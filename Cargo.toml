@@ -1,0 +1,9 @@
+[package]
+name = "l2r"
+version = "0.1.0"
+edition = "2024"
+description = "Human-directed Lean-first architecture modeling and Rust scaffolding (bootstrap)"
+repository = "https://github.com/syncom-systems/l2r"
+publish = false
+
+[dependencies]
