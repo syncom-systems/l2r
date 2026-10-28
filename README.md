@@ -8,8 +8,10 @@ The intended verification loop is **Lean specification → approved architectura
 
 ## Documentation
 
-- [Product Requirements Document (PRD v0.1)](docs/PRD.md)
-- [ADR-0001: Foundational architecture (proposed)](docs/adr/0001-foundational-architecture.md)
+PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r/discussions):
+
+- [Product Requirements Document (PRD v0.1)](https://github.com/syncom-systems/l2r/discussions/1)
+- [ADR-0001: Foundational architecture (proposed)](https://github.com/syncom-systems/l2r/discussions/2)
 
 ## Principles
 
