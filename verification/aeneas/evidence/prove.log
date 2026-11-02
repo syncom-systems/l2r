@@ -1,8 +1,8 @@
 $ lake -K aeneas=<aeneas>/backends/lean build
-⚠ [1513/1688] Replayed Aeneas.Std.Slice
+⚠ [1523/1701] Replayed Aeneas.Std.Slice
 warning: Aeneas/Std/Slice.lean:363:4: declaration uses `sorry`
 warning: Aeneas/Std/Slice.lean:586:8: declaration uses `sorry`
-⚠ [1592/1688] Replayed Aeneas.Std.StringIter
+⚠ [1593/1701] Replayed Aeneas.Std.StringIter
 warning: Aeneas/Std/StringIter.lean:12:4: declaration uses `sorry`
 warning: Aeneas/Std/StringIter.lean:15:4: declaration uses `sorry`
 ℹ [1700/1701] Replayed Refinement

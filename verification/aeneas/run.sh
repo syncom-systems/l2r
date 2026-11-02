@@ -9,6 +9,7 @@
 # these tools are not yet hermetic Bazel toolchains (see README.md here).
 #
 # Steps, each recorded under evidence/ with local paths replaced by placeholders:
+#   0. inventory the committed Lean inventory must equal a fresh export of the spec;
 #   1. extract   the committed signal module with Charon + Aeneas, and require the
 #                committed translation (proof/Extracted) to be byte-identical;
 #   2. prove     build the refinement proof (must succeed, no sorry);
@@ -37,6 +38,16 @@ cd "$repo"
   echo "charon pin (from aeneas): $(grep -v '^#' "$AENEAS_DIR/charon-pin" 2>/dev/null || echo unknown)"
   echo "lean:    $(cat "$here/proof/lean-toolchain")"
 } | sanitize > "$evidence/toolchain.txt"
+
+# 0. The committed Lean inventory must match the Lean sources it claims to describe.
+"$repo/tools/lean_inventory/export.sh" "$repo/examples/crossing/spec" "$work/inventory.json" Crossing 2> /dev/null
+if cmp -s "$work/inventory.json" "$repo/examples/crossing/lean-inventory.json"; then
+  echo "committed Lean inventory is current" > "$evidence/inventory-freshness.txt"
+else
+  diff "$repo/examples/crossing/lean-inventory.json" "$work/inventory.json" | sanitize > "$evidence/inventory-freshness.txt" || true
+  echo "FAIL: examples/crossing/lean-inventory.json is stale; re-export it" >&2
+  exit 1
+fi
 
 # 1. Extract the committed code (relative crate root keeps provenance paths stable).
 mkdir -p "$work/fresh"
