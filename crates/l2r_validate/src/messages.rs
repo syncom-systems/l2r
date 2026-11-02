@@ -1,6 +1,6 @@
 //! Message edge rules: who may send to whom, and what the message means.
 //!
-//! Hierarchy rule (strictest option, see `docs/decisions-pending.md`): a message
+//! Hierarchy rule (the strictest option; the alternatives are a pending decision in ADR-0003): a message
 //! edge may only connect two machines with the same parent. Nothing may reach
 //! into another subtree, and a parent does not exchange messages with its own
 //! children through edges.

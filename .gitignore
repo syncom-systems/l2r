@@ -7,3 +7,4 @@
 .idea/
 .vscode/
 user.bazelrc
+verification/aeneas/proof/lake-manifest.json

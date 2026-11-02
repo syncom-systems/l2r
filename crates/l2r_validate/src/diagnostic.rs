@@ -4,7 +4,7 @@ use std::fmt;
 
 /// One reason a model was rejected.
 ///
-/// Codes are stable and documented in `docs/validation-rules.md`; tests and
+/// Codes are stable and documented in `docs/model-reference.md`; tests and
 /// tooling match on them, never on message text.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Diagnostic {

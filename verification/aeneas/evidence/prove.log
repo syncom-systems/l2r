@@ -1,0 +1,13 @@
+$ lake -K aeneas=<aeneas>/backends/lean build
+⚠ [1513/1688] Replayed Aeneas.Std.Slice
+warning: Aeneas/Std/Slice.lean:363:4: declaration uses `sorry`
+warning: Aeneas/Std/Slice.lean:586:8: declaration uses `sorry`
+⚠ [1592/1688] Replayed Aeneas.Std.StringIter
+warning: Aeneas/Std/StringIter.lean:12:4: declaration uses `sorry`
+warning: Aeneas/Std/StringIter.lean:15:4: declaration uses `sorry`
+ℹ [1700/1701] Replayed Refinement
+info: Refinement.lean:70:0: 'Crossing.Refinement.init_refines' depends on axioms: [propext]
+info: Refinement.lean:71:0: 'Crossing.Refinement.step_refines' depends on axioms: [propext]
+info: Refinement.lean:72:0: 'Crossing.Refinement.impl_walk_entered_from_amber' depends on axioms: [propext]
+Build completed successfully (1701 jobs).
+exit status: 0
