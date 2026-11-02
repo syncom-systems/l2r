@@ -27,12 +27,19 @@ Rust tests is never presented as proof of correspondence with Lean.
   content. One digest covers the model, the Lean inventory, the generator and
   the profiles.
 - **Preview and approval.** The preview shows the effect on disk and the content
-  or diff of every change. An approval must name the digest the architect
-  reviewed, and a stale approval is refused with the reasons.
-- **Safe writes.** Writes are all or nothing. L2R refuses symlinks, foreign
-  files and edited generated files, never touches implementation files, and
-  keeps a lock for later runs. `l2r check` reports drift, a stale approval and
-  budget overruns.
+  or diff of every change. An approval record must name the digest that was
+  reviewed, and a stale record is refused with the reasons. A record is
+  evidence of a reviewed plan, not authorization; who may record approvals is a
+  repository-governance decision.
+- **A hardened write boundary.** Every path is validated, including paths
+  read back from L2R's own state files. The tree is accessed only through
+  descriptor-relative, no-follow system calls. Each file change is atomic, and
+  an interrupted generation is finished by `l2r recover`. Implementation files
+  are never replaced. The exact guarantees and their limits are in
+  [`docs/generation-boundary.md`](docs/generation-boundary.md); each claim is
+  backed by negative and fault-injection tests.
+- **Drift checks.** `l2r check` reports drift, a stale approval, a pending
+  journal and budget overruns.
 - **Profiles.** `transition-core/v0` is a pure state machine. `composite/v0` is
   deterministic asynchronous composition with per-child mailboxes.
   `crate-root/v0` produces a Bazel package.
@@ -60,6 +67,7 @@ $L2R render   $M                       # Mermaid view: containment, ownership, e
 $L2R preview  $M                       # plan, effect on disk, every change, the digest
 $L2R approve  $M --digest <digest from preview> --by "<your name>"
 $L2R generate $M                       # refuses unless the approval matches the current plan
+$L2R recover  $M                       # only after an interrupted generate
 $L2R check    $M                       # drift, staleness, budgets
 ```
 
@@ -79,6 +87,8 @@ the architecture model changed, until the new plan has been previewed and approv
 | `examples/crossing` | Generic example: Lean spec, model, approval, generated and implemented scaffold |
 | `verification/aeneas` | Rust-to-Lean refinement experiment and its evidence |
 | `docs/model-reference.md` | Model schema, profiles, validation rules, write semantics |
+| `docs/generation-boundary.md` | Exact write guarantees, threat model, limits, and the tests behind them |
+| `docs/verification.md` | Kinds of evidence, the verification route, and what is and is not proved |
 
 ## Documentation and decisions
 

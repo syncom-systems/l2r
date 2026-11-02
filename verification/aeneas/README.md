@@ -67,7 +67,7 @@ that none of them reach these theorems, but a proof that used slices could depen
 | --- | --- | --- |
 | **Charon + Aeneas** | Translates a *safe Rust subset* to pure Lean (also F\*, Coq, HOL4). Documented limits include some nested-loop control flow and mutable references in generic instantiations. Unsafe code and concurrency are future work. | **Chosen.** The `transition-core` profile generates exactly the shape it handles well: pure functions over enums. The proof lives in Lean, next to the specification. |
 | **hax** | Rust to F\* (stable), Rocq, ProVerif, SSProve, EasyCrypt (experimental). Its recommended Lean route goes *through Aeneas*. | No independent advantage for a Lean-first project today. Revisit if F\* or ProVerif obligations become relevant. |
-| **Verus** | Proves Rust against Verus specifications written in Rust syntax, using SMT. Handles code beyond plain safe Rust. | A different specification language from Lean, so using it would create a second behavioral authority. Useful later for local implementation obligations (bounds, absence of panics) that do not restate the Lean model. |
+| **Verus** | Proves Rust against specifications written in Rust syntax, using SMT. Handles code beyond plain safe Rust. | Complementary, not competing, if its specifications state only Rust-local facts: panic freedom, bounds, frame conditions. It would compete with Lean only if it restated behavior. See [`docs/verification.md`](../../docs/verification.md). A candidate for the composite scheduler's local properties. |
 
 ## Pins (not yet reproducible from public releases alone)
 

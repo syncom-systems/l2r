@@ -117,14 +117,12 @@ and never repairs the model.
   (create, update, unchanged, keep, delete, orphan), any conflicts, and the exact
   content or diff of every change.
 - `l2r approve --digest D --by NAME` records an approval **only if** `D` is the
-  current plan digest. The record is evidence for code review, not proof of
-  identity.
-- `l2r generate` refuses unless the recorded approval matches the current plan.
-  When it refuses, it says what changed: the model, the Lean inventory, the
-  generator, or the profiles.
-- Before writing anything, every action is checked. Any conflict means nothing is
-  written. Conflicts include a symlink anywhere on the path, a file L2R did not
-  generate, an edited generated file, a malformed lock, and an ownership change.
-- Generated files are replaced only while they still match the digest in
-  `l2r.lock.json`. Implementation files are created once and never modified or
-  deleted. When they are no longer planned they are reported as orphans.
+  current plan digest. A record is evidence that this exact plan was recorded as
+  reviewed. It is **not** proof of identity or authorization.
+- `l2r generate` refuses unless the recorded approval matches the current plan,
+  and says what changed: the model, the Lean inventory, the generator, or the
+  profiles.
+- `l2r recover` finishes an interrupted generation of the approved plan.
+
+The precise guarantees, assumptions and limits of writing are in
+[`generation-boundary.md`](generation-boundary.md).
