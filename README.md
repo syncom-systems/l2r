@@ -8,8 +8,10 @@ The intended verification loop is **Lean specification → approved architectura
 
 ## Documentation
 
-- [Product Requirements Document (PRD v0.1)](docs/PRD.md)
-- [ADR-0001: Foundational architecture (proposed)](docs/adr/0001-foundational-architecture.md)
+PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r/discussions):
+
+- [Product Requirements Document (PRD v0.1)](https://github.com/syncom-systems/l2r/discussions/1)
+- [ADR-0001: Foundational architecture (proposed)](https://github.com/syncom-systems/l2r/discussions/2)
 
 ## Principles
 
@@ -19,7 +21,7 @@ The intended verification loop is **Lean specification → approved architectura
 4. Planning and generation are deterministic, previewable, and explicitly approved.
 5. Regeneration must not overwrite agent-owned implementation files.
 6. Agents implement approved contracts and report contradictions rather than weaken specifications or proofs.
-7. The first pilot is Door Access, but the generator core stays project-independent.
+7. The core stays independent of the projects that adopt it; examples and fixtures are original and generic.
 
 ## Bootstrap
 
@@ -34,6 +36,6 @@ cargo clippy --all-targets -- -D warnings
 
 ## Public repository and license
 
-This repository is public but has **no open-source license selected yet**. Public visibility does not itself grant reuse rights. Selection of a license is a project-maintainer decision.
+The repository contains an MIT [`LICENSE`](LICENSE), added in its initial commit. The PRD still lists license selection as a pending maintainer decision; confirming the license is that decision.
 
-The ongoing Rust OSDP library implementation in Door Access continues independently; it must not be blocked by L2R development.
+Projects that adopt L2R continue their own development independently and are never blocked by L2R's maturity.
