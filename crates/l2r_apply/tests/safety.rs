@@ -56,7 +56,7 @@ fn a_fresh_generation_writes_every_planned_file_and_the_lock() {
     generate(&plan, &root);
     for artifact in &plan.artifacts {
         assert_eq!(
-            read(&root, &artifact.path),
+            read(&root, artifact.path.as_str()),
             artifact.content,
             "{}",
             artifact.path
@@ -234,6 +234,7 @@ fn an_ownership_change_requires_manual_migration() {
     let mut recorded = lock::Lock::from_json(&read(&root, lock::LOCK_FILE)).unwrap();
     let entry = recorded.files.iter_mut().find(|e| e.path == IMPL).unwrap();
     entry.ownership = lock::LockOwnership::Generated;
+    entry.digest = Some(l2r_model::digest::sha256(read(&root, IMPL).as_bytes()));
     fs::write(root.join(lock::LOCK_FILE), recorded.to_json()).unwrap();
     let conflicts = assess(&plan, &root).conflicts;
     assert_eq!(conflicts.len(), 1);

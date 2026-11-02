@@ -5,10 +5,12 @@ pub mod architecture;
 pub mod digest;
 pub mod lean;
 pub mod load;
+pub mod path;
 pub mod profiles;
 
 pub use architecture::{Behavior, Component, MODEL_SCHEMA, MessageEdge, Model, System};
 pub use lean::{Constructor, DeclKind, Declaration, INVENTORY_SCHEMA, Inventory};
+pub use path::{PathError, RelPath};
 
 #[cfg(test)]
 mod tests {

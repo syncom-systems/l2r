@@ -18,8 +18,9 @@ pub use plan::{
 use std::collections::BTreeSet;
 use std::fmt;
 
+use l2r_model::RelPath;
 use l2r_model::{digest, profiles as profile_ids};
-use l2r_validate::{Validated, names};
+use l2r_validate::Validated;
 
 /// Version of this generator, bound into every plan digest.
 pub const GENERATOR_VERSION: &str = "0.1.0";
@@ -47,7 +48,7 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
         .find(|c| c.parent.is_none())
         .ok_or_else(|| PlanError("no root component".into()))?;
 
-    let mut artifacts = profiles::crate_root::artifacts(model, &root.rust_module, &root.id);
+    let mut artifacts = profiles::crate_root::artifacts(model, &root.rust_module, &root.id)?;
     let mut used_profiles = BTreeSet::new();
     for component in &model.components {
         let dir = &dirs[&component.id];
@@ -59,10 +60,10 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
                 })?;
                 artifacts.extend(profiles::transition_core::artifacts(
                     component, machine, dir,
-                ));
+                )?);
             }
             profile_ids::COMPOSITE_V0 => {
-                artifacts.extend(profiles::composite::artifacts(model, component, dir))
+                artifacts.extend(profiles::composite::artifacts(model, component, dir)?)
             }
             other => {
                 return Err(PlanError(format!(
@@ -86,17 +87,16 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
     })
 }
 
-/// Defense in depth: planned paths are unique and stay inside the output directory.
+/// A planned path, validated like every other path that reaches the filesystem.
+pub(crate) fn planned_path(path: String) -> Result<RelPath, PlanError> {
+    RelPath::parse(&path).map_err(|e| PlanError(e.to_string()))
+}
+
+/// Defense in depth: planned paths are unique, also on case-insensitive filesystems.
 fn check_paths(artifacts: &[Artifact]) -> Result<(), PlanError> {
     let mut seen = BTreeSet::new();
     for artifact in artifacts {
-        if !names::is_safe_relative_path(&artifact.path) {
-            return Err(PlanError(format!(
-                "unsafe planned path `{}`",
-                artifact.path
-            )));
-        }
-        if !seen.insert(artifact.path.as_str()) {
+        if !seen.insert(artifact.path.case_key()) {
             return Err(PlanError(format!(
                 "two artifacts planned at `{}`",
                 artifact.path

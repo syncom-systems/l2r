@@ -1,9 +1,16 @@
-//! The approval record: a human statement that one exact plan may be written.
+//! The approval record: evidence that one exact plan was reviewed.
 //!
-//! An approval names the plan digest the architect saw in the preview. It is
-//! never computed on the architect's behalf: [`approve`] refuses a digest that
-//! differs from the current plan, and [`verify`] refuses an approval whose
-//! digest no longer matches, listing which inputs changed.
+//! A record names the plan digest shown in the preview. It is never computed on
+//! the reviewer's behalf: [`approve`] refuses a digest that differs from the
+//! current plan, and [`verify`] refuses a record whose digest no longer matches,
+//! listing which inputs changed.
+//!
+//! What a record is **not**: proof of who reviewed, or authorization. Anyone or
+//! any agent able to run `l2r approve` can create one, and `recorded_by` is free
+//! text. Authorization has to come from outside L2R, e.g. a required human review
+//! of changes to approval files under the repository's branch rules. L2R binds
+//! the write to the recorded digest; the repository's governance decides whose
+//! records count.
 
 use std::fmt;
 
@@ -14,12 +21,10 @@ use l2r_plan::Plan;
 /// Approval format identifier.
 pub const APPROVAL_FORMAT: &str = "l2r.approval/v0";
 
-/// The statement every approval records.
-pub const STATEMENT: &str = "I reviewed the generation plan with this digest, including the content of every planned file, and approve writing it.";
+/// The statement every record carries.
+pub const STATEMENT: &str = "The recorder states that the generation plan with this digest, including the content of every planned file, was reviewed and may be written. This record is not proof of identity or authorization.";
 
-/// A recorded approval. It is evidence for review, not proof of identity:
-/// `approved_by` is whatever the approver typed, and the protection comes from
-/// committing the record through normal code review.
+/// A recorded approval of one exact plan. Evidence, not authorization.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Approval {
@@ -37,8 +42,8 @@ pub struct Approval {
     pub profiles: Vec<String>,
     /// Number of planned files.
     pub artifact_count: usize,
-    /// Who approved, as stated by the approver.
-    pub approved_by: String,
+    /// Who recorded the approval, as typed by them (unverified).
+    pub recorded_by: String,
     /// What was approved.
     pub statement: String,
 }
@@ -72,7 +77,7 @@ impl fmt::Display for ApprovalError {
                 "the supplied digest {supplied} is not the current plan ({actual}); review the current preview and approve its digest"
             ),
             Self::Stale { reasons } => write!(f, "the approval is stale: {}", reasons.join("; ")),
-            Self::MissingApprover => write!(f, "an approver name is required"),
+            Self::MissingApprover => write!(f, "a recorder name is required"),
             Self::Unsupported(format) => write!(f, "unsupported approval format `{format}`"),
         }
     }
@@ -88,9 +93,9 @@ fn generator_label(plan: &Plan) -> String {
 pub fn approve(
     plan: &Plan,
     supplied_digest: &str,
-    approved_by: &str,
+    recorded_by: &str,
 ) -> Result<Approval, ApprovalError> {
-    if approved_by.trim().is_empty() || approved_by.chars().any(char::is_control) {
+    if recorded_by.trim().is_empty() || recorded_by.chars().any(char::is_control) {
         return Err(ApprovalError::MissingApprover);
     }
     let actual = plan.digest();
@@ -108,7 +113,7 @@ pub fn approve(
         generator: generator_label(plan),
         profiles: plan.profiles.clone(),
         artifact_count: plan.artifacts.len(),
-        approved_by: approved_by.trim().to_string(),
+        recorded_by: recorded_by.trim().to_string(),
         statement: STATEMENT.into(),
     })
 }
@@ -152,4 +157,32 @@ pub fn to_json(approval: &Approval) -> String {
 /// Parses an approval record.
 pub fn from_json(text: &str) -> Result<Approval, String> {
     serde_json::from_str(text).map_err(|e| e.to_string())
+}
+
+/// Writes a record to `path` atomically: an exclusively created temporary in the
+/// same directory, renamed over `path`. A symbolic link planted at `path` is
+/// replaced, never followed.
+pub fn write_record(path: &std::path::Path, approval: &Approval) -> std::io::Result<()> {
+    use std::io::Write;
+    let dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(std::path::Path::new("."));
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let temporary = dir.join(format!(".{name}.{}.tmp", std::process::id()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let written = file
+        .write_all(to_json(approval).as_bytes())
+        .and_then(|()| file.sync_all());
+    if let Err(e) = written.and_then(|()| std::fs::rename(&temporary, path)) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(e);
+    }
+    Ok(())
 }

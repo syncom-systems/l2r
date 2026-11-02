@@ -1,13 +1,14 @@
-//! Deciding, before any write, what applying a plan would do to the disk.
+//! Deciding, before any write, what applying a plan would do to the tree.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use l2r_model::digest;
+use l2r_model::{RelPath, digest};
 use l2r_plan::{Artifact, Ownership, Plan};
 
-use crate::fs_guard::{self, Occupant};
+use crate::journal::JOURNAL_FILE;
 use crate::lock::{LOCK_FILE, Lock, LockEntry, LockOwnership};
+use crate::tree::{Occupant, Tree};
 
 /// What will happen to one path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,17 +31,19 @@ pub enum ActionKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Action {
     /// Path relative to the output directory.
-    pub path: String,
+    pub path: RelPath,
     /// What will happen.
     pub kind: ActionKind,
-    /// Current content, when it matters for a preview (updates and deletes).
+    /// Ownership of the file.
+    pub ownership: LockOwnership,
+    /// Current content, for updates and deletes.
     pub current: Option<Vec<u8>>,
 }
 
 /// A reason the plan cannot be applied.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conflict {
-    /// Path relative to the output directory.
+    /// Path relative to the output directory (or a state file name).
     pub path: String,
     /// Explanation.
     pub reason: String,
@@ -62,77 +65,171 @@ impl Assessment {
     }
 }
 
-/// Reads the previous lock, if any. A malformed lock is a conflict, not a reset.
-pub fn read_lock(root: &Path) -> Result<Option<Lock>, Conflict> {
-    let conflict = |reason| Conflict {
-        path: LOCK_FILE.into(),
-        reason,
-    };
-    match fs_guard::inspect(root, LOCK_FILE).map_err(conflict)? {
+pub(crate) fn conflict(path: impl Into<String>, reason: impl Into<String>) -> Conflict {
+    Conflict {
+        path: path.into(),
+        reason: reason.into(),
+    }
+}
+
+/// Reads and validates the lock. A malformed lock is a conflict, not a reset.
+pub fn read_lock(tree: &Tree) -> Result<Option<Lock>, Conflict> {
+    match tree
+        .read_state(LOCK_FILE)
+        .map_err(|e| conflict(LOCK_FILE, e.reason))?
+    {
         Occupant::Absent => Ok(None),
         Occupant::File(bytes) => {
             let text =
-                String::from_utf8(bytes).map_err(|_| conflict("lock is not UTF-8".into()))?;
-            Lock::from_json(&text)
-                .map(Some)
-                .map_err(|e| conflict(format!("lock is malformed: {e}")))
+                String::from_utf8(bytes).map_err(|_| conflict(LOCK_FILE, "lock is not UTF-8"))?;
+            Lock::from_json(&text).map(Some).map_err(|e| {
+                conflict(
+                    LOCK_FILE,
+                    format!("lock is invalid ({e}); nothing it lists will be touched"),
+                )
+            })
         }
     }
 }
 
-/// Computes what applying `plan` to `root` would do.
+/// Reports a pending journal as a conflict.
+pub fn journal_conflict(tree: &Tree) -> Option<Conflict> {
+    match tree.read_state(JOURNAL_FILE) {
+        Ok(Occupant::Absent) => None,
+        Ok(Occupant::File(_)) => Some(conflict(
+            JOURNAL_FILE,
+            "an interrupted or concurrent generation is pending; run `l2r recover` with the plan it names",
+        )),
+        Err(e) => Some(conflict(JOURNAL_FILE, e.reason)),
+    }
+}
+
+/// Computes what applying `plan` to `root` would do, without writing.
 pub fn assess(plan: &Plan, root: &Path) -> Assessment {
+    match Tree::open(root) {
+        Ok(Some(tree)) => assess_tree(plan, &tree),
+        Ok(None) => Assessment {
+            actions: plan
+                .artifacts
+                .iter()
+                .map(|a| action(&a.path, ActionKind::Create, a.ownership.into(), None))
+                .collect(),
+            conflicts: vec![],
+        },
+        Err(e) => Assessment {
+            actions: vec![],
+            conflicts: vec![conflict(e.path, e.reason)],
+        },
+    }
+}
+
+/// Computes what applying `plan` to an open tree would do.
+pub fn assess_tree(plan: &Plan, tree: &Tree) -> Assessment {
     let mut actions = Vec::new();
-    let mut conflicts = Vec::new();
-    let lock = match read_lock(root) {
-        Ok(lock) => lock,
-        Err(conflict) => {
-            conflicts.push(conflict);
-            None
-        }
-    };
+    let mut conflicts: Vec<Conflict> = journal_conflict(tree).into_iter().collect();
+    let lock = read_lock(tree).unwrap_or_else(|c| {
+        conflicts.push(c);
+        None
+    });
     for artifact in &plan.artifacts {
         let entry = lock.as_ref().and_then(|l| l.entry(&artifact.path));
-        match fs_guard::inspect(root, &artifact.path) {
-            Err(reason) => conflicts.push(Conflict {
-                path: artifact.path.clone(),
-                reason,
-            }),
-            Ok(occupant) => match planned_action(artifact, entry, occupant) {
-                Ok(action) => actions.push(action),
-                Err(reason) => conflicts.push(Conflict {
-                    path: artifact.path.clone(),
-                    reason,
-                }),
-            },
+        let outcome = tree
+            .read(&artifact.path)
+            .map_err(|e| e.reason)
+            .and_then(|occupant| planned_action(artifact, entry, occupant));
+        match outcome {
+            Ok(a) => actions.push(a),
+            Err(reason) => conflicts.push(conflict(artifact.path.as_str(), reason)),
         }
     }
     if let Some(lock) = &lock {
-        let planned: BTreeSet<&str> = plan.artifacts.iter().map(|a| a.path.as_str()).collect();
-        for entry in lock
-            .files
-            .iter()
-            .filter(|e| !planned.contains(e.path.as_str()))
-        {
-            match unplanned_action(root, entry) {
-                Ok(Some(action)) => actions.push(action),
-                Ok(None) => {}
-                Err(reason) => conflicts.push(Conflict {
-                    path: entry.path.clone(),
-                    reason,
-                }),
-            }
-        }
+        unplanned(plan, lock, tree, &mut actions, &mut conflicts);
+        moved_implementations(plan, lock, &actions, &mut conflicts);
     }
     actions.sort_by(|a, b| a.path.cmp(&b.path));
     conflicts.sort_by(|a, b| a.path.cmp(&b.path));
     Assessment { actions, conflicts }
 }
 
-fn action(path: &str, kind: ActionKind, current: Option<Vec<u8>>) -> Action {
+fn unplanned(
+    plan: &Plan,
+    lock: &Lock,
+    tree: &Tree,
+    actions: &mut Vec<Action>,
+    conflicts: &mut Vec<Conflict>,
+) {
+    let planned: BTreeMap<String, &RelPath> = plan
+        .artifacts
+        .iter()
+        .map(|a| (a.path.case_key(), &a.path))
+        .collect();
+    let exact: BTreeSet<&RelPath> = plan.artifacts.iter().map(|a| &a.path).collect();
+    for entry in lock.files.iter().filter(|e| !exact.contains(&e.path)) {
+        if let Some(other) = planned.get(&entry.path.case_key()) {
+            conflicts.push(conflict(
+                entry.path.as_str(),
+                format!("differs from planned `{other}` only in letter case; resolve by hand"),
+            ));
+            continue;
+        }
+        let outcome = tree
+            .read(&entry.path)
+            .map_err(|e| e.reason)
+            .and_then(|o| unplanned_action(entry, o));
+        match outcome {
+            Ok(Some(a)) => actions.push(a),
+            Ok(None) => {}
+            Err(reason) => conflicts.push(conflict(entry.path.as_str(), reason)),
+        }
+    }
+}
+
+/// A component's implementation file that would be orphaned at one path while a
+/// fresh stub is created at another is a move (a renamed module or a component
+/// moved to a new parent). Creating the stub silently would invite the
+/// implementer's work to be redone or lost, so it is a conflict that names the move.
+fn moved_implementations(
+    plan: &Plan,
+    lock: &Lock,
+    actions: &[Action],
+    conflicts: &mut Vec<Conflict>,
+) {
+    for orphan in actions.iter().filter(|a| a.kind == ActionKind::Orphan) {
+        let Some(component) = lock.entry(&orphan.path).map(|e| e.component.as_str()) else {
+            continue;
+        };
+        let name = orphan.path.split().1;
+        let replacement = actions.iter().find(|a| {
+            a.kind == ActionKind::Create
+                && a.ownership == LockOwnership::Implementation
+                && a.path.split().1 == name
+                && plan.artifact(a.path.as_str()).is_some_and(|art| {
+                    art.components.first().map(String::as_str) == Some(component)
+                })
+        });
+        if let Some(created) = replacement {
+            conflicts.push(conflict(
+                created.path.as_str(),
+                format!(
+                    "the implementation of `{component}` moves from `{}`; move that file here (e.g. `git mv`) \
+                     and generate again",
+                    orphan.path
+                ),
+            ));
+        }
+    }
+}
+
+fn action(
+    path: &RelPath,
+    kind: ActionKind,
+    ownership: LockOwnership,
+    current: Option<Vec<u8>>,
+) -> Action {
     Action {
-        path: path.to_string(),
+        path: path.clone(),
         kind,
+        ownership,
         current,
     }
 }
@@ -142,9 +239,10 @@ fn planned_action(
     entry: Option<&LockEntry>,
     occupant: Occupant,
 ) -> Result<Action, String> {
-    let path = artifact.path.as_str();
+    let path = &artifact.path;
+    let ownership: LockOwnership = artifact.ownership.into();
     if let Some(entry) = entry
-        && entry.ownership != artifact.ownership.into()
+        && entry.ownership != ownership
     {
         return Err(format!(
             "ownership changes from {:?} to {:?}; migrate this file by hand and regenerate",
@@ -152,39 +250,48 @@ fn planned_action(
         ));
     }
     match (artifact.ownership, occupant) {
-        (_, Occupant::Absent) => Ok(action(path, ActionKind::Create, None)),
-        (Ownership::Implementation, Occupant::File(_)) => Ok(action(path, ActionKind::Keep, None)),
+        (_, Occupant::Absent) => Ok(action(path, ActionKind::Create, ownership, None)),
+        (Ownership::Implementation, Occupant::File(_)) => {
+            Ok(action(path, ActionKind::Keep, ownership, None))
+        }
         (Ownership::Generated, Occupant::File(bytes)) => {
             if bytes == artifact.content.as_bytes() {
-                return Ok(action(path, ActionKind::Unchanged, None));
+                return Ok(action(path, ActionKind::Unchanged, ownership, None));
             }
-            let recorded = entry.and_then(|e| e.digest.as_deref());
-            match recorded {
-                Some(d) if d == digest::sha256(&bytes) => Ok(action(path, ActionKind::Update, Some(bytes))),
-                Some(_) => Err("generated file was edited after generation; move the change into the model or Lean, or restore the file".into()),
+            match entry.and_then(|e| e.digest.as_deref()) {
+                Some(d) if d == digest::sha256(&bytes) => Ok(action(path, ActionKind::Update, ownership, Some(bytes))),
+                Some(_) => Err("generated file was edited after generation; move the change into the model or \
+                                Lean, or restore the file"
+                    .into()),
                 None => Err("a file L2R did not generate is in the way".into()),
             }
         }
     }
 }
 
-fn unplanned_action(root: &Path, entry: &LockEntry) -> Result<Option<Action>, String> {
-    match fs_guard::inspect(root, &entry.path)? {
-        Occupant::Absent => Ok(None),
-        Occupant::File(bytes) => match entry.ownership {
-            LockOwnership::Implementation => {
-                Ok(Some(action(&entry.path, ActionKind::Orphan, None)))
-            }
-            LockOwnership::Generated => {
-                if entry.digest.as_deref() == Some(digest::sha256(&bytes).as_str()) {
-                    Ok(Some(action(&entry.path, ActionKind::Delete, Some(bytes))))
-                } else {
-                    Err(
-                        "generated file is no longer planned but was edited; resolve by hand"
-                            .into(),
-                    )
-                }
-            }
-        },
+fn unplanned_action(entry: &LockEntry, occupant: Occupant) -> Result<Option<Action>, String> {
+    let Occupant::File(bytes) = occupant else {
+        return Ok(None);
+    };
+    match entry.ownership {
+        LockOwnership::Implementation => Ok(Some(action(
+            &entry.path,
+            ActionKind::Orphan,
+            entry.ownership,
+            None,
+        ))),
+        LockOwnership::Generated
+            if entry.digest.as_deref() == Some(digest::sha256(&bytes).as_str()) =>
+        {
+            Ok(Some(action(
+                &entry.path,
+                ActionKind::Delete,
+                entry.ownership,
+                Some(bytes),
+            )))
+        }
+        LockOwnership::Generated => {
+            Err("generated file is no longer planned but was edited; resolve by hand".into())
+        }
     }
 }

@@ -146,3 +146,39 @@ fn a_profile_version_change_is_rejected_until_implemented() {
         .profile = "transition-core/v1".into();
     assert!(validate(&model, &example_inventory()).is_err());
 }
+
+/// Approved generation behavior must never change silently. Each profile's output
+/// for the example is pinned here; changing what a profile generates requires a
+/// new profile version (e.g. `transition-core/v1`), and v0 keeps producing
+/// exactly these bytes. Do not update these digests to make a v0 change pass.
+#[test]
+fn v0_profile_output_is_frozen() {
+    let plan = plan_of(&example_model());
+    let mut by_profile: std::collections::BTreeMap<&str, Vec<(&str, &str)>> = Default::default();
+    for artifact in &plan.artifacts {
+        by_profile
+            .entry(artifact.profile.as_str())
+            .or_default()
+            .push((artifact.path.as_str(), artifact.content.as_str()));
+    }
+    let digests: Vec<(&str, String)> = by_profile
+        .iter()
+        .map(|(profile, files)| (*profile, l2r_model::digest::digest_of(files)))
+        .collect();
+    let expected = [
+        (
+            "composite/v0",
+            "sha256:5acb1f55460425ec22557c81d6d2de483d359e300243c3ec8d5f36d36ff7df0b",
+        ),
+        (
+            "crate-root/v0",
+            "sha256:74278f5b2f60a73975cb0c2c4766a9ebf90c00b901ea901465e5d5012c430dc3",
+        ),
+        (
+            "transition-core/v0",
+            "sha256:306371c46d0c0c66b3bae53c73d2c634ce9a821815e1a33630fb4a83fa9fbd82",
+        ),
+    ];
+    let expected: Vec<(&str, String)> = expected.iter().map(|(p, d)| (*p, d.to_string())).collect();
+    assert_eq!(digests, expected);
+}

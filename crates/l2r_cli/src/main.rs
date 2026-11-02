@@ -20,6 +20,7 @@ Usage:
   l2r preview  <model.toml> [--summary]             Show the plan, its effect on disk, and every change
   l2r approve  <model.toml> --digest <d> --by <n>   Record approval of the plan with digest <d>
   l2r generate <model.toml>                         Write the approved plan (refuses stale approvals)
+  l2r recover  <model.toml>                         Finish an interrupted generation of the approved plan
   l2r check    <model.toml>                         Check the output for drift, staleness and budgets
   l2r render   <model.toml>                         Print a Mermaid view of the architecture
   l2r --version
@@ -92,6 +93,7 @@ fn run(args: &[String]) -> Outcome {
             )),
         },
         "generate" => only_flags(rest, &[]).map(|_| commands::generate(&model)),
+        "recover" => only_flags(rest, &[]).map(|_| commands::recover_generation(&model)),
         "check" => only_flags(rest, &[]).map(|_| commands::check_output(&model)),
         "render" => only_flags(rest, &[]).map(|_| commands::render(&model)),
         other => Err(usage_error(&format!("unknown command `{other}`"))),

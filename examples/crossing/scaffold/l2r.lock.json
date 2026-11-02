@@ -6,48 +6,58 @@
     {
       "path": "BUILD.bazel",
       "ownership": "generated",
+      "component": "crossing",
       "digest": "sha256:cddd1edf420c4f7cabb9d8997e72d47284e9e1dc8d1e4871dcfde9b5824bc383"
     },
     {
       "path": "src/crossing/mod.rs",
       "ownership": "generated",
+      "component": "crossing",
       "digest": "sha256:a955d1c9d4531dc686f883df3910da090412d8e127908086c1d0d3f29d64f1fe"
     },
     {
       "path": "src/crossing/request_latch/contract_tests.rs",
       "ownership": "generated",
+      "component": "request_latch",
       "digest": "sha256:c0f9b2aab3a75fb47b2b9f0a96325537acdea39c3a4b392852e1edf4379e6128"
     },
     {
       "path": "src/crossing/request_latch/imp.rs",
-      "ownership": "implementation"
+      "ownership": "implementation",
+      "component": "request_latch"
     },
     {
       "path": "src/crossing/request_latch/mod.rs",
       "ownership": "generated",
+      "component": "request_latch",
       "digest": "sha256:863f8d730a787c39e10207458ac975ae9bbb4d954b6a3a309a9df8b3013d84ee"
     },
     {
       "path": "src/crossing/routes.rs",
-      "ownership": "implementation"
+      "ownership": "implementation",
+      "component": "crossing"
     },
     {
       "path": "src/crossing/signal/contract_tests.rs",
       "ownership": "generated",
+      "component": "signal",
       "digest": "sha256:1e0177652a6adfa64378a66cc3d9c2d472587a542bbaaebcf3695e9c90deca4f"
     },
     {
       "path": "src/crossing/signal/imp.rs",
-      "ownership": "implementation"
+      "ownership": "implementation",
+      "component": "signal"
     },
     {
       "path": "src/crossing/signal/mod.rs",
       "ownership": "generated",
+      "component": "signal",
       "digest": "sha256:0dcc01f60bc5a09c35b5e5082b18ecc0ce8d8ca8d8f465286247c9e2ff45eb4f"
     },
     {
       "path": "src/lib.rs",
       "ownership": "generated",
+      "component": "crossing",
       "digest": "sha256:bbe84b8c3e4de9de6ad7e2b96ae05ba144d0314e8ef36b0a390e742beb7e6595"
     }
   ]

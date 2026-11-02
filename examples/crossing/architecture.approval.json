@@ -10,6 +10,6 @@
     "transition-core/v0"
   ],
   "artifact_count": 10,
-  "approved_by": "example fixture recorded by the implementing agent; not a maintainer approval",
-  "statement": "I reviewed the generation plan with this digest, including the content of every planned file, and approve writing it."
+  "recorded_by": "example fixture recorded by the implementing agent; not a review or authorization",
+  "statement": "The recorder states that the generation plan with this digest, including the content of every planned file, was reviewed and may be written. This record is not proof of identity or authorization."
 }

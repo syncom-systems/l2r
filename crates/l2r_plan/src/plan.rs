@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-use l2r_model::digest;
+use l2r_model::{RelPath, digest};
 
 /// Plan format identifier.
 pub const PLAN_FORMAT: &str = "l2r.plan/v0";
@@ -42,7 +42,7 @@ pub enum Ownership {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Artifact {
     /// Path relative to the output directory.
-    pub path: String,
+    pub path: RelPath,
     /// Ownership class.
     pub ownership: Ownership,
     /// Profile that produced the file.
@@ -126,7 +126,7 @@ impl Plan {
                 .artifacts
                 .iter()
                 .map(|a| ArtifactSummary {
-                    path: &a.path,
+                    path: a.path.as_str(),
                     ownership: a.ownership,
                     profile: &a.profile,
                     purpose: &a.purpose,
@@ -145,6 +145,6 @@ impl Plan {
 
     /// Finds a planned file by path.
     pub fn artifact(&self, path: &str) -> Option<&Artifact> {
-        self.artifacts.iter().find(|a| a.path == path)
+        self.artifacts.iter().find(|a| a.path.as_str() == path)
     }
 }

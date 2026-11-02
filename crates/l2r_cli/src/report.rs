@@ -79,7 +79,9 @@ pub fn preview(model: &Model, plan: &Plan, assessment: &Assessment, show_content
     }
     if show_content {
         for action in &assessment.actions {
-            let planned = plan.artifact(&action.path).map(|a| a.content.as_str());
+            let planned = plan
+                .artifact(action.path.as_str())
+                .map(|a| a.content.as_str());
             let current = action.current.as_deref().map(String::from_utf8_lossy);
             let body = match (action.kind, planned, current) {
                 (ActionKind::Create, Some(new), _) => line_diff("", new),

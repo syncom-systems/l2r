@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use l2r_apply::{ApplyError, apply, approval, approve, assess, check};
+use l2r_apply::{Approval, apply, approval, approve, assess, check, recover};
 
 use crate::report;
 use crate::session::{self, Session, SessionError};
@@ -103,11 +103,12 @@ pub fn approve_plan(model: &Path, digest: &str, by: &str) -> Outcome {
     with_session(model, |s| match approve(&s.plan, digest, by) {
         Ok(record) => {
             let path = s.approval_path();
-            match std::fs::write(&path, approval::to_json(&record)) {
+            match approval::write_record(&path, &record) {
                 Ok(()) => Outcome::ok(format!(
-                    "approved {} by {}; recorded in {}\n",
+                    "recorded approval of {} by \"{}\" in {}\n\
+                     (a record binds generation to this digest; it is not proof of authorization)\n",
                     record.plan_digest,
-                    record.approved_by,
+                    record.recorded_by,
                     path.display()
                 )),
                 Err(e) => Outcome::refused(format!("{}: {e}\n", path.display())),
@@ -117,18 +118,23 @@ pub fn approve_plan(model: &Path, digest: &str, by: &str) -> Outcome {
     })
 }
 
+fn recorded_approval(s: &Session) -> Result<Approval, Outcome> {
+    match s.read_approval() {
+        Ok(Some(record)) => Ok(record),
+        Ok(None) => Err(Outcome::refused(format!(
+            "no approval recorded at {}; run `l2r preview`, then `l2r approve` with the digest you reviewed\n",
+            s.approval_path().display()
+        ))),
+        Err(e) => Err(Outcome::refused(format!("{e}\n"))),
+    }
+}
+
 /// `l2r generate <model>`
 pub fn generate(model: &Path) -> Outcome {
     with_session(model, |s| {
-        let record = match s.read_approval() {
-            Ok(Some(record)) => record,
-            Ok(None) => {
-                return Outcome::refused(format!(
-                    "no approval recorded at {}; run `l2r preview`, then `l2r approve` with the digest you reviewed\n",
-                    s.approval_path().display()
-                ));
-            }
-            Err(e) => return Outcome::refused(format!("{e}\n")),
+        let record = match recorded_approval(&s) {
+            Ok(record) => record,
+            Err(outcome) => return outcome,
         };
         match apply(&s.plan, &record, &s.output_dir()) {
             Ok(report) => {
@@ -139,8 +145,25 @@ pub fn generate(model: &Path) -> Outcome {
                 }
                 Outcome::ok(text)
             }
-            Err(ApplyError::Approval(e)) => Outcome::refused(format!("generation refused: {e}\n")),
             Err(e) => Outcome::refused(format!("generation refused: {e}\n")),
+        }
+    })
+}
+
+/// `l2r recover <model>`
+pub fn recover_generation(model: &Path) -> Outcome {
+    with_session(model, |s| {
+        let record = match recorded_approval(&s) {
+            Ok(record) => record,
+            Err(outcome) => return outcome,
+        };
+        match recover(&s.plan, &record, &s.output_dir()) {
+            Ok(()) => Outcome::ok(format!(
+                "completed interrupted generation of plan {} in {}/\n",
+                s.plan.digest(),
+                s.plan.output_dir
+            )),
+            Err(e) => Outcome::refused(format!("recovery refused: {e}\n")),
         }
     })
 }

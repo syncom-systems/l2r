@@ -65,18 +65,9 @@ pub fn upper_camel(segment: &str) -> Option<String> {
     valid.then_some(out)
 }
 
-/// A relative path that cannot escape its base: no absolute paths, no `..`,
-/// no empty or hidden segments, and only `[A-Za-z0-9_.-]` characters.
+/// A relative path that cannot escape its base; see [`l2r_model::RelPath`].
 pub fn is_safe_relative_path(path: &str) -> bool {
-    !path.is_empty()
-        && !path.starts_with('/')
-        && path.split('/').all(|segment| {
-            !segment.is_empty()
-                && !segment.starts_with('.')
-                && segment
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
-        })
+    l2r_model::RelPath::parse(path).is_ok()
 }
 
 /// Free text without control characters other than newline.

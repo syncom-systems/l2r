@@ -12,43 +12,50 @@ use l2r_validate::{ResolvedEnum, ResolvedMachine};
 
 use crate::plan::{Artifact, Ownership};
 use crate::text;
+use crate::{PlanError, planned_path};
 
 /// Plans the files for one machine component in directory `dir`.
-pub fn artifacts(component: &Component, machine: &ResolvedMachine, dir: &str) -> Vec<Artifact> {
+pub fn artifacts(
+    component: &Component,
+    machine: &ResolvedMachine,
+    dir: &str,
+) -> Result<Vec<Artifact>, PlanError> {
     let behavior = component
         .behavior
         .as_ref()
         .expect("validated machine has behavior");
     let lean = lean_refs(behavior, machine);
-    let artifact = |name: &str, ownership, purpose: &str, content| Artifact {
-        path: format!("{dir}/{name}"),
-        ownership,
-        profile: TRANSITION_CORE_V0.into(),
-        purpose: purpose.into(),
-        components: vec![component.id.clone()],
-        lean: lean.clone(),
-        content,
+    let artifact = |name: &str, ownership, purpose: &str, content| -> Result<Artifact, PlanError> {
+        Ok(Artifact {
+            path: planned_path(format!("{dir}/{name}"))?,
+            ownership,
+            profile: TRANSITION_CORE_V0.into(),
+            purpose: purpose.into(),
+            components: vec![component.id.clone()],
+            lean: lean.clone(),
+            content,
+        })
     };
-    vec![
+    Ok(vec![
         artifact(
             "mod.rs",
             Ownership::Generated,
             "Machine contract: types and transition signature",
             contract(component, behavior, machine),
-        ),
+        )?,
         artifact(
             "contract_tests.rs",
             Ownership::Generated,
             "Generated contract tests",
             contract_tests(behavior),
-        ),
+        )?,
         artifact(
             "imp.rs",
             Ownership::Implementation,
             "Transition implementation, owned by the implementer",
             implementation(component, behavior),
-        ),
-    ]
+        )?,
+    ])
 }
 
 fn lean_refs(behavior: &Behavior, machine: &ResolvedMachine) -> Vec<String> {

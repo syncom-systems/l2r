@@ -10,9 +10,14 @@ use l2r_model::{Component, MessageEdge, Model, profiles};
 
 use crate::plan::{Artifact, Ownership};
 use crate::text;
+use crate::{PlanError, planned_path};
 
 /// Plans the files for one composite component in directory `dir`.
-pub fn artifacts(model: &Model, component: &Component, dir: &str) -> Vec<Artifact> {
+pub fn artifacts(
+    model: &Model,
+    component: &Component,
+    dir: &str,
+) -> Result<Vec<Artifact>, PlanError> {
     let children = model.children(&component.id);
     let edges = edges_within(model, component);
     let mut lean: Vec<String> = edges.iter().map(|e| e.translation.clone()).collect();
@@ -20,7 +25,7 @@ pub fn artifacts(model: &Model, component: &Component, dir: &str) -> Vec<Artifac
     let mut sources = vec![component.id.clone()];
     sources.extend(children.iter().map(|c| c.id.clone()));
     let mut artifacts = vec![Artifact {
-        path: format!("{dir}/mod.rs"),
+        path: planned_path(format!("{dir}/mod.rs"))?,
         ownership: Ownership::Generated,
         profile: profiles::COMPOSITE_V0.into(),
         purpose: "Composite contract: children, mailboxes and deterministic scheduler".into(),
@@ -30,7 +35,7 @@ pub fn artifacts(model: &Model, component: &Component, dir: &str) -> Vec<Artifac
     }];
     if !edges.is_empty() {
         artifacts.push(Artifact {
-            path: format!("{dir}/routes.rs"),
+            path: planned_path(format!("{dir}/routes.rs"))?,
             ownership: Ownership::Implementation,
             profile: profiles::COMPOSITE_V0.into(),
             purpose: "Message translations, owned by the implementer".into(),
@@ -39,7 +44,7 @@ pub fn artifacts(model: &Model, component: &Component, dir: &str) -> Vec<Artifac
             content: routes(model, component, &edges),
         });
     }
-    artifacts
+    Ok(artifacts)
 }
 
 /// Edges between children of `component`, in canonical order.

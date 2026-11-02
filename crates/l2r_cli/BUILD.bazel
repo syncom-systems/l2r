@@ -26,3 +26,17 @@ l2r_rust_test(
     env = {"L2R_BIN": "$(rootpath :l2r)"},
     deps = ["//crates/l2r_testing"],
 )
+
+l2r_rust_test(
+    name = "l2r_cli_crash_test",
+    srcs = ["tests/crash.rs"],
+    data = [
+        ":l2r",
+        "//crates/l2r_apply:l2r_crash_after",
+    ],
+    env = {
+        "CRASH_BIN": "$(rootpath //crates/l2r_apply:l2r_crash_after)",
+        "L2R_BIN": "$(rootpath :l2r)",
+    },
+    deps = ["//crates/l2r_testing"],
+)
