@@ -1,6 +1,9 @@
+/bazel-*
 /target/
+.lake/
 .DS_Store
 *.swp
 *.swo
 .idea/
 .vscode/
+user.bazelrc

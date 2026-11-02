@@ -1,0 +1,142 @@
+//! Syntax of identifiers, Lean names, paths and free text.
+
+/// Module names that profiles generate themselves and components may not take.
+pub const RESERVED_MODULES: &[&str] = &["contract_tests", "imp", "routes"];
+
+const RUST_KEYWORDS: &[&str] = &[
+    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
+    "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
+    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+    "return", "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof",
+    "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
+];
+
+/// Lower snake case: `[a-z][a-z0-9_]*`, at most 64 bytes, no `__`, no trailing `_`.
+pub fn is_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    let starts_lower = matches!(chars.next(), Some('a'..='z'));
+    starts_lower
+        && s.len() <= 64
+        && s.chars().all(|c| matches!(c, 'a'..='z' | '0'..='9' | '_'))
+        && !s.contains("__")
+        && !s.ends_with('_')
+}
+
+/// True for words Rust reserves.
+pub fn is_rust_keyword(s: &str) -> bool {
+    RUST_KEYWORDS.contains(&s)
+}
+
+/// An ASCII, dot-separated Lean name such as `Crossing.Latch.step`.
+pub fn is_lean_name(s: &str) -> bool {
+    !s.is_empty() && s.split('.').all(is_lean_segment)
+}
+
+fn is_lean_segment(segment: &str) -> bool {
+    let mut chars = segment.chars();
+    let valid_start = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_');
+    valid_start && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '\'' | '!' | '?'))
+}
+
+/// The last segment of a Lean name.
+pub fn lean_last_segment(name: &str) -> &str {
+    name.rsplit('.').next().unwrap_or(name)
+}
+
+/// Converts `vehiclesGreen` or `vehicles_green` into `VehiclesGreen`.
+///
+/// Returns `None` when the segment cannot become a Rust type name.
+pub fn upper_camel(segment: &str) -> Option<String> {
+    if !segment
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return None;
+    }
+    let mut out = String::new();
+    for part in segment.split('_').filter(|p| !p.is_empty()) {
+        let mut chars = part.chars();
+        if let Some(first) = chars.next() {
+            out.push(first.to_ascii_uppercase());
+            out.extend(chars);
+        }
+    }
+    let valid = out.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && out != "Self";
+    valid.then_some(out)
+}
+
+/// A relative path that cannot escape its base: no absolute paths, no `..`,
+/// no empty or hidden segments, and only `[A-Za-z0-9_.-]` characters.
+pub fn is_safe_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && path.split('/').all(|segment| {
+            !segment.is_empty()
+                && !segment.starts_with('.')
+                && segment
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        })
+}
+
+/// Free text without control characters other than newline.
+pub fn is_clean_text(text: &str) -> bool {
+    text.chars().all(|c| c == '\n' || !c.is_control())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identifiers() {
+        assert!(is_identifier("request_latch"));
+        assert!(is_identifier("a1"));
+        for bad in ["", "Latch", "1a", "a-b", "a__b", "a_", "a b"] {
+            assert!(!is_identifier(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn lean_names() {
+        assert!(is_lean_name("Crossing.Latch.step"));
+        assert!(is_lean_name("Foo.bar'"));
+        for bad in ["", "Foo.", ".Foo", "Foo..bar", "Foo.1bar", "Foo bar"] {
+            assert!(!is_lean_name(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn camel_case() {
+        assert_eq!(
+            upper_camel("vehiclesGreen").as_deref(),
+            Some("VehiclesGreen")
+        );
+        assert_eq!(
+            upper_camel("vehicles_green").as_deref(),
+            Some("VehiclesGreen")
+        );
+        assert_eq!(upper_camel("idle").as_deref(), Some("Idle"));
+        assert_eq!(upper_camel("self"), None);
+        assert_eq!(upper_camel("_"), None);
+        assert_eq!(upper_camel("a'"), None);
+    }
+
+    #[test]
+    fn paths() {
+        assert!(is_safe_relative_path("scaffold"));
+        assert!(is_safe_relative_path("a/b-c/d_e.json"));
+        for bad in [
+            "", "/abs", "../up", "a/../b", "a//b", ".hidden", "a/.git", "a\\b",
+        ] {
+            assert!(!is_safe_relative_path(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn text() {
+        assert!(is_clean_text("line one\nline two"));
+        assert!(!is_clean_text("bell\u{7}"));
+        assert!(!is_clean_text("carriage\rreturn"));
+    }
+}
