@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use l2r_model::{RelPath, digest};
 use l2r_plan::Plan;
 
+use crate::approval::{Approval, Change};
 use crate::lock::{Lock, LockOwnership, is_digest};
 use crate::tree::TempName;
 
@@ -118,9 +119,15 @@ impl Journal {
     /// `plan` from `prior` (the recorded prior lock) could produce. The plan and
     /// the prior lock are the only sources of authority; the journal's own claims
     /// about ownership and digests are checked against them, never believed.
-    pub fn authorize(&self, plan: &Plan, prior: Option<&Lock>) -> Result<(), String> {
+    pub fn authorize(
+        &self,
+        plan: &Plan,
+        prior: Option<&Lock>,
+        approval: &Approval,
+    ) -> Result<(), String> {
         for step in &self.steps {
             step.authorize(plan, prior)
+                .and_then(|()| step.authorized_by(approval))
                 .map_err(|why| format!("step for `{}` {why}", step.path))?;
         }
         Ok(())
@@ -181,6 +188,20 @@ impl Step {
             },
         }
     }
+    /// Replacing or deleting needs the approval record's explicit entry for this
+    /// path and this exact prior content; the lock alone never suffices.
+    fn authorized_by(&self, approval: &Approval) -> Result<(), &'static str> {
+        let change = match self.kind {
+            StepKind::Create => return Ok(()),
+            StepKind::Replace => Change::Replace,
+            StepKind::Delete => Change::Delete,
+        };
+        match &self.before {
+            Some(before) if approval.authorizes(&self.path, change, before) => Ok(()),
+            _ => Err("is not authorized by the approval record for that file content"),
+        }
+    }
+
     fn validate(&self) -> Result<(), String> {
         let digest_ok = |d: &Option<String>| d.as_deref().is_some_and(is_digest);
         let shape_ok = match self.kind {

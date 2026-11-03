@@ -67,6 +67,17 @@ pub fn preview(model: &Model, plan: &Plan, assessment: &Assessment, show_content
     for action in &assessment.actions {
         let _ = writeln!(out, "  {:<29} {}", action_label(action.kind), action.path);
     }
+    let destructive = l2r_apply::destructive_changes(assessment);
+    if !destructive.is_empty() {
+        let _ = writeln!(
+            out,
+            "\nApproving records permission to destroy existing content ({}):",
+            destructive.len()
+        );
+        for c in &destructive {
+            let _ = writeln!(out, "  {:?} {} while it is {}", c.change, c.path, c.before);
+        }
+    }
     if !assessment.conflicts.is_empty() {
         let _ = writeln!(
             out,

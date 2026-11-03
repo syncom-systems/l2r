@@ -22,7 +22,9 @@ pub mod lock;
 pub mod transaction;
 mod tree;
 
-pub use approval::{Approval, ApprovalError, approve, verify};
+pub use approval::{
+    Approval, ApprovalError, AuthorizedChange, Change, approve, destructive_changes, verify,
+};
 pub use assess::{Action, ActionKind, Assessment, Conflict, assess};
 pub use check::{Finding, check};
 pub use transaction::{ApplyError, Report, apply, pending, recover};

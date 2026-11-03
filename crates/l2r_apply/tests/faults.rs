@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use l2r_apply::fault::{self, Mode};
 use l2r_apply::journal::JOURNAL_FILE;
 use l2r_apply::lock::{LOCK_FILE, Lock};
-use l2r_apply::{ApplyError, Approval, apply, approve, check, pending, recover};
+use l2r_apply::{ApplyError, Approval, apply, approve, assess, check, pending, recover};
 use l2r_model::Model;
 use l2r_plan::{GeneratorIdentity, Ownership, Plan, plan};
 use l2r_testing::{example_inventory, example_model, scratch_dir};
@@ -23,8 +23,20 @@ fn plan_for(model: &Model) -> Plan {
     .expect("plans")
 }
 
-fn approved(plan: &Plan) -> Approval {
-    approve(plan, &plan.digest(), "test").expect("approves")
+fn approved(plan: &Plan, root: &Path) -> Approval {
+    // The record is made once, from the tree as it is before generation, as a
+    // reviewer's preview would show it; later calls for the same tree and plan
+    // return that same record, as a committed approval file would.
+    static RECORDS: std::sync::Mutex<Vec<(PathBuf, String, Approval)>> =
+        std::sync::Mutex::new(Vec::new());
+    let mut records = RECORDS.lock().unwrap();
+    let key = (root.to_path_buf(), plan.digest());
+    if let Some((_, _, a)) = records.iter().find(|(r, d, _)| (r, d) == (&key.0, &key.1)) {
+        return a.clone();
+    }
+    let record = approve(plan, &plan.digest(), "test", &assess(plan, root)).expect("approves");
+    records.push((key.0, key.1, record.clone()));
+    record
 }
 
 /// A change that exercises every step kind: two replacements, one creation and
@@ -77,7 +89,7 @@ impl Fixture {
         let base = scratch_dir(label);
         let root = base.join("out");
         let first = plan_for(&example_model());
-        apply(&first, &approved(&first), &root).expect("initial generation");
+        apply(&first, &approved(&first, &root), &root).expect("initial generation");
         for path in IMPLEMENTATIONS {
             fs::write(
                 root.join(path),
@@ -153,7 +165,7 @@ fn every_interruption_point_recovers_to_the_approved_plan() {
         let fixture = Fixture::new(&format!("interrupt-{k}"));
         let outside = fixture.outside();
         fault::arm(k, Mode::Interrupt);
-        let result = apply(&next, &approved(&next), &fixture.root);
+        let result = apply(&next, &approved(&next, &fixture.root), &fixture.root);
         fault::disarm();
         assert!(
             matches!(result, Err(ApplyError::Interrupted(_))),
@@ -164,11 +176,12 @@ fn every_interruption_point_recovers_to_the_approved_plan() {
 
         // A new generation is refused while the journal is pending.
         assert!(matches!(
-            apply(&next, &approved(&next), &fixture.root),
+            apply(&next, &approved(&next, &fixture.root), &fixture.root),
             Err(ApplyError::Conflicts(_))
         ));
 
-        recover(&next, &approved(&next), &fixture.root).unwrap_or_else(|e| panic!("k={k}: {e}"));
+        recover(&next, &approved(&next, &fixture.root), &fixture.root)
+            .unwrap_or_else(|e| panic!("k={k}: {e}"));
         assert_matches_plan(&fixture.root, &next);
         assert_implementations_preserved(&fixture.root);
         assert_eq!(
@@ -191,7 +204,7 @@ fn a_staging_failure_leaves_every_file_unchanged() {
         let fixture = Fixture::new(&format!("stage-{k}"));
         let before = snapshot(&fixture.root);
         fault::arm(k, Mode::FailStaging);
-        let result = apply(&next, &approved(&next), &fixture.root);
+        let result = apply(&next, &approved(&next, &fixture.root), &fixture.root);
         fault::disarm();
         assert!(matches!(result, Err(ApplyError::Staging(_))), "{result:?}");
         assert_eq!(
@@ -208,7 +221,7 @@ fn recovery_never_overwrites_a_file_changed_after_interruption() {
     let fixture = Fixture::new("concurrent-edit");
     let next = plan_for(&next_model());
     fault::arm(0, Mode::Interrupt);
-    let _ = apply(&next, &approved(&next), &fixture.root);
+    let _ = apply(&next, &approved(&next, &fixture.root), &fixture.root);
     fault::disarm();
     let edited = "src/crossing/request_latch/mod.rs";
     fs::write(
@@ -216,7 +229,7 @@ fn recovery_never_overwrites_a_file_changed_after_interruption() {
         "// edited by hand during the interruption\n",
     )
     .unwrap();
-    let err = recover(&next, &approved(&next), &fixture.root).unwrap_err();
+    let err = recover(&next, &approved(&next, &fixture.root), &fixture.root).unwrap_err();
     assert!(err.to_string().contains("changed by someone else"), "{err}");
     assert_eq!(
         fs::read_to_string(fixture.root.join(edited)).unwrap(),
@@ -234,12 +247,12 @@ fn an_implementation_file_created_during_interruption_wins_over_the_stub() {
     let root = base.join("out");
     let first = plan_for(&example_model());
     fault::arm(0, Mode::Interrupt);
-    let _ = apply(&first, &approved(&first), &root);
+    let _ = apply(&first, &approved(&first, &root), &root);
     fault::disarm();
     let imp = "src/crossing/signal/imp.rs";
     fs::create_dir_all(root.join("src/crossing/signal")).unwrap();
     fs::write(root.join(imp), "// written by the implementer first\n").unwrap();
-    recover(&first, &approved(&first), &root).expect("recovers");
+    recover(&first, &approved(&first, &root), &root).expect("recovers");
     assert_eq!(
         fs::read_to_string(root.join(imp)).unwrap(),
         "// written by the implementer first\n"
@@ -251,7 +264,7 @@ fn lost_staged_content_is_restaged_from_the_plan() {
     let fixture = Fixture::new("lost-temp");
     let next = plan_for(&next_model());
     fault::arm(0, Mode::Interrupt);
-    let _ = apply(&next, &approved(&next), &fixture.root);
+    let _ = apply(&next, &approved(&next, &fixture.root), &fixture.root);
     fault::disarm();
     for (path, _) in snapshot(&fixture.root)
         .iter()
@@ -259,7 +272,7 @@ fn lost_staged_content_is_restaged_from_the_plan() {
     {
         fs::write(fixture.root.join(path), "garbage").unwrap();
     }
-    recover(&next, &approved(&next), &fixture.root).expect("recovers");
+    recover(&next, &approved(&next, &fixture.root), &fixture.root).expect("recovers");
     assert_matches_plan(&fixture.root, &next);
 }
 
@@ -267,7 +280,7 @@ fn interrupted_journal(label: &str) -> (Fixture, Plan, serde_json::Value) {
     let fixture = Fixture::new(label);
     let next = plan_for(&next_model());
     fault::arm(1, Mode::Interrupt);
-    let _ = apply(&next, &approved(&next), &fixture.root);
+    let _ = apply(&next, &approved(&next, &fixture.root), &fixture.root);
     fault::disarm();
     let text = fs::read_to_string(fixture.root.join(JOURNAL_FILE)).unwrap();
     (fixture, next, serde_json::from_str(&text).unwrap())
@@ -288,7 +301,7 @@ fn a_tampered_journal_cannot_escape_the_tree() {
     journal["steps"][4]["path"] = "../victim.txt".into();
     write_journal(&fixture, &journal);
     assert!(matches!(
-        recover(&next, &approved(&next), &fixture.root),
+        recover(&next, &approved(&next, &fixture.root), &fixture.root),
         Err(ApplyError::Journal(_))
     ));
     assert_eq!(fixture.outside(), outside);
@@ -308,7 +321,7 @@ fn a_tampered_journal_cannot_replace_an_implementation_file() {
     steps.push(forged);
     write_journal(&fixture, &journal);
     assert!(matches!(
-        recover(&next, &approved(&next), &fixture.root),
+        recover(&next, &approved(&next, &fixture.root), &fixture.root),
         Err(ApplyError::Journal(_))
     ));
     assert_implementations_preserved(&fixture.root);
@@ -318,7 +331,7 @@ fn a_tampered_journal_cannot_replace_an_implementation_file() {
 fn a_journal_for_another_plan_is_refused() {
     let (fixture, _next, _journal) = interrupted_journal("journal-other");
     let other = plan_for(&example_model());
-    let err = recover(&other, &approved(&other), &fixture.root).unwrap_err();
+    let err = recover(&other, &approved(&other, &fixture.root), &fixture.root).unwrap_err();
     assert!(err.to_string().contains("the journal is for plan"), "{err}");
 }
 
@@ -327,7 +340,7 @@ fn a_journal_with_content_outside_the_plan_is_refused() {
     let (fixture, next, mut journal) = interrupted_journal("journal-content");
     journal["steps"][0]["after"] = l2r_model::digest::sha256(b"injected").into();
     write_journal(&fixture, &journal);
-    let err = recover(&next, &approved(&next), &fixture.root).unwrap_err();
+    let err = recover(&next, &approved(&next, &fixture.root), &fixture.root).unwrap_err();
     assert!(err.to_string().contains("does not match the plan"), "{err}");
 }
 
@@ -336,7 +349,7 @@ fn recovery_requires_a_current_approval() {
     let (fixture, next, _journal) = interrupted_journal("journal-approval");
     let other = plan_for(&example_model());
     assert!(matches!(
-        recover(&next, &approved(&other), &fixture.root),
+        recover(&next, &approved(&other, &fixture.root), &fixture.root),
         Err(ApplyError::Approval(_))
     ));
 }
@@ -347,7 +360,7 @@ fn a_directory_swapped_for_a_symlink_mid_generation_is_never_followed() {
     let fixture = Fixture::new("swap-dir");
     let next = plan_for(&next_model());
     fault::arm(0, Mode::Interrupt);
-    let _ = apply(&next, &approved(&next), &fixture.root);
+    let _ = apply(&next, &approved(&next, &fixture.root), &fixture.root);
     fault::disarm();
     // Replace a directory that still has pending steps with a link to a directory outside the tree.
     let decoy = fixture.base.join("decoy");
@@ -356,7 +369,7 @@ fn a_directory_swapped_for_a_symlink_mid_generation_is_never_followed() {
     fs::rename(&target, fixture.base.join("moved-away")).unwrap();
     std::os::unix::fs::symlink(&decoy, &target).unwrap();
 
-    let err = recover(&next, &approved(&next), &fixture.root).unwrap_err();
+    let err = recover(&next, &approved(&next, &fixture.root), &fixture.root).unwrap_err();
     assert!(err.to_string().contains("symbolic link"), "{err}");
     assert_eq!(
         fs::read_dir(&decoy).unwrap().count(),
@@ -390,7 +403,7 @@ fn symlinks_planted_at_the_exact_temporary_names_are_refused() {
             std::os::unix::fs::symlink(&victim, dir.join(format!(".l2r-tmp.feed.{n}"))).unwrap();
         }
     }
-    let result = apply(&next, &approved(&next), &fixture.root);
+    let result = apply(&next, &approved(&next, &fixture.root), &fixture.root);
     assert!(matches!(result, Err(ApplyError::Staging(_))), "{result:?}");
     assert_eq!(
         fs::read_to_string(&victim).unwrap(),
@@ -444,7 +457,7 @@ fn a_journal_cannot_forge_generated_ownership_of_an_implementation_file() {
     });
     journal["steps"].as_array_mut().unwrap().push(forged);
     write_journal(&fixture, &journal);
-    let result = recover(&next, &approved(&next), &fixture.root);
+    let result = recover(&next, &approved(&next, &fixture.root), &fixture.root);
     assert_implementations_preserved(&fixture.root);
     assert!(matches!(result, Err(ApplyError::Journal(_))), "{result:?}");
 }
@@ -460,7 +473,7 @@ fn a_journal_cannot_overwrite_an_edited_generated_file() {
     let step = steps.iter_mut().find(|s| s["path"] == target).unwrap();
     step["before"] = l2r_model::digest::sha256(edited.as_bytes()).into();
     write_journal(&fixture, &journal);
-    let result = recover(&next, &approved(&next), &fixture.root);
+    let result = recover(&next, &approved(&next, &fixture.root), &fixture.root);
     assert!(result.is_err(), "{result:?}");
     assert_eq!(
         fs::read_to_string(fixture.root.join(target)).unwrap(),
@@ -485,7 +498,7 @@ fn forged_delete(label: &str, target: &str, plant: Option<&str>) {
             "before": digest_of_file(&fixture, target),
         }));
     write_journal(&fixture, &journal);
-    let result = recover(&next, &approved(&next), &fixture.root);
+    let result = recover(&next, &approved(&next, &fixture.root), &fixture.root);
     assert_eq!(
         fs::read(fixture.root.join(target)).ok(),
         Some(before),
@@ -513,13 +526,13 @@ fn omitted_steps(k: usize) {
     let fixture = Fixture::new(&format!("omit-{k}"));
     let next = plan_for(&next_model());
     fault::arm(k, Mode::Interrupt);
-    let _ = apply(&next, &approved(&next), &fixture.root);
+    let _ = apply(&next, &approved(&next, &fixture.root), &fixture.root);
     fault::disarm();
     let text = fs::read_to_string(fixture.root.join(JOURNAL_FILE)).unwrap();
     let mut journal: serde_json::Value = serde_json::from_str(&text).unwrap();
     journal["steps"] = serde_json::json!([]);
     write_journal(&fixture, &journal);
-    let result = recover(&next, &approved(&next), &fixture.root);
+    let result = recover(&next, &approved(&next, &fixture.root), &fixture.root);
     // Recovery either completes the whole plan or refuses; it never records
     // the plan as applied while it is not.
     assert_lock_is_truthful(&fixture.root, &next);
@@ -557,7 +570,7 @@ fn recovery_refuses_a_prior_lock_swapped_after_the_interruption() {
         serde_json::to_string_pretty(&lock).unwrap(),
     )
     .unwrap();
-    let result = recover(&next, &approved(&next), &fixture.root);
+    let result = recover(&next, &approved(&next, &fixture.root), &fixture.root);
     assert!(matches!(result, Err(ApplyError::Journal(_))), "{result:?}");
     assert_implementations_preserved(&fixture.root);
 }
@@ -591,7 +604,7 @@ fn a_consistently_forged_lock_and_journal_still_cannot_delete_an_unmarked_file()
             "before": digest_of_file(&fixture, target),
         }));
     write_journal(&fixture, &journal);
-    let result = recover(&next, &approved(&next), &fixture.root);
+    let result = recover(&next, &approved(&next, &fixture.root), &fixture.root);
     assert!(
         fixture.root.join(target).exists(),
         "the unmarked file was deleted"
@@ -608,7 +621,7 @@ fn once_the_plans_lock_is_written_recovery_runs_no_step() {
     let next = plan_for(&next_model());
     let steps = step_count(&fixture, &next);
     fault::arm(steps + 1, Mode::Interrupt);
-    let _ = apply(&next, &approved(&next), &fixture.root);
+    let _ = apply(&next, &approved(&next, &fixture.root), &fixture.root);
     fault::disarm();
     let target = "src/notes.txt";
     fs::write(
@@ -626,7 +639,7 @@ fn once_the_plans_lock_is_written_recovery_runs_no_step() {
             "before": digest_of_file(&fixture, target),
         }));
     write_journal(&fixture, &journal);
-    recover(&next, &approved(&next), &fixture.root).expect("completes");
+    recover(&next, &approved(&next, &fixture.root), &fixture.root).expect("completes");
     assert!(
         fixture.root.join(target).exists(),
         "a step ran after the lock was written"
@@ -640,7 +653,7 @@ fn a_journal_from_before_prior_lock_binding_is_refused() {
     journal["format"] = "l2r.journal/v0".into();
     journal.as_object_mut().unwrap().remove("prior_lock");
     write_journal(&fixture, &journal);
-    let err = recover(&next, &approved(&next), &fixture.root).unwrap_err();
+    let err = recover(&next, &approved(&next, &fixture.root), &fixture.root).unwrap_err();
     assert!(
         err.to_string().contains("unsupported journal format"),
         "{err}"
@@ -654,7 +667,7 @@ fn a_journal_cannot_change_the_ownership_the_plan_gives_a_new_file() {
     let root = base.join("out");
     let first = plan_for(&example_model());
     fault::arm(0, Mode::Interrupt);
-    let _ = apply(&first, &approved(&first), &root);
+    let _ = apply(&first, &approved(&first, &root), &root);
     fault::disarm();
     let text = fs::read_to_string(root.join(JOURNAL_FILE)).unwrap();
     let mut journal: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -666,7 +679,7 @@ fn a_journal_cannot_change_the_ownership_the_plan_gives_a_new_file() {
         .unwrap();
     step["ownership"] = "generated".into();
     fs::write(root.join(JOURNAL_FILE), journal.to_string()).unwrap();
-    let err = recover(&first, &approved(&first), &root).unwrap_err();
+    let err = recover(&first, &approved(&first, &root), &root).unwrap_err();
     assert!(
         err.to_string().contains("ownership the plan does not give"),
         "{err}"

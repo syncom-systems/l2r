@@ -40,7 +40,7 @@ use std::path::Path;
 use l2r_model::digest;
 use l2r_plan::{Ownership, Plan, declares_generated};
 
-use crate::approval::{self, Approval, ApprovalError};
+use crate::approval::{self, Approval, ApprovalError, Change, destructive_changes};
 use crate::assess::{
     ActionKind, Assessment, Conflict, RecordedLock, assess_recorded, assess_tree, conflict,
     read_recorded_lock,
@@ -108,14 +108,20 @@ pub fn apply(plan: &Plan, approval: &Approval, root: &Path) -> Result<Report, Ap
     if let Some(tree) =
         Tree::open(root).map_err(|e| ApplyError::Conflicts(vec![conflict(e.path, e.reason)]))?
     {
-        let assessment = assess_tree(plan, &tree);
+        let mut assessment = assess_tree(plan, &tree);
+        assessment
+            .conflicts
+            .extend(unauthorized(&assessment, approval));
         if !assessment.conflicts.is_empty() {
             return Err(ApplyError::Conflicts(assessment.conflicts));
         }
     }
     let tree = Tree::open_or_create(root).map_err(ApplyError::Staging)?;
     // Re-assess on the tree we will write to, so the steps describe exactly it.
-    let (assessment, recorded) = assess_recorded(plan, &tree);
+    let (mut assessment, recorded) = assess_recorded(plan, &tree);
+    assessment
+        .conflicts
+        .extend(unauthorized(&assessment, approval));
     if !assessment.conflicts.is_empty() {
         return Err(ApplyError::Conflicts(assessment.conflicts));
     }
@@ -124,7 +130,7 @@ pub fn apply(plan: &Plan, approval: &Approval, root: &Path) -> Result<Report, Ap
     let journal = journal_for(plan, &assessment, recorded.as_ref(), &names);
     // One definition of a permitted transition, for writing and for recovery.
     journal
-        .authorize(plan, prior)
+        .authorize(plan, prior, approval)
         .map_err(|e| ApplyError::Journal(format!("generator defect: {e}")))?;
     stage(plan, &tree, &journal.steps).map_err(ApplyError::Staging)?;
     let created = tree
@@ -173,9 +179,9 @@ pub fn recover(plan: &Plan, approval: &Approval, root: &Path) -> Result<(), Appl
     let names = TempNames::new();
     if on_disk.as_ref().map(|r| &r.digest) == journal.prior_lock.as_ref() {
         let prior = on_disk.as_ref().map(|r| &r.lock);
-        journal.authorize(plan, prior).map_err(|e| {
+        journal.authorize(plan, prior, approval).map_err(|e| {
             ApplyError::Journal(format!(
-                "{e}; the plan and the prior lock do not authorize it"
+                "{e}; the plan, the prior lock and the approval record do not authorize it"
             ))
         })?;
         let mut steps = journal.steps.clone();
@@ -194,6 +200,31 @@ pub fn recover(plan: &Plan, approval: &Approval, root: &Path) -> Result<(), Appl
                 .into(),
         ))
     }
+}
+
+/// Replacements and deletions the approval record does not name. The lock may
+/// say a file is L2R's to replace or remove; only the reviewed record can
+/// authorize doing it to this content.
+fn unauthorized(assessment: &Assessment, approval: &Approval) -> Vec<Conflict> {
+    let granted = destructive_changes(assessment);
+    granted
+        .iter()
+        .filter(|c| !approval.authorizes(&c.path, c.change, &c.before))
+        .map(|c| {
+            let what = match c.change {
+                Change::Replace => "replacing",
+                Change::Delete => "deleting",
+            };
+            conflict(
+                c.path.as_str(),
+                format!(
+                    "{what} this file ({}) is not authorized by the approval record; review the preview and \
+                     approve again so the record names this change",
+                    c.before
+                ),
+            )
+        })
+        .collect()
 }
 
 /// True when a journal is present under `root`.

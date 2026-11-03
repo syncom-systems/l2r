@@ -118,7 +118,11 @@ and never repairs the model.
   content or diff of every change.
 - `l2r approve --digest D --by NAME` records an approval **only if** `D` is the
   current plan digest. A record is evidence that this exact plan was recorded as
-  reviewed. It is **not** proof of identity or authorization.
+  reviewed. It is **not** proof of identity or authorization. It also lists
+  (`authorized_changes`) each existing generated file the plan would replace or
+  delete, with the digest of its current content, taken from the preview.
+  `generate` replaces or deletes nothing the record does not name; the lock in
+  the output tree is evidence only.
 - `l2r generate` refuses unless the recorded approval matches the current plan,
   and says what changed: the model, the Lean inventory, the generator, or the
   profiles.

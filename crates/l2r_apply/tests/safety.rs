@@ -1,7 +1,7 @@
 //! The approval boundary and the write rules hold under hostile and stale conditions.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use l2r_apply::{
     ActionKind, ApplyError, Approval, ApprovalError, apply, approve, assess, check, lock,
@@ -23,12 +23,24 @@ fn example_plan() -> Plan {
     plan_for(&example_model(), &example_inventory())
 }
 
-fn approved(plan: &Plan) -> Approval {
-    approve(plan, &plan.digest(), "architect").expect("approves")
+fn approved(plan: &Plan, root: &Path) -> Approval {
+    // The record is made once, from the tree as it is before generation, as a
+    // reviewer's preview would show it; later calls for the same tree and plan
+    // return that same record, as a committed approval file would.
+    static RECORDS: std::sync::Mutex<Vec<(PathBuf, String, Approval)>> =
+        std::sync::Mutex::new(Vec::new());
+    let mut records = RECORDS.lock().unwrap();
+    let key = (root.to_path_buf(), plan.digest());
+    if let Some((_, _, a)) = records.iter().find(|(r, d, _)| (r, d) == (&key.0, &key.1)) {
+        return a.clone();
+    }
+    let record = approve(plan, &plan.digest(), "test", &assess(plan, root)).expect("approves");
+    records.push((key.0, key.1, record.clone()));
+    record
 }
 
 fn generate(plan: &Plan, root: &Path) {
-    apply(plan, &approved(plan), root).expect("applies");
+    apply(plan, &approved(plan, root), root).expect("applies");
 }
 
 fn read(root: &Path, path: &str) -> String {
@@ -78,7 +90,7 @@ fn regeneration_preserves_implementation_work() {
     assert_eq!(read(&root, IMPL), "// the implementer's work\n");
 
     let next = plan_for(&edited_model(), &example_inventory());
-    let report = apply(&next, &approved(&next), &root).expect("applies");
+    let report = apply(&next, &approved(&next, &root), &root).expect("applies");
     assert_eq!(read(&root, IMPL), "// the implementer's work\n");
     assert!(read(&root, CONTRACT).contains("(revised)"));
     let updated: Vec<_> = report
@@ -93,10 +105,21 @@ fn regeneration_preserves_implementation_work() {
 fn an_approval_requires_the_digest_the_architect_saw() {
     let plan = example_plan();
     let other = plan_for(&edited_model(), &example_inventory());
-    let err = approve(&plan, &other.digest(), "architect").unwrap_err();
+    let err = approve(
+        &plan,
+        &other.digest(),
+        "architect",
+        &assess(&plan, Path::new("no-such-tree")),
+    )
+    .unwrap_err();
     assert!(matches!(err, ApprovalError::DigestMismatch { .. }));
     assert!(matches!(
-        approve(&plan, &plan.digest(), "  "),
+        approve(
+            &plan,
+            &plan.digest(),
+            "  ",
+            &assess(&plan, Path::new("no-such-tree"))
+        ),
         Err(ApprovalError::MissingApprover)
     ));
 }
@@ -104,7 +127,7 @@ fn an_approval_requires_the_digest_the_architect_saw() {
 #[test]
 fn a_stale_approval_is_refused_and_nothing_is_written() {
     let root = scratch_dir("stale");
-    let old_approval = approved(&example_plan());
+    let old_approval = approved(&example_plan(), Path::new("no-such-tree"));
     let next = plan_for(&edited_model(), &example_inventory());
     match apply(&next, &old_approval, &root) {
         Err(ApplyError::Approval(ApprovalError::Stale { reasons })) => {
@@ -117,7 +140,7 @@ fn a_stale_approval_is_refused_and_nothing_is_written() {
 
 #[test]
 fn a_lean_change_makes_an_approval_stale() {
-    let approval = approved(&example_plan());
+    let approval = approved(&example_plan(), Path::new("no-such-tree"));
     let mut inventory = example_inventory();
     inventory.lean_version = "4.99.0".into();
     let next = plan_for(&example_model(), &inventory);
@@ -132,7 +155,7 @@ fn a_lean_change_makes_an_approval_stale() {
 
 #[test]
 fn a_generator_change_makes_an_approval_stale() {
-    let approval = approved(&example_plan());
+    let approval = approved(&example_plan(), Path::new("no-such-tree"));
     let validated = validate(&example_model(), &example_inventory()).unwrap();
     let next = plan(
         &validated,
@@ -157,7 +180,7 @@ fn an_edited_generated_file_blocks_the_whole_write() {
     let before = read(&root, CONTRACT);
 
     let next = plan_for(&edited_model(), &example_inventory());
-    match apply(&next, &approved(&next), &root) {
+    match apply(&next, &approved(&next, &root), &root) {
         Err(ApplyError::Conflicts(conflicts)) => {
             assert_eq!(conflicts.len(), 1);
             assert_eq!(conflicts[0].path, "src/lib.rs");
@@ -177,7 +200,7 @@ fn a_foreign_file_in_a_generated_path_is_a_conflict() {
     let root = scratch_dir("foreign");
     fs::write(root.join("BUILD.bazel"), "# someone else's package\n").unwrap();
     let plan = example_plan();
-    let err = apply(&plan, &approved(&plan), &root).unwrap_err();
+    let err = apply(&plan, &approved(&plan, &root), &root).unwrap_err();
     assert!(
         matches!(err, ApplyError::Conflicts(ref c) if c[0].path == "BUILD.bazel"),
         "{err}"
@@ -193,7 +216,7 @@ fn symlinks_inside_the_output_are_refused() {
     let outside = scratch_dir("outside");
     std::os::unix::fs::symlink(&outside, root.join("src")).unwrap();
     let plan = example_plan();
-    let err = apply(&plan, &approved(&plan), &root).unwrap_err();
+    let err = apply(&plan, &approved(&plan, &root), &root).unwrap_err();
     assert!(matches!(err, ApplyError::Conflicts(_)), "{err}");
     assert_eq!(
         fs::read_dir(&outside).unwrap().count(),
@@ -211,7 +234,7 @@ fn a_symlinked_output_directory_is_refused() {
     let link = base.join("link");
     std::os::unix::fs::symlink(&real, &link).unwrap();
     let plan = example_plan();
-    assert!(apply(&plan, &approved(&plan), &link).is_err());
+    assert!(apply(&plan, &approved(&plan, &link), &link).is_err());
     assert_eq!(fs::read_dir(&real).unwrap().count(), 0);
 }
 
@@ -223,7 +246,7 @@ fn a_malformed_lock_is_a_conflict_not_a_reset() {
     let plan = example_plan();
     let assessment = assess(&plan, &root);
     assert_eq!(assessment.conflicts[0].path, lock::LOCK_FILE);
-    assert!(apply(&plan, &approved(&plan), &root).is_err());
+    assert!(apply(&plan, &approved(&plan, &root), &root).is_err());
 }
 
 #[test]
@@ -255,7 +278,7 @@ fn removing_a_component_deletes_its_generated_files_but_keeps_implementation() {
     model.components.retain(|c| c.id != "signal");
     model.messages.clear();
     let next = plan_for(&model, &example_inventory());
-    let report = apply(&next, &approved(&next), &root).expect("applies");
+    let report = apply(&next, &approved(&next, &root), &root).expect("applies");
 
     let deleted: Vec<_> = report
         .assessment
