@@ -128,7 +128,8 @@ impl TempNames {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let run = format!("{:x}{:x}", std::process::id(), nanos & 0xffff_ffff_ffff);
+        let run = crate::fault::run_id_override()
+            .unwrap_or_else(|| format!("{:x}{:x}", std::process::id(), nanos & 0xffff_ffff_ffff));
         Self {
             run,
             next: AtomicU32::new(0),

@@ -23,6 +23,17 @@ mod armed {
 
     thread_local! {
         static ARMED: Cell<Option<(usize, Mode)>> = const { Cell::new(None) };
+        static RUN_ID: Cell<Option<&'static str>> = const { Cell::new(None) };
+    }
+
+    /// Makes this thread's temporary names predictable (`.l2r-tmp.<id>.<n>`), so a
+    /// test can plant files or links at exactly the names L2R will create.
+    pub fn fix_run_id(id: &'static str) {
+        RUN_ID.with(|r| r.set(Some(id)));
+    }
+
+    pub(crate) fn run_id() -> Option<&'static str> {
+        RUN_ID.with(|r| r.get())
     }
 
     /// Stops the current thread's next generation after `steps` committed steps.
@@ -47,7 +58,7 @@ mod armed {
 }
 
 #[cfg(feature = "fault-injection")]
-pub use armed::{Mode, arm, disarm};
+pub use armed::{Mode, arm, disarm, fix_run_id};
 
 /// Called after each committed step (and after the lock is written).
 #[cfg(feature = "fault-injection")]
@@ -86,4 +97,17 @@ pub fn staging_checkpoint(_index: usize) -> Result<(), TreeError> {
 #[inline(always)]
 pub fn checkpoint(_completed: usize) -> Result<(), TreeError> {
     Ok(())
+}
+
+/// A fixed run id for temporary names, set only by tests in the fault build.
+#[cfg(feature = "fault-injection")]
+pub(crate) fn run_id_override() -> Option<String> {
+    armed::run_id().map(str::to_string)
+}
+
+/// A fixed run id for temporary names, set only by tests in the fault build.
+#[cfg(not(feature = "fault-injection"))]
+#[inline(always)]
+pub(crate) fn run_id_override() -> Option<String> {
+    None
 }

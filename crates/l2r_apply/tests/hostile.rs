@@ -23,17 +23,6 @@ fn approved(plan: &Plan) -> Approval {
     approve(plan, &plan.digest(), "test").expect("approves")
 }
 
-fn edited_model() -> Model {
-    let mut model = example_model();
-    let signal = model
-        .components
-        .iter_mut()
-        .find(|c| c.id == "signal")
-        .unwrap();
-    signal.responsibility.push_str(" (revised)");
-    model
-}
-
 /// An output tree `<scratch>/out` holding the generated example, and a victim
 /// file `<scratch>/victim.txt` outside it.
 fn fixture(label: &str) -> (PathBuf, PathBuf) {
@@ -109,25 +98,11 @@ fn check_does_not_probe_files_outside_the_tree() {
     assert!(victim.exists());
 }
 
-#[cfg(unix)]
-#[test]
-fn a_planted_temporary_symlink_cannot_redirect_a_write() {
-    let (root, victim) = fixture("tmp-symlink");
-    let dir = root.join("src/crossing/signal");
-    for name in [".mod.rs.l2r-tmp", ".l2r.lock.json.l2r-tmp"] {
-        let _ = fs::remove_file(dir.join(name));
-    }
-    std::os::unix::fs::symlink(&victim, dir.join(".mod.rs.l2r-tmp")).unwrap();
-    std::os::unix::fs::symlink(&victim, root.join(".l2r.lock.json.l2r-tmp")).unwrap();
-
-    let next = plan_for(&edited_model());
-    let _ = apply(&next, &approved(&next), &root);
-    assert_eq!(
-        fs::read_to_string(&victim).unwrap(),
-        "outside the output tree\n",
-        "a write followed a planted symlink out of the tree"
-    );
-}
+// The temporary-file symlink attack is tested in `faults.rs`
+// (`symlinks_planted_at_the_exact_temporary_names_are_refused`), where the
+// fault build makes temporary names predictable. This file reproduced the
+// original defect against the old fixed names (`.mod.rs.l2r-tmp`), which the
+// current code no longer uses.
 
 #[test]
 fn a_lock_entry_naming_the_lock_itself_is_refused() {
