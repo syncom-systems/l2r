@@ -1,6 +1,7 @@
 # Attempts to make the proof lane pass without a real proof. Each is applied to the
 # proof sources (exact text -> replacement, `\n` for newlines) and must be rejected
-# by the named gate: `proof` (does not compile) or `audit` (compiles, audit rejects).
+# by the named gate: `proof` (does not compile), `audit` (compiles, audit rejects)
+# or `kernel` (passes the audit, the kernel replay rejects).
 # name	file	exact text	replacement	gate
 sorry_proof	verification/aeneas/proof/Refinement.lean	  exact ⟨.VehiclesGreen, rfl, rfl⟩	  sorry	audit
 native_decide	verification/aeneas/proof/Refinement.lean	      r.map signalInput = Crossing.Routes.latchToSignal (latchOutput o) := by\n  cases o; exact ⟨_, rfl, rfl⟩	      r.map signalInput = Crossing.Routes.latchToSignal (latchOutput o) := by\n  cases o; exact ⟨_, rfl, by native_decide⟩	audit
@@ -8,3 +9,4 @@ new_axiom	verification/aeneas/proof/Refinement.lean	theorem signal_init_refines 
 weakened_statement	verification/aeneas/proof/Refinement.lean	    ∃ s, request_latch.init = ok s ∧ latchState s = Crossing.Latch.init := by\n  exact ⟨.Idle, rfl, rfl⟩	    ∃ s, request_latch.init = ok s := by\n  exact ⟨.Idle, rfl⟩	audit
 exit_early	verification/aeneas/proof/Refinement.lean	/-! ## Specification invariants	#exit\n/-! ## Specification invariants	audit
 permuted_abstraction	verification/aeneas/proof/Refinement.lean	  | .Walk => .walk\n  | .Clearance => .clearance	  | .Walk => .clearance\n  | .Clearance => .walk	proof
+skip_kernel	verification/aeneas/proof/Refinement.lean	theorem signal_init_refines :\n    ∃ s, signal.init = ok s ∧ signalState s = Crossing.Signal.init := by\n  exact ⟨.VehiclesGreen, rfl, rfl⟩	set_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM do\n  Lean.addDecl (.thmDecl (Lean.TheoremVal.mk (Lean.ConstantVal.mk `Crossing.Refinement.forged [] (Lean.mkConst ``False))\n    (Lean.mkConst ``True.intro) [`Crossing.Refinement.forged]))\n\ntheorem signal_init_refines :\n    ∃ s, signal.init = ok s ∧ signalState s = Crossing.Signal.init :=\n  forged.elim	kernel

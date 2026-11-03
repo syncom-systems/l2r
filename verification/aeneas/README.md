@@ -18,8 +18,9 @@ job (`verification` in `.github/workflows/bazel.yml`) and uploads its evidence.
 | 2. Extraction | Charon + Aeneas translate the **committed** Rust sources (both machines' `mod.rs` + `imp.rs`, and `routes.rs`), and the result is byte-identical to `proof/Extracted/CrossingCore.lean` | A stale translation: proofs about code that is no longer the code |
 | 3. Proof | The spec, the translation and `proof/Refinement.lean` compile | Proofs that do not check |
 | 4. Audit | `proof/Audit.lean`: every expected theorem exists, is a theorem, and depends only on `propext`, `Classical.choice` and `Quot.sound`. Its statement, and the defining equations of every abstraction function, equal the reviewed `expected-statements.txt` | `sorry`, `native_decide` (`Lean.ofReduceBool`), new axioms (including the `Hash` axiom Aeneas emits), `#exit` before a theorem, weakened statements, permuted abstraction functions |
+| 4b. Kernel replay | `leanchecker` re-checks every declaration of the spec, the translation and the proof modules in the kernel | A declaration that never reached the kernel, e.g. one added with `debug.skipKernelTC`. Such a declaration compiles and uses only standard axioms, so it passes gate 4 |
 | 5. Mutants | Each seeded defect in `mutants.tsv` (a real edit of the Rust source) is re-extracted, and must make **its named theorem** fail and nothing else | A proof that cannot fail; a setup error masquerading as detection |
-| 6. Bypasses | Each attempt in `bypasses.tsv` to pass without a real proof (`sorry`, `native_decide`, a new `axiom`, a weakened statement, `#exit`, a permuted abstraction function) must be rejected by its named gate | An audit that has quietly stopped detecting what it claims to detect |
+| 6. Bypasses | Each attempt in `bypasses.tsv` to pass without a real proof (`sorry`, `native_decide`, a new `axiom`, a weakened statement, `#exit`, a permuted abstraction function, a proof that skipped the kernel) must be rejected by its named gate | An audit that has quietly stopped detecting what it claims to detect |
 
 Compiling the translation alone (gate 3 without 4–6) is not accepted as
 evidence. Gates 5 and 6 run on every CI run, so the lane continuously shows
@@ -60,13 +61,16 @@ All pins are in [`bazel/verification/repo.bzl`](../../bazel/verification/repo.bz
   that day's channel manifest. This is the nightly Charon's driver links against.
 - mathlib at the revision in that Aeneas release's `lake-manifest.json`. Its
   compiled libraries come from mathlib's own cache (`lake exe cache get`) and
-  are **not** pinned by a hash recorded here. They are trusted artifacts: Lean
-  does not re-check imported proofs. Re-checking the imported environment with
-  `leanchecker` is the next hardening step.
+  are **not** pinned by a hash recorded here. They are trusted artifacts. Gate
+  4b re-checks this repository's own declarations with `leanchecker`, but not
+  the imported Aeneas and mathlib declarations. Replaying those (`leanchecker
+  --fresh`) took over 55 CPU-minutes without finishing locally. That suits a
+  scheduled job, not a PR gate, and it is not done yet.
 
 Trusted base of a passing lane: the Lean kernel; Charon and Aeneas translating
-faithfully; the mathlib and Aeneas compiled libraries; rustc; and the abstraction
-functions, which are pinned and reviewed as part of the statements.
+faithfully; the mathlib and Aeneas compiled libraries (their declarations are not
+replayed, ours are); rustc; and the abstraction functions, which are pinned and
+reviewed as part of the statements.
 
 ## Platforms
 

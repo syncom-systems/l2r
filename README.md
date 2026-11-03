@@ -106,8 +106,9 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
 
 - The proof lane covers the transition functions and routes, not the composite
   scheduler or any property of the composed system. mathlib's compiled
-  libraries are trusted inputs (not hash-pinned; imported proofs are not
-  re-checked). The lane is pinned for Linux x86_64 and macOS arm64 only.
+  libraries are trusted inputs (not hash-pinned; their proofs are not
+  re-checked, while the repository's own declarations are re-checked by the
+  kernel with `leanchecker`). The lane is pinned for Linux x86_64 and macOS arm64 only.
 - v0 state types must be field-less Lean inductives. Message edges connect
   siblings only (an open decision in ADR-0003).
 - The composite scheduler realizes one deterministic interleaving. It is neither

@@ -13,9 +13,13 @@
 #                  reviewed expected-statements.txt;
 #   5. mutants     each seeded defect in the Rust sources makes its named
 #                  refinement theorem fail, and only that theorem;
+#   4b. kernel     leanchecker re-checks every declaration of the spec, the
+#                  translation and the proof (imported Aeneas/mathlib .oleans
+#                  are trusted, not replayed);
 #   6. bypasses    each attempt in bypasses.tsv to pass without a real proof
 #                  (sorry, native_decide, a new axiom, a weakened statement,
-#                  #exit, a permuted abstraction) is rejected by its gate.
+#                  #exit, a permuted abstraction, a proof that skipped the
+#                  kernel) is rejected by its gate.
 # Evidence goes to $TEST_UNDECLARED_OUTPUTS_DIR (bazel-testlogs/.../outputs).
 set -euo pipefail
 
@@ -70,6 +74,10 @@ cmp -s "$evidence/statements.txt" verification/aeneas/expected-statements.txt ||
   diff verification/aeneas/expected-statements.txt "$evidence/statements.txt" >&2 || true
   fail "proved statements differ from the reviewed expected-statements.txt"
 }
+
+step "4b. kernel replay of the spec, translation and proof modules (leanchecker)"
+kernel_check "$spec_out" "$proof_out" > "$evidence/kernel.log" 2>&1 || { cat "$evidence/kernel.log" >&2; fail "leanchecker rejected a declaration"; }
+echo "leanchecker: every spec, translation and proof declaration re-checked by the kernel" | tee "$evidence/kernel.txt"
 
 step "5. seeded defects are detected by the named theorem"
 run_mutants "$ws" "$spec_out" "$evidence"

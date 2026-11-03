@@ -47,6 +47,16 @@ lean_compile() {
   LEAN_PATH="$LEAN_LIBS:$extra" "$LEAN" -R "$root" "$file" -o "$out"
 }
 
+# kernel_check <spec-oleans> <proof-oleans>: re-checks every declaration of the
+# spec and proof modules with leanchecker. Imported Aeneas and mathlib .oleans are
+# trusted, not replayed (a full replay of mathlib does not fit a PR gate).
+kernel_check() {
+  local spec="$1" out="$2" m
+  for m in Crossing.Latch Crossing.Signal Crossing.Routes Crossing Extracted.CrossingCore Refinement; do
+    PATH="$TOOLS/lean/bin:/usr/bin:/bin" LEAN_PATH="$LEAN_LIBS:$spec:$out" "$TOOLS/lean/bin/leanchecker" "$m" || return 1
+  done
+}
+
 compile_spec() {
   local ws="$1" out="$2" m
   for m in Crossing/Latch Crossing/Signal Crossing/Routes Crossing; do
@@ -144,10 +154,19 @@ run_bypasses() {
       echo "bypass $name: rejected by proof checking" | tee -a "$evidence/bypasses.txt"
       continue
     fi
-    [ "$gate" = audit ] || fail "bypass $name was NOT rejected: the proof still compiles"
+    [ "$gate" = audit ] || [ "$gate" = kernel ] || fail "bypass $name was NOT rejected: the proof still compiles"
     local audited=rejected
     if audit_proof "$bws" "$spec" "$bws/olean" >> "$log" 2>&1 && grep -q "AUDIT PASSED" "$log"; then
       grep -E "^(DEFINITION|STATEMENT) " "$log" | cmp -s - "$bws/verification/aeneas/expected-statements.txt" && audited=accepted
+    fi
+    if [ "$gate" = kernel ]; then
+      # Passes the audit by construction; only the kernel replay can reject it.
+      [ "$audited" = accepted ] || fail "bypass $name: expected only the kernel replay to reject it, but the audit did"
+      if kernel_check "$spec" "$bws/olean" >> "$log" 2>&1; then
+        fail "bypass $name was NOT rejected by the kernel replay"
+      fi
+      echo "bypass $name: passes the audit, rejected by the kernel replay ($(grep -m1 -oE '\(kernel\) .{0,80}' "$log" || echo 'leanchecker failed'))" | tee -a "$evidence/bypasses.txt"
+      continue
     fi
     [ "$audited" = rejected ] || fail "bypass $name was NOT rejected by the audit"
     echo "bypass $name: rejected by the audit ($(grep -m1 -oE 'AUDIT FAILED: .{0,120}' "$log" || echo 'statement mismatch'))" | tee -a "$evidence/bypasses.txt"

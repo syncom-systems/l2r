@@ -69,7 +69,11 @@ lane (`bazel test --config=verify //verification/...`) checks each of them in CI
 4. **No bypass.** Every expected theorem is present, has its expected statement,
    and depends only on the standard axioms (`propext`, `Classical.choice`,
    `Quot.sound`). `sorryAx`, `Lean.ofReduceBool` (`native_decide`) and
-   translation-introduced axioms are rejected.
+   translation-introduced axioms are rejected. The axiom check alone is not
+   enough: a declaration added with `debug.skipKernelTC` compiles and uses only
+   standard axioms. Every declaration of the spec, translation and proof is
+   therefore re-checked by the kernel with `leanchecker`, and a fixture with a
+   kernel-skipping proof must be rejected.
 5. **Detection.** Each deliberately wrong implementation (a mutant) makes the
    proof fail inside the named refinement theorem. This shows the check can fail
    at all.
