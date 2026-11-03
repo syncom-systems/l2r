@@ -1,0 +1,118 @@
+# Scheduled kernel replay of the proof lane's imported dependencies (mathlib, Aeneas' Lean
+# library, ...), which the PR lane trusts and does not replay. Separate from the PR checks:
+# no pull_request trigger, so it can never be a required check, and nothing in the foundation
+# waits for it. Bounds and how to change them: docs/verification.md ("Scheduled dependency recheck").
+#
+# Scheduled workflows run from the default branch only.
+name: dependency-recheck
+
+on:
+  schedule:
+    # Sundays 03:17 UTC: off-peak, and off the :00 minute when scheduled runs queue up.
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      budget_seconds:
+        description: "Wall-clock budget of the replay phase, in seconds (the job is hard-capped at 150 minutes)"
+        default: "5400"
+      threads:
+        description: "LEAN_NUM_THREADS per leanchecker process"
+        default: "2"
+
+permissions: {}
+
+# Runs never overlap; a new run waits for the running one rather than cancelling it.
+concurrency:
+  group: dependency-recheck
+  cancel-in-progress: false
+
+jobs:
+  recheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The pinned toolchain and mathlib libraries need ~10 GB.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/share/swift /opt/microsoft /usr/local/.ghcup
+          df -h /
+
+      # Same key as the `verification` job in bazel.yml: shares the fetched toolchain.
+      - name: Bazel repository cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-verify-${{ runner.os }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'bazel/verification/repo.bzl') }}
+          restore-keys: |
+            bazel-verify-${{ runner.os }}-
+
+      - name: Cache flags
+        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" > user.bazelrc
+
+      # --test_timeout is a backstop above the script's own budget: the script reports
+      # "incomplete" itself and writes its evidence before Bazel would have to kill it.
+      - name: Replay imported dependencies
+        run: |
+          bazel test --config=verify --test_tag_filters=dependency-recheck --test_timeout=6600 \
+            --test_output=errors \
+            --test_env=RECHECK_BUDGET_SECONDS="${{ inputs.budget_seconds || '5400' }}" \
+            --test_env=RECHECK_THREADS="${{ inputs.threads || '2' }}" \
+            //verification/aeneas:dependency_recheck
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-recheck-evidence
+          path: bazel-testlogs/verification/aeneas/dependency_recheck/
+          if-no-files-found: ignore
+
+  # One issue for as long as the recheck keeps failing. Runs after failure, timeout or
+  # cancellation of `recheck` (a job that hit timeout-minutes cannot report on itself).
+  report:
+    needs: recheck
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULT: ${{ needs.recheck.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      TITLE: Scheduled dependency recheck failed
+    steps:
+      - name: Open, update or close the tracking issue
+        run: |
+          existing="$(gh issue list --state open --label dependency-recheck --search "\"$TITLE\" in:title" --json number --jq '.[0].number // empty')"
+          if [ "$RESULT" = success ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --comment "The dependency recheck completed successfully: $RUN_URL"
+            fi
+            exit 0
+          fi
+          case "$RESULT" in
+            failure) what="failed (a dependency declaration was rejected, or the run errored)" ;;
+            cancelled) what="did not finish: it was cancelled or hit its time limit. This is INCOMPLETE, not a pass" ;;
+            *) what="did not run to completion ($RESULT). This is INCOMPLETE, not a pass" ;;
+          esac
+          body="The scheduled dependency recheck $what.
+
+          Run: $RUN_URL
+          Evidence: the \`dependency-recheck-evidence\` artifact of that run (\`dependency-recheck.json\`, status complete, failed or incomplete).
+
+          The PR checks and the foundation do not depend on this job. See docs/verification.md, section 'Scheduled dependency recheck'."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Failed again. $body"
+          else
+            gh label create dependency-recheck --color B60205 --description "Scheduled dependency recheck" 2> /dev/null || true
+            gh issue create --title "$TITLE" --label dependency-recheck --body "$body"
+          fi

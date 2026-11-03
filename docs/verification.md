@@ -92,6 +92,76 @@ abstraction functions, which are part of the reviewed statement. Aeneas's
 standard-library models contain `sorry` in some modules (e.g. slices). The axiom
 check (4) ensures no accepted proof depends on them.
 
+## Scheduled dependency recheck (separate from the PR checks)
+
+The PR lane replays its own declarations through the kernel but trusts the
+imported compiled libraries (mathlib, Aeneas' Lean library and their
+dependencies). A weekly workflow, `.github/workflows/dependency-recheck.yml`
+(also `workflow_dispatch`), replays those too:
+
+```sh
+bazel test --config=verify --test_tag_filters=dependency-recheck --test_timeout=6600 \
+  //verification/aeneas:dependency_recheck
+```
+
+**The foundation does not depend on this job.** It has no `pull_request`
+trigger, is not a required check, is tagged `manual` and `dependency-recheck`
+(so `bazel test //...` and `--config=verify //verification/...` never run it),
+and no PR waits for it. Its result is a periodic audit of trusted inputs, not a
+merge gate.
+
+- **What is replayed.** The import closure of `Refinement`: the lane's modules
+  plus every module they transitively import (about 1,740 outside the Lean
+  core). `leanchecker <Prefix>` runs once per shard; each module's own
+  declarations are re-checked by the kernel on top of its imports, so every
+  declaration in the closure is checked once. `leanchecker --fresh` would do
+  the same in one single-threaded process and did not finish in 55 CPU-minutes;
+  shards run in parallel and are reported one by one. Only closure modules are
+  replayed, not all of mathlib.
+- **Still trusted.** The Lean kernel and the `lean`, `lake` and `leanchecker`
+  binaries (the same executables do the replay; this is not an independent
+  checker), the Lean core library (`Init`, `Std`, `Lean`, `Lake`; set
+  `RECHECK_CORE=1` to replay it as well), Charon, Aeneas, rustc, the host, and
+  the abstraction functions. The replay detects declarations in the compiled
+  libraries that bypassed the kernel (for example through
+  `debug.skipKernelTC`); it does not make the kernel itself trustworthy.
+- **Schedule and bounds.** Sundays 03:17 UTC. `timeout-minutes: 150`, Bazel
+  `--test_timeout=6600`, a replay budget of 5400 s (`RECHECK_BUDGET_SECONDS`),
+  2 threads per `leanchecker` process (`RECHECK_THREADS`, i.e. `LEAN_NUM_THREADS`)
+  and shards of at most 200 modules (`RECHECK_MAX_SHARD`). Change them on the
+  `bazel test` line of the workflow (`--test_env=NAME=value`), or per manual run
+  with the `budget_seconds` and `threads` inputs. Runs never overlap
+  (`concurrency` group `dependency-recheck`, no cancellation). If you raise the
+  budget, keep `--test_timeout` and `timeout-minutes` above it.
+- **Outcomes.** `complete` passes. `failed` (a shard was rejected or crashed)
+  and `incomplete` (the budget ran out, or the job hit its time limit and was
+  killed) both fail the run; a timeout is never a pass. A failure opens, or
+  comments on, a single issue titled "Scheduled dependency recheck failed"
+  (label `dependency-recheck`); the next successful run closes it.
+- **Evidence.** The `dependency-recheck-evidence` artifact holds Bazel's test
+  outputs (`test.outputs/`, or `outputs.zip` there), containing `dependency-recheck.json` (status and
+  reason, toolchain manifest, mathlib and other package revisions from the
+  Aeneas `lake-manifest.json`, `leanchecker` sha256, closure size, modules
+  checked, wall time, budget, threads, per-shard status/time/exit code, and the
+  tail of the first failing shard's log), `modules.tsv` (every closure module
+  and its file), `shards.tsv`, and one log per shard. A run killed by the job
+  time limit may have no JSON.
+- **Expected cost.** The workflow has not run on GitHub yet; these are a local
+  probe and an extrapolation. Measured on a 14-core, 48 GB macOS arm64 machine
+  that was also busy with an unrelated job (load average about 15), one
+  `leanchecker <Prefix>` process per shard: Batteries (77 modules, 4 threads)
+  10 s, 3.0 GB peak RSS; Aesop (132, 4 threads) 18 s, 3.7 GB; Aeneas (249, 4
+  threads) 99 s, 9.4 GB; `Mathlib.Order` (134, 2 threads) 58 s, 3.7 GB;
+  `Mathlib.Tactic` (218, 2 threads) 59 s, 3.7 GB. Each module task builds its own
+  environment, so peak RSS (which includes mapped `.olean` files) grows with
+  threads, hence the default of 2. Extrapolated, not measured: the whole closure
+  (about 1,740 modules) should take on the order of 10 to 30 minutes of wall time
+  at 2 threads on a 4-core Linux runner, with 4 to 6 GB per process. The
+  uncertainty is large (module cost varies widely, the runner is slower and has
+  less memory, and mathlib's `Algebra` and `Data` shards were not measured), so
+  the 5400 s budget leaves several-fold headroom. Use the first scheduled runs
+  to calibrate the budget, and treat anything but `complete` as not checked.
+
 ## Supported subset
 
 Correspondence is practical for the code shape `transition-core/v0` generates:
