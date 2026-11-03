@@ -7,14 +7,22 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The only model schema this generator accepts.
+/// The original model schema. Models in it cannot use ports, capacities or
+/// the `composite/v1` profile.
 pub const MODEL_SCHEMA: &str = "l2r.architecture/v0";
+
+/// The model schema that adds typed composite ports and mailbox capacities
+/// (profile `composite/v1`). Every `v0` model is also accepted unchanged.
+pub const MODEL_SCHEMA_V1: &str = "l2r.architecture/v1";
+
+/// Every model schema this generator accepts.
+pub const SUPPORTED_SCHEMAS: &[&str] = &[MODEL_SCHEMA, MODEL_SCHEMA_V1];
 
 /// A complete architectural model, as authored by the architect.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Model {
-    /// Schema identifier; must equal [`MODEL_SCHEMA`].
+    /// Schema identifier; one of [`SUPPORTED_SCHEMAS`].
     pub schema: String,
     /// System-wide settings.
     pub system: System,
@@ -24,6 +32,9 @@ pub struct Model {
     /// Permitted asynchronous message edges between components.
     #[serde(default, rename = "message")]
     pub messages: Vec<MessageEdge>,
+    /// Typed input ports of composites (schema `v1`).
+    #[serde(default, rename = "port", skip_serializing_if = "Vec::is_empty")]
+    pub ports: Vec<Port>,
 }
 
 /// System-wide identity and locations.
@@ -68,6 +79,11 @@ pub struct Component {
     /// Lean references for a state machine; required by machine profiles.
     #[serde(default)]
     pub behavior: Option<Behavior>,
+    /// Capacity of this machine's mailbox, in messages (schema `v1`; required
+    /// for the children of a `composite/v1`). Part of the behavioral
+    /// semantics: a full mailbox blocks senders; nothing is dropped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailbox_capacity: Option<u32>,
 }
 
 /// Qualified Lean references describing one state machine.
@@ -105,6 +121,23 @@ pub struct MessageEdge {
     pub translation: String,
 }
 
+/// A typed input port of a composite: the only way the environment can add a
+/// message to the composite's children.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Port {
+    /// Stable identifier; also names the generated `send_<id>` function.
+    pub id: String,
+    /// The `composite/v1` component this port belongs to.
+    pub composite: String,
+    /// The child machine whose mailbox the port feeds.
+    pub to: String,
+    /// Lean inductive type (constructors without fields) of the messages the port accepts.
+    pub message: String,
+    /// Lean function `PortMessage → ToInput` (total) giving the message's meaning.
+    pub translation: String,
+}
+
 impl Model {
     /// Returns the model in canonical form: order-insensitive collections sorted.
     ///
@@ -114,6 +147,7 @@ impl Model {
         let mut model = self.clone();
         model.components.sort_by(|a, b| a.id.cmp(&b.id));
         model.messages.sort_by(|a, b| a.id.cmp(&b.id));
+        model.ports.sort_by(|a, b| a.id.cmp(&b.id));
         for component in &mut model.components {
             if let Some(behavior) = &mut component.behavior {
                 behavior.invariants.sort();

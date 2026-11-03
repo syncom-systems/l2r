@@ -36,6 +36,11 @@ pub fn translation_type(from_output: &str, to_input: &str) -> String {
     format!("{from_output} → Option {to_input}")
 }
 
+/// The exact type a port translation must have: total, unlike an edge's.
+pub fn port_translation_type(message: &str, to_input: &str) -> String {
+    format!("{message} → {to_input}")
+}
+
 /// Resolves the Lean references of every machine component.
 pub fn resolve_machines(
     model: &Model,
@@ -157,7 +162,7 @@ impl Refs<'_> {
         }
     }
 
-    fn resolve_enum(
+    pub(crate) fn resolve_enum(
         &self,
         name: &str,
         role: &str,

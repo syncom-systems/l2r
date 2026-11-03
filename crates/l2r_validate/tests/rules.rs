@@ -47,7 +47,7 @@ fn the_example_model_is_valid() {
 #[test]
 fn unsupported_schema_is_rejected() {
     let mut model = example_model();
-    model.schema = "l2r.architecture/v1".into();
+    model.schema = "l2r.architecture/v2".into();
     rejects(&model, "L2R-S001");
 }
 
@@ -299,6 +299,7 @@ fn messages_across_subtrees_are_rejected() {
         notes: None,
         implementation_budget_lines: None,
         behavior: None,
+        mailbox_capacity: None,
     });
     component(&mut model, "request_latch").parent = Some("kerb".into());
     rejects(&model, "L2R-M005");
@@ -346,4 +347,124 @@ fn a_kind_change_in_lean_invalidates_the_model() {
         .unwrap();
     theorem.kind = DeclKind::Axiom;
     assert!(codes(&example_model(), &inventory).contains(&"L2R-L004"));
+}
+
+// ---------------------------------------------------------------------------
+// composite/v1: ports, capacities and the rules that keep them honest.
+// ---------------------------------------------------------------------------
+
+use l2r_testing::{example_v1_inventory, example_v1_model};
+
+fn v1_codes(model: &Model) -> Vec<&'static str> {
+    codes(model, &example_v1_inventory())
+}
+
+fn v1_rejects(model: &Model, code: &str) {
+    let found = v1_codes(model);
+    assert!(found.contains(&code), "expected {code}, got {found:?}");
+}
+
+#[test]
+fn the_v1_example_is_valid_and_resolves_its_port_types() {
+    let validated = validate(&example_v1_model(), &example_v1_inventory()).expect("valid");
+    let button = validated.port_message("button").expect("resolved");
+    assert_eq!(button.lean_name, "CrossingV1.Ports.ButtonEvent");
+    assert_eq!(button.variants[0].rust_name, "Pressed");
+}
+
+#[test]
+fn a_v0_document_cannot_use_v1_features() {
+    // Schema `v0` means what it always meant; it does not silently gain ports.
+    let mut model = example_v1_model();
+    model.schema = "l2r.architecture/v0".into();
+    v1_rejects(&model, "L2R-S015");
+    let mut only_capacity = example_model();
+    component(&mut only_capacity, "signal").mailbox_capacity = Some(2);
+    rejects(&only_capacity, "L2R-S015");
+}
+
+#[test]
+fn v0_models_are_still_valid_under_the_v1_schema() {
+    let mut model = example_model();
+    model.schema = "l2r.architecture/v1".into();
+    assert!(codes(&model, &example_inventory()).is_empty());
+}
+
+#[test]
+fn every_child_of_a_v1_composite_must_state_a_capacity() {
+    let mut model = example_v1_model();
+    component(&mut model, "signal").mailbox_capacity = None;
+    v1_rejects(&model, "L2R-S017");
+    component(&mut model, "signal").mailbox_capacity = Some(0);
+    v1_rejects(&model, "L2R-S017");
+    component(&mut model, "signal").mailbox_capacity = Some(10_000);
+    v1_rejects(&model, "L2R-S017");
+}
+
+#[test]
+fn capacity_outside_a_v1_composite_is_rejected() {
+    let mut model = example_v1_model();
+    component(&mut model, "crossing").mailbox_capacity = Some(2);
+    v1_rejects(&model, "L2R-S018");
+}
+
+#[test]
+fn port_structure_is_checked() {
+    let mut model = example_v1_model();
+    let mut dup = model.ports[0].clone();
+    dup.translation = model.ports[0].translation.clone();
+    model.ports.push(dup);
+    v1_rejects(&model, "L2R-P001");
+
+    let mut model = example_v1_model();
+    model.ports[0].composite = "signal".into();
+    v1_rejects(&model, "L2R-P002");
+
+    let mut model = example_v1_model();
+    model.ports[0].to = "crossing".into();
+    v1_rejects(&model, "L2R-P003");
+
+    let mut model = example_v1_model();
+    model.ports.clear();
+    v1_rejects(&model, "L2R-P004");
+}
+
+#[test]
+fn a_port_must_translate_its_message_into_its_targets_input() {
+    // The wrong translation (it produces the latch's input, not the signal's)
+    // is the typed-interface guarantee in action.
+    let mut model = example_v1_model();
+    let timer = model.ports.iter_mut().find(|p| p.id == "timer").unwrap();
+    timer.translation = "CrossingV1.Ports.buttonToLatch".into();
+    v1_rejects(&model, "L2R-L006");
+    let mut model = example_v1_model();
+    model.ports[0].message = "CrossingV1.Latch.Input".into();
+    v1_rejects(&model, "L2R-L006");
+}
+
+#[test]
+fn a_machine_whose_outputs_nobody_consumes_is_rejected() {
+    // composite/v1 never discards silently and has no output ports yet.
+    let mut model = example_v1_model();
+    model.messages.retain(|m| m.from != "signal");
+    v1_rejects(&model, "L2R-M007");
+}
+
+#[test]
+fn a_v1_composite_must_be_the_root_and_hold_only_machines() {
+    let mut model = example_v1_model();
+    model.components.push(Component {
+        id: "outer".into(),
+        name: "Outer".into(),
+        parent: None,
+        profile: "composite/v0".into(),
+        responsibility: "Holds the crossing.".into(),
+        rust_module: "outer".into(),
+        notes: None,
+        implementation_budget_lines: None,
+        behavior: None,
+        mailbox_capacity: None,
+    });
+    component(&mut model, "crossing").parent = Some("outer".into());
+    v1_rejects(&model, "L2R-S016");
 }

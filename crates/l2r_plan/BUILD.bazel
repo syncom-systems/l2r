@@ -36,6 +36,9 @@ l2r_rust_test(
     compile_data = [
         "//examples/crossing:architecture.approval.json",
         "//examples/crossing:composition_derived",
+        "//examples/crossing_v1:architecture.approval.json",
+        "//examples/crossing_v1:composition_derived",
+        "//examples/crossing_v1:inputs",
         "//lean:sources",
     ],
     deps = [

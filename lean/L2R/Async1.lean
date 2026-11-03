@@ -597,7 +597,26 @@ theorem stepOnce_settled_iff (s : Sched N) :
         rw [List.all_eq_true]
         intro c _
         simp [hset c]
-      rw [if_pos hall]
+      simp [hall]
+
+/-- `Blocked` is exactly what the scheduler reports as blocked. -/
+theorem stepOnce_blocked (s : Sched N) (h : stepOnce N s = .blocked) : Blocked N s.cfg := by
+  refine ⟨?_, ?_⟩
+  · refine Classical.byContradiction fun hno => ?_
+    have hset : Settled N s.cfg := fun c =>
+      Classical.byContradiction fun hc => hno ⟨c, hc⟩
+    have := (stepOnce_settled_iff N s).mpr hset
+    rw [h] at this
+    cases this
+  · intro c
+    refine Classical.byContradiction fun hc => ?_
+    have hsome : (deliver N s.cfg c).isSome := by
+      cases hd : deliver N s.cfg c with
+      | none => exact absurd hd hc
+      | some _ => rfl
+    obtain ⟨s', hs'⟩ := (stepOnce_delivered_iff N s).mpr ⟨c, hsome⟩
+    rw [h] at hs'
+    cases hs'
 
 end RoundRobin
 

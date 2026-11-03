@@ -7,11 +7,12 @@ mod diagnostic;
 mod lean_refs;
 mod messages;
 pub mod names;
+mod ports;
 mod resolved;
 mod structure;
 
 pub use diagnostic::Diagnostic;
-pub use lean_refs::{step_type, translation_type};
+pub use lean_refs::{port_translation_type, step_type, translation_type};
 pub use resolved::{ResolvedEnum, ResolvedMachine, Validated, Variant};
 
 use l2r_model::{Inventory, Model};
@@ -30,13 +31,18 @@ pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<D
     let inventory_ok = lean_refs::check_inventory(&inventory, &mut findings);
     let usable_inventory = inventory_ok.then_some(&inventory);
     messages::check(&model, usable_inventory, &mut findings);
+    ports::check(&model, &mut findings);
     let machines = match usable_inventory {
         Some(inventory) => lean_refs::resolve_machines(&model, inventory, &mut findings),
         None => Default::default(),
     };
+    let port_messages = match usable_inventory {
+        Some(inventory) => ports::resolve(&model, inventory, &mut findings),
+        None => Default::default(),
+    };
 
     if findings.is_empty() {
-        Ok(Validated::new(model, inventory, machines))
+        Ok(Validated::new(model, inventory, machines, port_messages))
     } else {
         Err(findings.into_sorted())
     }
