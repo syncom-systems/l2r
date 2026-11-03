@@ -184,39 +184,54 @@ fn unplanned(
     }
 }
 
-/// A component's implementation file that would be orphaned at one path while a
-/// fresh stub is created at another is a move (a renamed module or a component
-/// moved to a new parent). Creating the stub silently would invite the
-/// implementer's work to be redone or lost, so it is a conflict that names the move.
+/// Creating a fresh implementation stub while an implementation file of the same
+/// name is being orphaned would silently start the implementer over: it is what a
+/// renamed module, a component moved to a new parent, or a renamed component looks
+/// like. Generation fails closed and names both paths; the human moves the file
+/// (or deletes an obsolete one) and generates again.
 fn moved_implementations(
     plan: &Plan,
     lock: &Lock,
     actions: &[Action],
     conflicts: &mut Vec<Conflict>,
 ) {
-    for orphan in actions.iter().filter(|a| a.kind == ActionKind::Orphan) {
-        let Some(component) = lock.entry(&orphan.path).map(|e| e.component.as_str()) else {
-            continue;
+    let orphans: Vec<&Action> = actions
+        .iter()
+        .filter(|a| a.kind == ActionKind::Orphan)
+        .collect();
+    for created in actions
+        .iter()
+        .filter(|a| a.kind == ActionKind::Create && a.ownership == LockOwnership::Implementation)
+    {
+        let name = created.path.split().1;
+        let owner = plan
+            .artifact(created.path.as_str())
+            .and_then(|art| art.components.first().cloned())
+            .unwrap_or_default();
+        let candidates: Vec<&&Action> = orphans
+            .iter()
+            .filter(|o| o.path.split().1 == name)
+            .collect();
+        let same_owner = candidates
+            .iter()
+            .find(|o| lock.entry(&o.path).is_some_and(|e| e.component == owner));
+        let reason = match (same_owner, candidates.first()) {
+            (Some(orphan), _) => format!(
+                "the implementation of `{owner}` moves from `{}`; move that file here (e.g. `git mv`) and generate \
+                 again",
+                orphan.path
+            ),
+            (None, Some(orphan)) => format!(
+                "a new implementation stub would be created while `{}` (component `{}`) is orphaned; if the \
+                 component was renamed, move that file here, otherwise delete it, then generate again",
+                orphan.path,
+                lock.entry(&orphan.path)
+                    .map(|e| e.component.as_str())
+                    .unwrap_or("?")
+            ),
+            (None, None) => continue,
         };
-        let name = orphan.path.split().1;
-        let replacement = actions.iter().find(|a| {
-            a.kind == ActionKind::Create
-                && a.ownership == LockOwnership::Implementation
-                && a.path.split().1 == name
-                && plan.artifact(a.path.as_str()).is_some_and(|art| {
-                    art.components.first().map(String::as_str) == Some(component)
-                })
-        });
-        if let Some(created) = replacement {
-            conflicts.push(conflict(
-                created.path.as_str(),
-                format!(
-                    "the implementation of `{component}` moves from `{}`; move that file here (e.g. `git mv`) \
-                     and generate again",
-                    orphan.path
-                ),
-            ));
-        }
+        conflicts.push(conflict(created.path.as_str(), reason));
     }
 }
 

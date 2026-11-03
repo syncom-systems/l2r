@@ -192,3 +192,33 @@ fn an_old_approval_never_applies_to_an_evolved_plan() {
         Err(ApplyError::Approval(_))
     ));
 }
+
+#[test]
+fn renaming_id_and_module_together_never_creates_a_silent_stub() {
+    let root = started("rename-both");
+    let mut model = example_model();
+    let signal = component(&mut model, "signal");
+    signal.id = "crossing_signal".into();
+    signal.rust_module = "crossing_signal".into();
+    for edge in &mut model.messages {
+        for end in [&mut edge.from, &mut edge.to] {
+            if end == "signal" {
+                *end = "crossing_signal".into();
+            }
+        }
+    }
+    let next = plan_for(&model);
+    let conflicts = assess(&next, &root).conflicts;
+    let flagged: Vec<_> = conflicts.iter().map(|c| c.path.as_str()).collect();
+    assert_eq!(
+        flagged,
+        ["src/crossing/crossing_signal/imp.rs"],
+        "{conflicts:?}"
+    );
+    assert!(
+        conflicts[0].reason.contains("src/crossing/signal/imp.rs"),
+        "{conflicts:?}"
+    );
+    assert!(apply(&next, &approved(&next), &root).is_err());
+    assert_eq!(read(&root, "src/crossing/signal/imp.rs"), WORK);
+}

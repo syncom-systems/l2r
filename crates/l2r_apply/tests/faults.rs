@@ -364,3 +364,44 @@ fn a_directory_swapped_for_a_symlink_mid_generation_is_never_followed() {
         "a write went through the swapped-in link"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn symlinks_planted_at_the_exact_temporary_names_are_refused() {
+    let fixture = Fixture::new("planted-temps");
+    let next = plan_for(&next_model());
+    let victim = fixture.base.join("victim.txt");
+    let before = snapshot(&fixture.root);
+    // Plant a link to the victim at every name this run will use, in every directory.
+    fault::fix_run_id("feed");
+    let mut dirs = vec![fixture.root.clone()];
+    let mut i = 0;
+    while i < dirs.len() {
+        for entry in fs::read_dir(&dirs[i]).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            }
+        }
+        i += 1;
+    }
+    for dir in &dirs {
+        for n in 0..32 {
+            std::os::unix::fs::symlink(&victim, dir.join(format!(".l2r-tmp.feed.{n}"))).unwrap();
+        }
+    }
+    let result = apply(&next, &approved(&next), &fixture.root);
+    assert!(matches!(result, Err(ApplyError::Staging(_))), "{result:?}");
+    assert_eq!(
+        fs::read_to_string(&victim).unwrap(),
+        "outside\n",
+        "a write followed a planted link"
+    );
+    let after: BTreeMap<_, _> = snapshot(&fixture.root);
+    let unchanged = before.iter().all(|(p, c)| after.get(p) == Some(c));
+    assert!(
+        unchanged,
+        "a staging refusal must leave the tree's files unchanged"
+    );
+    assert!(!pending(&fixture.root));
+}

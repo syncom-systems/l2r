@@ -24,7 +24,7 @@ the tests disagree, the tests are authoritative and this text is a bug.
 | --- | --- | --- | --- |
 | G1 | No file outside the output tree is read, written or deleted. | All tree access goes through one handle (`crates/l2r_apply/src/tree.rs`). It opens the root once, then resolves every path one segment at a time relative to directory descriptors (`openat` with `O_DIRECTORY \| O_NOFOLLOW`). A symbolic link anywhere below the root is refused, including one that appears after inspection. | `hostile.rs`: symlinked output dirs; `faults.rs`: a directory swapped for a symlink mid-generation; `safety.rs`: symlinked root |
 | G2 | Every path that reaches the filesystem is validated, whatever its source. | Plan artifacts, lock entries and journal steps hold a `RelPath`, which can only be built through `RelPath::parse`: relative, no `.`/`..`/hidden segments, ASCII `[A-Za-z0-9_.-]`, length limits, not a reserved state-file name. Lock and journal parsing also reject duplicate and case-colliding paths. | `l2r_model` path tests; `hostile.rs`: `../`, absolute and self-referencing lock entries; `check` cannot probe outside files |
-| G3 | Temporary files cannot be redirected. | Temporaries are created with `O_CREAT \| O_EXCL \| O_NOFOLLOW` under a per-run name. A planted file or link with that name causes a refusal, never a write through it. | `hostile.rs`: planted temporary symlinks |
+| G3 | Temporary files cannot be redirected. | Temporaries are created with `O_CREAT \| O_EXCL \| O_NOFOLLOW` under a per-run name. A planted file or link with that name causes a refusal, never a write through it. | `faults.rs`: links planted at the exact temporary names a run will use (the fault build fixes the run id); fails if the no-follow, exclusive create is removed |
 | G4 | Conflicts are detected before anything is written. | Every action is assessed before staging. Conflicts include: a symlink, a non-file, a foreign file, an edited generated file, an invalid lock, a pending journal, an ownership change, a case collision, and a moved implementation. | `safety.rs`, `evolution.rs` |
 | G5 | A staging failure changes no file. | New content is staged into temporaries first; on failure they are removed. New, empty parent directories may remain. | `faults.rs`: staging failure at each file |
 | G6 | An interruption at any point leaves each file in its old or its new state, and the run can be finished. | Each step is a single `linkat` (create), `renameat` (replace) or `unlinkat` (delete). The journal, written before the first step, names the plan and every step's before/after digests. | `faults.rs`: interruption after every step 0…n+1; `crash.rs`: a real `SIGABRT` followed by the real `l2r recover` |
@@ -67,8 +67,11 @@ example's record is a fixture recorded by an agent, and says so.
 
 ## Implementation moves
 
-When a model edit moves a component's implementation file (a renamed
-`rust_module`, or a component moved under a new parent), generation refuses and
-names both paths. The alternative, creating a fresh stub while the real work
-lies orphaned, invites lost or duplicated work. Move the file (`git mv`) and
-generate again.
+Generation refuses whenever it would create a fresh implementation stub while
+an implementation file with the same name is being orphaned, and names both
+paths. This covers a renamed `rust_module`, a component moved under a new parent,
+a renamed component id, and combinations of these. The alternative, creating a
+fresh stub while the real work lies orphaned, invites lost or duplicated work.
+Move the file (`git mv`), or delete it if it really is obsolete, and generate
+again. When the orphan belongs to the same component, the message says it
+moved. Otherwise it says it may have been renamed. (`evolution.rs`)
