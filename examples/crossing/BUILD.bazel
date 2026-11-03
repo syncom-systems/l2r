@@ -11,6 +11,13 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# The Lean specification sources, for the proof lane.
+filegroup(
+    name = "spec_sources",
+    srcs = glob(["spec/**/*.lean"]) + ["spec/lean-toolchain"],
+    visibility = ["//visibility:public"],
+)
+
 # The committed scaffold must equal the approved plan of the committed model and
 # inventory: no drift in generated files, a current approval and lock, and every
 # implementation file within its budget.

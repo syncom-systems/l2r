@@ -1,0 +1,50 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# The pinned toolchain under --config=verify, a placeholder that makes the lane
+# fail loudly otherwise.
+filegroup(
+    name = "toolchain_manifest",
+    srcs = select({
+        "//bazel/verification:verify": ["@verification_tools//:manifest.txt"],
+        "//conditions:default": ["//bazel/verification:unavailable_manifest.txt"],
+    }),
+)
+
+LANE_INPUTS = [
+    "crossing_core.rs",
+    "expected-statements.txt",
+    "mutants.tsv",
+    "proof/Audit.lean",
+    "proof/Extracted/CrossingCore.lean",
+    "proof/Refinement.lean",
+    "toolchain.sh",
+    ":toolchain_manifest",
+    "//examples/crossing:inputs",
+    "//examples/crossing:spec_sources",
+    "//examples/crossing/scaffold:l2r_files",
+    "//tools/lean_inventory:exporter",
+]
+
+# Source-to-proof verification of the crossing example (see refinement_test.sh).
+# Tagged `verification`: excluded from plain `bazel test //...`, selected by
+# `bazel test --config=verify //...`.
+sh_test(
+    name = "refinement_test",
+    size = "large",
+    srcs = ["refinement_test.sh"],
+    args = ["$(rootpath :toolchain_manifest)"],
+    data = LANE_INPUTS,
+    tags = [
+        "no-remote",
+        "no-sandbox",
+        "verification",
+    ],
+)
+
+sh_binary(
+    name = "update_translation",
+    srcs = ["update_translation.sh"],
+    args = ["$(rootpath :toolchain_manifest)"],
+    data = LANE_INPUTS,
+)

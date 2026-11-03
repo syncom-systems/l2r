@@ -62,3 +62,9 @@ crate.from_specs(
     ],
 )
 use_repo(crate, "crates")
+
+# The proof lane's pinned toolchain (Lean, Charon, Aeneas, Aeneas Lean library).
+# Fetched only when a --config=verify build needs it; see //bazel/verification.
+verification_tools = use_repo_rule("//bazel/verification:repo.bzl", "verification_tools")
+
+verification_tools(name = "verification_tools")

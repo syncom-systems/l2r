@@ -44,3 +44,42 @@ jobs:
 
       - name: rustfmt
         run: bazel build --config=fmt //...
+
+  # The proof lane: pinned Lean, Charon and Aeneas, fetched by Bazel; the
+  # refinement proofs are re-checked against a fresh extraction of the committed
+  # Rust sources, audited, and every seeded defect must be rejected.
+  verification:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The pinned toolchain and mathlib libraries need ~10 GB.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/share/swift /opt/microsoft /usr/local/.ghcup
+          df -h /
+
+      - name: Bazel repository cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-verify-${{ runner.os }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'bazel/verification/repo.bzl') }}
+          restore-keys: |
+            bazel-verify-${{ runner.os }}-
+
+      - name: Cache flags
+        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" > user.bazelrc
+
+      - name: Proof lane
+        run: bazel test --config=verify //verification/...
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-evidence
+          path: bazel-testlogs/verification/aeneas/refinement_test/
+          if-no-files-found: ignore

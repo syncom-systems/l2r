@@ -1,6 +1,6 @@
 {"schema": "l2r.lean-inventory/v0",
  "root_modules": ["Crossing"],
- "lean_version": "4.31.0",
+ "lean_version": "4.35.0",
  "declarations":
  [{"type": "Type",
    "name": "Crossing.Latch.Input",

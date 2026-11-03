@@ -9,8 +9,8 @@ owns structure. Rust is the implementation. Verification tools produce evidence
 | Kind | Question answered | Tool / artifact | Status in this repository |
 | --- | --- | --- | --- |
 | **1. Specification proofs** | Does the Lean specification have the properties we want? | Lean theorems in the spec project (e.g. `Crossing.Signal.no_conflicting_release`) | Proved for the example spec; referenced from the model as `invariants` |
-| **2. Implementation correspondence** | Does the Rust implementation compute what the Lean specification says? | Charon + Aeneas translate Rust to Lean; a refinement theorem relates the translation to the spec under explicit abstraction functions | Proved for `signal` (`verification/aeneas`). **Not** for `request_latch`, routes or the scheduler |
-| **3. Rust-local properties** | Is the implementation free of panics and overflow, and are its data-structure invariants maintained, independently of behavior? | Aeneas (panic freedom follows from the `Result` being `ok`), or Verus/Kani for properties that do not restate behavior | Panic freedom proved for `signal` as part of (2); nothing else yet |
+| **2. Implementation correspondence** | Does the Rust implementation compute what the Lean specification says? | Charon + Aeneas translate Rust to Lean; a refinement theorem relates the translation to the spec under explicit abstraction functions | Proved in CI for both machines (`request_latch`, `signal`) and both message routes (`verification/aeneas`). **Not** for the composite scheduler |
+| **3. Rust-local properties** | Is the implementation free of panics and overflow, and are its data-structure invariants maintained, independently of behavior? | Aeneas (panic freedom follows from the `Result` being `ok`), or Verus/Kani for properties that do not restate behavior | Panic freedom proved for both machines and the routes as part of (2); nothing else yet |
 | **4. Composition exploration** | Do the machines, composed asynchronously, satisfy system properties under *all* allowed interleavings? | A Lean model of the composition (or a model checker) over the space of interleavings | **Not done.** The generated scheduler realizes *one* deterministic order (see below) |
 | **5. Runtime and platform evidence** | Does the deployed system behave on real hardware, with real I/O and timing? | Integration tests, hardware-in-the-loop, monitoring | Out of scope for the generator; the example has unit tests only |
 
@@ -54,22 +54,28 @@ Lean, not a hand-written restatement.
 
 ## Traceability: when a proof counts
 
-A correspondence proof is accepted only if all of the following hold. The
-verification pipeline (separate PR) turns each into a CI check.
+A correspondence proof is accepted only if all of the following hold. The proof
+lane (`bazel test --config=verify //verification/...`) checks each of them in CI.
 
 1. **Source identity.** The translation was produced from the exact committed
    Rust sources. It is regenerated in CI from those files, not from a copy, and
    must equal the committed translation byte for byte.
 2. **Spec identity.** The proof imports the same Lean spec that produced the
    inventory that the approved plan is bound to.
-3. **Tool identity.** Charon, Aeneas, Lean and the Aeneas Lean library are
-   pinned to public releases by hash.
+3. **Tool identity.** Charon, Aeneas, Lean and the Rust nightly Charon uses are
+   pinned to public releases by sha256. mathlib's compiled libraries are fetched
+   at a pinned revision by mathlib's cache tool and are trusted, not hash-pinned
+   here.
 4. **No bypass.** Every expected theorem is present, has its expected statement,
    and depends only on the standard axioms (`propext`, `Classical.choice`,
    `Quot.sound`). `sorryAx`, `Lean.ofReduceBool` (`native_decide`) and
    translation-introduced axioms are rejected.
-5. **Detection.** A deliberately wrong implementation (a mutant) makes the
-   proof fail inside the refinement theorem. This shows the check can fail at all.
+5. **Detection.** Each deliberately wrong implementation (a mutant) makes the
+   proof fail inside the named refinement theorem. This shows the check can fail
+   at all.
+6. **Meaningful statements.** Theorem statements and the abstraction functions'
+   defining equations equal a reviewed, committed expectation. A permuted
+   abstraction function would otherwise keep every statement's text.
 
 Compiling the translated Lean is not a proof check. Only the theorem statements
 and the axiom report are.
