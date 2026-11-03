@@ -3,7 +3,7 @@
 //! the plan) must hold beyond the original happy path.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use l2r_apply::{ActionKind, ApplyError, Approval, ApprovalError, apply, approve, assess, verify};
 use l2r_model::{Component, Constructor, Inventory, Model};
@@ -23,8 +23,20 @@ fn plan_for(model: &Model) -> Plan {
     plan_with(model, &example_inventory())
 }
 
-fn approved(plan: &Plan) -> Approval {
-    approve(plan, &plan.digest(), "test").expect("approves")
+fn approved(plan: &Plan, root: &Path) -> Approval {
+    // The record is made once, from the tree as it is before generation, as a
+    // reviewer's preview would show it; later calls for the same tree and plan
+    // return that same record, as a committed approval file would.
+    static RECORDS: std::sync::Mutex<Vec<(PathBuf, String, Approval)>> =
+        std::sync::Mutex::new(Vec::new());
+    let mut records = RECORDS.lock().unwrap();
+    let key = (root.to_path_buf(), plan.digest());
+    if let Some((_, _, a)) = records.iter().find(|(r, d, _)| (r, d) == (&key.0, &key.1)) {
+        return a.clone();
+    }
+    let record = approve(plan, &plan.digest(), "test", &assess(plan, root)).expect("approves");
+    records.push((key.0, key.1, record.clone()));
+    record
 }
 
 const WORK: &str = "// the implementer's signal logic\n";
@@ -33,7 +45,7 @@ const WORK: &str = "// the implementer's signal logic\n";
 fn started(label: &str) -> std::path::PathBuf {
     let root = scratch_dir(label).join("out");
     let first = plan_for(&example_model());
-    apply(&first, &approved(&first), &root).expect("generates");
+    apply(&first, &approved(&first, &root), &root).expect("generates");
     fs::write(root.join("src/crossing/signal/imp.rs"), WORK).unwrap();
     root
 }
@@ -62,7 +74,7 @@ fn renaming_a_module_requires_moving_the_implementation_explicitly() {
             .contains("moves from `src/crossing/signal/imp.rs`")
     );
     assert!(
-        apply(&next, &approved(&next), &root).is_err(),
+        apply(&next, &approved(&next, &root), &root).is_err(),
         "no stub may silently replace the work"
     );
 
@@ -73,7 +85,7 @@ fn renaming_a_module_requires_moving_the_implementation_explicitly() {
         root.join("src/crossing/signal_head/imp.rs"),
     )
     .unwrap();
-    let report = apply(&next, &approved(&next), &root).expect("applies after the move");
+    let report = apply(&next, &approved(&next, &root), &root).expect("applies after the move");
     assert_eq!(read(&root, "src/crossing/signal_head/imp.rs"), WORK);
     let deleted: Vec<_> = report
         .assessment
@@ -131,7 +143,7 @@ fn renaming_a_component_id_keeps_its_files_and_work() {
         }
     }
     let next = plan_for(&model);
-    apply(&next, &approved(&next), &root).expect("same paths, same ownership");
+    apply(&next, &approved(&next, &root), &root).expect("same paths, same ownership");
     assert_eq!(read(&root, "src/crossing/signal/imp.rs"), WORK);
 }
 
@@ -163,12 +175,12 @@ fn a_new_lean_constructor_changes_the_contract_but_not_the_implementation() {
     let next = plan_with(&example_model(), &inventory);
     let first = plan_for(&example_model());
     assert_eq!(
-        verify(&approved(&first), &next),
+        verify(&approved(&first, Path::new("no-such-tree")), &next),
         Err(ApprovalError::Stale {
             reasons: vec!["the Lean inventory changed".into()]
         })
     );
-    let report = apply(&next, &approved(&next), &root).expect("applies");
+    let report = apply(&next, &approved(&next, &root), &root).expect("applies");
     let updated: Vec<_> = report
         .assessment
         .of_kind(ActionKind::Update)
@@ -186,7 +198,7 @@ fn an_old_approval_never_applies_to_an_evolved_plan() {
     let mut model = example_model();
     component(&mut model, "request_latch").notes = Some("New instruction.".into());
     let next = plan_for(&model);
-    let old = approved(&plan_for(&example_model()));
+    let old = approved(&plan_for(&example_model()), Path::new("no-such-tree"));
     assert!(matches!(
         apply(&next, &old, &root),
         Err(ApplyError::Approval(_))
@@ -219,6 +231,6 @@ fn renaming_id_and_module_together_never_creates_a_silent_stub() {
         conflicts[0].reason.contains("src/crossing/signal/imp.rs"),
         "{conflicts:?}"
     );
-    assert!(apply(&next, &approved(&next), &root).is_err());
+    assert!(apply(&next, &approved(&next, &root), &root).is_err());
     assert_eq!(read(&root, "src/crossing/signal/imp.rs"), WORK);
 }

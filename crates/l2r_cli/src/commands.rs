@@ -100,21 +100,26 @@ pub fn preview(model: &Path, show_content: bool) -> Outcome {
 
 /// `l2r approve <model> --digest <d> --by <name>`
 pub fn approve_plan(model: &Path, digest: &str, by: &str) -> Outcome {
-    with_session(model, |s| match approve(&s.plan, digest, by) {
-        Ok(record) => {
-            let path = s.approval_path();
-            match approval::write_record(&path, &record) {
-                Ok(()) => Outcome::ok(format!(
-                    "recorded approval of {} by \"{}\" in {}\n\
+    with_session(model, |s| {
+        let assessment = assess(&s.plan, &s.output_dir());
+        match approve(&s.plan, digest, by, &assessment) {
+            Ok(record) => {
+                let path = s.approval_path();
+                match approval::write_record(&path, &record) {
+                    Ok(()) => Outcome::ok(format!(
+                        "recorded approval of {} by \"{}\" in {}\n\
+                     authorizes replacing or deleting {} existing generated file(s)\n\
                      (a record binds generation to this digest; it is not proof of authorization)\n",
-                    record.plan_digest,
-                    record.recorded_by,
-                    path.display()
-                )),
-                Err(e) => Outcome::refused(format!("{}: {e}\n", path.display())),
+                        record.plan_digest,
+                        record.recorded_by,
+                        path.display(),
+                        record.authorized_changes.len()
+                    )),
+                    Err(e) => Outcome::refused(format!("{}: {e}\n", path.display())),
+                }
             }
+            Err(e) => Outcome::refused(format!("approval refused: {e}\n")),
         }
-        Err(e) => Outcome::refused(format!("approval refused: {e}\n")),
     })
 }
 

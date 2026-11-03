@@ -1,5 +1,5 @@
 {
-  "format": "l2r.approval/v0",
+  "format": "l2r.approval/v1",
   "plan_digest": "sha256:222b7ae958a3d7b64ecc28c19c113c57f9381fc6ecdb99a913a0d03ebab80511",
   "model_digest": "sha256:838aa6d7fdef040b5aacba98d936f2086f33a8a12297b0dce5a3322e41b79168",
   "inventory_digest": "sha256:64085bafe64bc4f81e45d43e86c5fc39e5b7f67b308f7f540d06b8398b39b934",
@@ -10,6 +10,7 @@
     "transition-core/v0"
   ],
   "artifact_count": 10,
+  "authorized_changes": [],
   "recorded_by": "example fixture recorded by the implementing agent; not a review or authorization",
-  "statement": "The recorder states that the generation plan with this digest, including the content of every planned file, was reviewed and may be written. This record is not proof of identity or authorization."
+  "statement": "The recorder states that the generation plan with this digest, including the content of every planned file, and the listed replacements and deletions of existing generated files, were reviewed and may be applied. This record is not proof of identity or authorization."
 }
