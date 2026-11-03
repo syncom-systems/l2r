@@ -1,4 +1,4 @@
-# Architecture model reference (`l2r.architecture/v0`)
+# Architecture model reference (`l2r.architecture/v0` and `v1`)
 
 The model is the authoritative source for **software structure**. Behavior
 (states, inputs, transitions, invariants, and what messages mean) is owned by
@@ -47,6 +47,38 @@ to = "signal"
 translation = "Crossing.Routes.latchToSignal"   # FromOutput → Option ToInput
 ```
 
+### Schema `l2r.architecture/v1`
+
+`v1` is `v0` plus what `composite/v1` needs; every `v0` model is also valid with
+`schema = "l2r.architecture/v1"` and means the same. A document that declares
+`v0` and uses any of the following is rejected (L2R-S015), so `v0` can never
+silently acquire new meaning.
+
+```toml
+schema = "l2r.architecture/v1"
+
+[[component]]
+id = "crossing"
+profile = "composite/v1"             # must be the root; children must be machines
+# ...
+[[component]]
+id = "signal"
+parent = "crossing"
+profile = "transition-core/v0"
+mailbox_capacity = 2                 # required for every child of a composite/v1; 1..=64
+
+[[port]]                             # the only way the environment reaches the composite
+id = "timer"                         # names the generated `send_timer`
+composite = "crossing"
+to = "signal"                        # a machine child
+message = "CrossingV1.Ports.TimerEvent"        # field-less Lean inductive
+translation = "CrossingV1.Ports.timerToSignal"  # TimerEvent → Signal.Input (total)
+```
+
+Capacity is part of the behavioral semantics (`l2r.async/v1`), not an
+implementation detail: a full mailbox blocks the sender and rejects a port send;
+nothing is dropped. See [`composite-v1.md`](composite-v1.md).
+
 Unknown fields are rejected, so a misspelled field is an error rather than being
 silently ignored. The order of components, messages and invariants does not
 matter: the model is canonicalized before it is digested.
@@ -58,6 +90,7 @@ matter: the model is canonicalized before it is digested.
 | `crate-root/v0` | whole crate | `BUILD.bazel`, `src/lib.rs` | – |
 | `transition-core/v0` | pure state machine | `mod.rs`: enums mirroring the Lean types, `init`/`step` contract; `contract_tests.rs`: totality over all states and inputs | `imp.rs` |
 | `composite/v0` | container, owns no state | `mod.rs`: children, `Envelope`, `System` with one FIFO mailbox per machine child and a deterministic round-robin scheduler | `routes.rs`: one translation function per message edge |
+| `composite/v1` | root container, owns no state, machine children only | `mod.rs`: capacities, typed port message enums, array-backed bounded mailboxes, `System` with `send_<port>` (explicit `Rejected`), a guarded round-robin `step_once` reporting `Delivered`/`Settled`/`Blocked` | `routes.rs`: one translation per edge and per port |
 
 Hierarchical composition comes from nesting composites. In v0, state types must be
 Lean inductives whose constructors have no fields. Statecharts with nested states
@@ -84,6 +117,10 @@ and never repairs the model.
 | L2R-S012 | Control characters in text |
 | L2R-S013 | Unsafe path (absolute, `..`, hidden segments) |
 | L2R-S014 | Zero implementation budget |
+| L2R-S015 | Ports, capacities or `composite/v1` used by a `v0` document |
+| L2R-S016 | `composite/v1` shape: must be the root, children must be machines |
+| L2R-S017 | A child of a `composite/v1` lacks `mailbox_capacity`, or it is 0 or above 64 |
+| L2R-S018 | `mailbox_capacity` outside the children of a `composite/v1` |
 | L2R-O001 | A Lean state type owned by more than one component |
 | L2R-L001 | Unsupported inventory schema |
 | L2R-L002 | Malformed Lean name |
@@ -98,6 +135,11 @@ and never repairs the model.
 | L2R-M004 | Self-message |
 | L2R-M005 | Endpoints are not siblings (strictest hierarchy rule; see the pending decision in ADR-0003) |
 | L2R-M006 | Two edges between the same ordered pair |
+| L2R-M007 | A machine in a `composite/v1` has no outgoing edge, so its outputs would be silently discarded |
+| L2R-P001 | Duplicate port id |
+| L2R-P002 | A port's composite does not exist or is not a `composite/v1` |
+| L2R-P003 | A port's target is not a machine inside its composite |
+| L2R-P004 | A `composite/v1` has no port |
 
 ## Recurring failure modes, turned into rules
 

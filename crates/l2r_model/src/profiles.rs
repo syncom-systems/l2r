@@ -11,5 +11,11 @@ pub const TRANSITION_CORE_V0: &str = "transition-core/v0";
 /// explicit FIFO mailboxes and approved message edges.
 pub const COMPOSITE_V0: &str = "composite/v0";
 
+/// A container whose children have bounded mailboxes (capacity is part of the
+/// semantics, `l2r.async/v1`), with typed input ports and a scheduler whose
+/// deliveries are enabled only when every receiver has room. `composite/v0` is
+/// unchanged and remains available.
+pub const COMPOSITE_V1: &str = "composite/v1";
+
 /// Every profile this generator version implements.
-pub const SUPPORTED: &[&str] = &[COMPOSITE_V0, TRANSITION_CORE_V0];
+pub const SUPPORTED: &[&str] = &[COMPOSITE_V0, COMPOSITE_V1, TRANSITION_CORE_V0];

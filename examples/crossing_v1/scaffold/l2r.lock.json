@@ -1,0 +1,64 @@
+{
+  "format": "l2r.lock/v0",
+  "plan_digest": "sha256:6bb855146029e64fdf7e13be40422a9dc8af047f5f4ef4ff30957636571aab24",
+  "generator": "l2r 0.1.0",
+  "files": [
+    {
+      "path": "BUILD.bazel",
+      "ownership": "generated",
+      "component": "crossing",
+      "digest": "sha256:32f100b70ad4a6f767fc9ad20c4c2bab2021d3370bfa5b83c8350bdb06593bba"
+    },
+    {
+      "path": "src/crossing/mod.rs",
+      "ownership": "generated",
+      "component": "crossing",
+      "digest": "sha256:cc0aba445041ff993067692fad88410dd800de08671a2183a3f980043dff8cc8"
+    },
+    {
+      "path": "src/crossing/request_latch/contract_tests.rs",
+      "ownership": "generated",
+      "component": "request_latch",
+      "digest": "sha256:8f0713f7593c2ea0a49abefc7152d06d4d89d2437ccbe310cfcead9c57f38909"
+    },
+    {
+      "path": "src/crossing/request_latch/imp.rs",
+      "ownership": "implementation",
+      "component": "request_latch"
+    },
+    {
+      "path": "src/crossing/request_latch/mod.rs",
+      "ownership": "generated",
+      "component": "request_latch",
+      "digest": "sha256:87a62f1c057165b07d40da2d89ecfa0792a48b66e17a9ed8c014211eb04c1423"
+    },
+    {
+      "path": "src/crossing/routes.rs",
+      "ownership": "implementation",
+      "component": "crossing"
+    },
+    {
+      "path": "src/crossing/signal/contract_tests.rs",
+      "ownership": "generated",
+      "component": "signal",
+      "digest": "sha256:f03955d23ad46a5a1636162e8a5a0a93c55ef3d5313b8a9042c5508b049fe398"
+    },
+    {
+      "path": "src/crossing/signal/imp.rs",
+      "ownership": "implementation",
+      "component": "signal"
+    },
+    {
+      "path": "src/crossing/signal/mod.rs",
+      "ownership": "generated",
+      "component": "signal",
+      "digest": "sha256:484a03035c08e2828aaab1a75afc69ae2ce8b0d386ee8c9f0f50d1a49f4be6ff"
+    },
+    {
+      "path": "src/lib.rs",
+      "ownership": "generated",
+      "component": "crossing",
+      "digest": "sha256:33791426d5ff6db1dc774966b3689ad9ca3ec64274ab705c1622d219c07d4db4"
+    }
+  ]
+}

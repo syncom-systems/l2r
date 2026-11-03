@@ -1,0 +1,198 @@
+{
+ "schema": "l2r.lean-inventory/v0",
+ "lean_version": "4.35.0",
+ "root_modules": [
+  "Ring"
+ ],
+ "declarations": [
+  {
+   "name": "Ring.A.State",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.A.State.off",
+     "arity": 0
+    },
+    {
+     "name": "Ring.A.State.on",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.A.Input",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.A.Input.go",
+     "arity": 0
+    },
+    {
+     "name": "Ring.A.Input.stop",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.A.Output",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.A.Output.done",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.A.init",
+   "kind": "definition",
+   "type": "Ring.A.State"
+  },
+  {
+   "name": "Ring.A.step",
+   "kind": "definition",
+   "type": "Ring.A.State → Ring.A.Input → Prod Ring.A.State (Option Ring.A.Output)"
+  },
+  {
+   "name": "Ring.B.State",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.B.State.off",
+     "arity": 0
+    },
+    {
+     "name": "Ring.B.State.on",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.B.Input",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.B.Input.go",
+     "arity": 0
+    },
+    {
+     "name": "Ring.B.Input.stop",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.B.Output",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.B.Output.done",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.B.init",
+   "kind": "definition",
+   "type": "Ring.B.State"
+  },
+  {
+   "name": "Ring.B.step",
+   "kind": "definition",
+   "type": "Ring.B.State → Ring.B.Input → Prod Ring.B.State (Option Ring.B.Output)"
+  },
+  {
+   "name": "Ring.C.State",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.C.State.off",
+     "arity": 0
+    },
+    {
+     "name": "Ring.C.State.on",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.C.Input",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.C.Input.go",
+     "arity": 0
+    },
+    {
+     "name": "Ring.C.Input.stop",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.C.Output",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.C.Output.done",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.C.init",
+   "kind": "definition",
+   "type": "Ring.C.State"
+  },
+  {
+   "name": "Ring.C.step",
+   "kind": "definition",
+   "type": "Ring.C.State → Ring.C.Input → Prod Ring.C.State (Option Ring.C.Output)"
+  },
+  {
+   "name": "Ring.Ping",
+   "kind": "inductive",
+   "type": "Type",
+   "constructors": [
+    {
+     "name": "Ring.Ping.ping",
+     "arity": 0
+    }
+   ]
+  },
+  {
+   "name": "Ring.Routes.aToB",
+   "kind": "definition",
+   "type": "Ring.A.Output → Option Ring.B.Input"
+  },
+  {
+   "name": "Ring.Routes.bToC",
+   "kind": "definition",
+   "type": "Ring.B.Output → Option Ring.C.Input"
+  },
+  {
+   "name": "Ring.Routes.cToA",
+   "kind": "definition",
+   "type": "Ring.C.Output → Option Ring.A.Input"
+  },
+  {
+   "name": "Ring.Ports.toA",
+   "kind": "definition",
+   "type": "Ring.Ping → Ring.A.Input"
+  },
+  {
+   "name": "Ring.Ports.toC",
+   "kind": "definition",
+   "type": "Ring.Ping → Ring.C.Input"
+  }
+ ]
+}

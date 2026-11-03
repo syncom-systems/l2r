@@ -1,0 +1,52 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# The bounded, repaired pedestrian-crossing example for composite/v1: model,
+# Lean inventory, approval and the generated scaffold (its own Bazel package,
+# //examples/crossing_v1/scaffold). //examples/crossing is unchanged and keeps
+# its deliberately failing liveness example.
+exports_files(["architecture.approval.json"], visibility = ["//visibility:public"])
+
+filegroup(
+    name = "inputs",
+    srcs = [
+        "architecture.toml",
+        "lean-inventory.json",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# The Lean specification sources, for the proof lanes.
+filegroup(
+    name = "spec_sources",
+    srcs = glob(["spec/**/*.lean"]) + ["spec/lean-toolchain"],
+    visibility = ["//visibility:public"],
+)
+
+# The derived Lean composition (`l2r lean-composition`) and the hand-written
+# system proofs about it.
+filegroup(
+    name = "composition_derived",
+    srcs = glob(["composition/L2RDerived/*.lean"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "composition_sources",
+    srcs = glob(["composition/**/*.lean"]),
+    visibility = ["//visibility:public"],
+)
+
+# The committed scaffold must equal the approved plan of the committed model and
+# inventory: no drift in generated files, a current approval and lock, and every
+# implementation file within its budget.
+sh_test(
+    name = "scaffold_matches_approved_plan_test",
+    srcs = ["check_scaffold.sh"],
+    args = ["$(rootpath //crates/l2r_cli:l2r)"],
+    data = [
+        "architecture.approval.json",
+        ":inputs",
+        "//crates/l2r_cli:l2r",
+        "//examples/crossing_v1/scaffold:l2r_files",
+    ],
+)

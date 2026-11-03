@@ -115,6 +115,7 @@ fn moving_machines_under_a_new_parent_moves_their_implementations() {
         notes: None,
         implementation_budget_lines: None,
         behavior: None,
+        mailbox_capacity: None,
     });
     component(&mut model, "signal").parent = Some("kerb".into());
     // Moving only one machine would break the sibling-only message rule.

@@ -21,6 +21,23 @@ pub fn example_inventory() -> Inventory {
     load::parse_inventory(EXAMPLE_INVENTORY).expect("example inventory parses")
 }
 
+/// The composite/v1 example model, as committed.
+pub const EXAMPLE_V1_MODEL: &str = include_str!("../../../examples/crossing_v1/architecture.toml");
+
+/// The composite/v1 example Lean inventory, as committed.
+pub const EXAMPLE_V1_INVENTORY: &str =
+    include_str!("../../../examples/crossing_v1/lean-inventory.json");
+
+/// Parses the composite/v1 example model.
+pub fn example_v1_model() -> Model {
+    load::parse_model(EXAMPLE_V1_MODEL).expect("v1 example model parses")
+}
+
+/// Parses the composite/v1 example inventory.
+pub fn example_v1_inventory() -> Inventory {
+    load::parse_inventory(EXAMPLE_V1_INVENTORY).expect("v1 example inventory parses")
+}
+
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
 /// Creates a fresh, empty directory under the test's scratch area.

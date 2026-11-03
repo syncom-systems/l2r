@@ -1,0 +1,11 @@
+# Seeded deviations. Each is an exact-text edit (`\n` for newlines). Expected:
+#   <proof file>:<theorem>[,<theorem>]  rejected, with every error inside those theorems
+#   accepted                            still proves every theorem with the same statement
+# name	file	exact text	replacement	expected
+sched_overflows	lean/L2R/Async1.lean	    if fits N k1 (emitted N c r.2) then	    if true then	lean/L2R/Async1.lean:deliver_some,deliver_none_iff
+send_ignores_capacity	lean/L2R/Async1.lean	      E k p m → (k.inbox (N.target p)).length < N.cap (N.target p) →\n      StepL E k (.send p m) (inject N k p m)	      E k p m →\n      StepL E k (.send p m) (inject N k p m)	lean/L2R/Async1.lean:send_sound,step_bounded
+sched_send_ignores_capacity	lean/L2R/Async1.lean	  if (s.cfg.inbox (N.target p)).length < N.cap (N.target p) then	  if true then	lean/L2R/Async1.lean:send_sound,send_rejected_iff
+sched_serves_newest	lean/L2R/Async1.lean	  match k.inbox c with\n  | [] => none\n  | i :: rest =>\n    let r	  match (k.inbox c).reverse with\n  | [] => none\n  | i :: rest =>\n    let r	lean/L2R/Async1.lean:deliver_some,deliver_none_iff,deliver_empty
+spec_signal_drops_queued_request	examples/crossing_v1/spec/CrossingV1/Signal.lean	  | .walk, .crossingRequested => (.walkQueued, none)	  | .walk, .crossingRequested => (.walk, none)	examples/crossing_v1/composition/CrossingV1Properties.lean:reach_coherent,dist_certificate
+port_timer_injects_requests	examples/crossing_v1/spec/CrossingV1/Ports.lean	  | .expired => .timerExpired	  | .expired => .crossingRequested	examples/crossing_v1/composition/CrossingV1Properties.lean:send_timer
+sched_sticky_cursor	lean/L2R/Async1.lean	(deliver N s.cfg c).map fun k => (⟨k, (c.val + 1) % N.size⟩ : Sched N)	(deliver N s.cfg c).map fun k => (⟨k, c.val⟩ : Sched N)	accepted
