@@ -13,8 +13,18 @@
 //! 4. **Commit**: one step per file, each re-checking the target's digest
 //!    immediately before acting. Creates never replace an existing file.
 //!    Replacements are atomic renames, and deletions remove only an unmodified
-//!    generated file. Then the new lock is written atomically and the journal
-//!    removed.
+//!    generated file. Then the tree is checked to be in the plan's state, the
+//!    new lock is written atomically and the journal removed.
+//!
+//! **Authority.** Every step must be one that generating the approved plan from
+//! the recorded prior lock could produce ([`Journal::authorize`]); this holds for
+//! the journal `apply` writes and is re-checked for the journal `recover` reads.
+//! Recovery runs steps only while that same prior lock is on disk, so it has no
+//! authority beyond what generation from the same recorded state has. A lock is
+//! written only after a final-state check confirms the tree holds every planned
+//! generated file with its planned content, every planned implementation file,
+//! and none of the prior lock's no-longer-planned generated files. Omitting steps
+//! from a journal therefore cannot produce a lock that misstates the tree.
 //!
 //! Guarantee: after an interruption at any point, every file is either in its
 //! old or its new state, and the journal records which plan was being applied.
@@ -28,10 +38,13 @@ use std::fmt;
 use std::path::Path;
 
 use l2r_model::digest;
-use l2r_plan::Plan;
+use l2r_plan::{Ownership, Plan, declares_generated};
 
 use crate::approval::{self, Approval, ApprovalError};
-use crate::assess::{ActionKind, Assessment, Conflict, assess_tree, conflict};
+use crate::assess::{
+    ActionKind, Assessment, Conflict, RecordedLock, assess_recorded, assess_tree, conflict,
+    read_recorded_lock,
+};
 use crate::journal::{JOURNAL_FILE, JOURNAL_FORMAT, Journal, Step, StepKind};
 use crate::lock::{LOCK_FILE, Lock, LockOwnership};
 use crate::tree::{Occupant, TempNames, Tree, TreeError};
@@ -102,12 +115,17 @@ pub fn apply(plan: &Plan, approval: &Approval, root: &Path) -> Result<Report, Ap
     }
     let tree = Tree::open_or_create(root).map_err(ApplyError::Staging)?;
     // Re-assess on the tree we will write to, so the steps describe exactly it.
-    let assessment = assess_tree(plan, &tree);
+    let (assessment, recorded) = assess_recorded(plan, &tree);
     if !assessment.conflicts.is_empty() {
         return Err(ApplyError::Conflicts(assessment.conflicts));
     }
+    let prior = recorded.as_ref().map(|r| &r.lock);
     let names = TempNames::new();
-    let journal = journal_for(plan, &assessment, &names);
+    let journal = journal_for(plan, &assessment, recorded.as_ref(), &names);
+    // One definition of a permitted transition, for writing and for recovery.
+    journal
+        .authorize(plan, prior)
+        .map_err(|e| ApplyError::Journal(format!("generator defect: {e}")))?;
     stage(plan, &tree, &journal.steps).map_err(ApplyError::Staging)?;
     let created = tree
         .create_state(JOURNAL_FILE, &names.next(), journal.to_json().as_bytes())
@@ -126,27 +144,56 @@ pub fn apply(plan: &Plan, approval: &Approval, root: &Path) -> Result<Report, Ap
             return Err(e);
         }
     }
-    commit(&tree, &journal, &names).map_err(ApplyError::Interrupted)?;
+    commit(&tree, plan, &journal, prior, &names).map_err(ApplyError::Interrupted)?;
     Ok(Report { assessment })
 }
 
 /// Finishes an interrupted generation of `plan` under `root`.
 ///
-/// The journal must name exactly `plan`, which must still be approved. Every
-/// step is re-verified, and missing or damaged staged content is re-staged from
-/// the plan itself, so recovery never writes content that is not in the plan.
+/// The journal must name exactly `plan`, which must still be approved. What
+/// happens next depends on the lock on disk:
+///
+/// - It is the prior lock the journal records (same bytes): every step must be
+///   authorized by the plan and that lock, missing or damaged staged content is
+///   re-staged from the plan itself, and the steps are committed.
+/// - It is already the plan's own lock (the interruption came after it was
+///   written): no step runs; the tree is only checked to be in the plan's state.
+/// - Anything else: refused, because the recorded state the steps were derived
+///   from is gone.
+///
+/// Either way the final-state check runs before the journal is removed.
 pub fn recover(plan: &Plan, approval: &Approval, root: &Path) -> Result<(), ApplyError> {
     approval::verify(approval, plan).map_err(ApplyError::Approval)?;
     let tree = Tree::open(root)
         .map_err(|e| ApplyError::Journal(e.to_string()))?
         .ok_or(ApplyError::NothingToRecover)?;
     let journal = read_journal(&tree)?;
-    check_journal_matches_plan(&journal, plan)?;
+    check_journal_names_plan(&journal, plan)?;
+    let on_disk = read_recorded_lock(&tree).map_err(|c| ApplyError::Journal(c.reason))?;
     let names = TempNames::new();
-    let mut steps = journal.steps.clone();
-    restage_missing(plan, &tree, &mut steps, &names).map_err(ApplyError::Interrupted)?;
-    let journal = Journal { steps, ..journal };
-    commit(&tree, &journal, &names).map_err(ApplyError::Interrupted)
+    if on_disk.as_ref().map(|r| &r.digest) == journal.prior_lock.as_ref() {
+        let prior = on_disk.as_ref().map(|r| &r.lock);
+        journal.authorize(plan, prior).map_err(|e| {
+            ApplyError::Journal(format!(
+                "{e}; the plan and the prior lock do not authorize it"
+            ))
+        })?;
+        let mut steps = journal.steps.clone();
+        restage_missing(plan, &tree, &mut steps, &names).map_err(ApplyError::Interrupted)?;
+        let journal = Journal { steps, ..journal };
+        commit(&tree, plan, &journal, prior, &names).map_err(ApplyError::Interrupted)
+    } else if on_disk.as_ref().is_some_and(|r| r.lock == journal.lock) {
+        verify_applied(&tree, plan, None).map_err(ApplyError::Interrupted)?;
+        discard_temps(&tree, &journal.steps);
+        tree.remove_state(JOURNAL_FILE)
+            .map_err(ApplyError::Interrupted)
+    } else {
+        Err(ApplyError::Journal(
+            "the lock changed after the generation started, so the recorded state its steps were \
+             derived from is gone; restore that lock or resolve by hand"
+                .into(),
+        ))
+    }
 }
 
 /// True when a journal is present under `root`.
@@ -166,8 +213,9 @@ fn read_journal(tree: &Tree) -> Result<Journal, ApplyError> {
     }
 }
 
-/// A journal is trusted only as far as it agrees with the approved plan.
-fn check_journal_matches_plan(journal: &Journal, plan: &Plan) -> Result<(), ApplyError> {
+/// The journal must name the approved plan and the lock that plan produces.
+/// Its steps are authorized separately, against the recorded prior lock.
+fn check_journal_names_plan(journal: &Journal, plan: &Plan) -> Result<(), ApplyError> {
     if journal.plan_digest != plan.digest() {
         return Err(ApplyError::Journal(format!(
             "the journal is for plan {}, but the approved plan is {}; restore the model that produced it",
@@ -180,25 +228,15 @@ fn check_journal_matches_plan(journal: &Journal, plan: &Plan) -> Result<(), Appl
             "the journal's lock does not match the plan".into(),
         ));
     }
-    for step in &journal.steps {
-        let planned = plan
-            .artifact(step.path.as_str())
-            .map(|a| digest::sha256(a.content.as_bytes()));
-        let consistent = match step.kind {
-            StepKind::Create | StepKind::Replace => planned.is_some() && step.after == planned,
-            StepKind::Delete => planned.is_none(),
-        };
-        if !consistent {
-            return Err(ApplyError::Journal(format!(
-                "step for `{}` does not match the plan",
-                step.path
-            )));
-        }
-    }
     Ok(())
 }
 
-fn journal_for(plan: &Plan, assessment: &Assessment, names: &TempNames) -> Journal {
+fn journal_for(
+    plan: &Plan,
+    assessment: &Assessment,
+    prior: Option<&RecordedLock>,
+    names: &TempNames,
+) -> Journal {
     let mut writes = Vec::new();
     let mut deletes = Vec::new();
     for action in &assessment.actions {
@@ -230,6 +268,7 @@ fn journal_for(plan: &Plan, assessment: &Assessment, names: &TempNames) -> Journ
     Journal {
         format: JOURNAL_FORMAT.into(),
         plan_digest: plan.digest(),
+        prior_lock: prior.map(|r| r.digest.clone()),
         steps: writes,
         lock: Lock::for_plan(plan),
     }
@@ -310,7 +349,8 @@ fn commit_step(tree: &Tree, step: &Step) -> Result<(), TreeError> {
     let current = digest_of(&found);
     match step.kind {
         StepKind::Delete => {
-            if current.is_some() && current == step.before {
+            let marked = matches!(&found, Occupant::File(b) if declares_generated(b));
+            if current.is_some() && current == step.before && marked {
                 tree.remove(&step.path)?;
             } else if current.is_some() {
                 return Err(mismatch(step, &found));
@@ -340,12 +380,57 @@ fn commit_step(tree: &Tree, step: &Step) -> Result<(), TreeError> {
     Ok(())
 }
 
-fn commit(tree: &Tree, journal: &Journal, names: &TempNames) -> Result<(), TreeError> {
+/// The final-state check: the tree holds every planned generated file with its
+/// planned content and every planned implementation file, and none of `prior`'s
+/// generated files that the plan no longer contains. Only then may a lock
+/// claiming the plan be written.
+fn verify_applied(tree: &Tree, plan: &Plan, prior: Option<&Lock>) -> Result<(), TreeError> {
+    let unmet = |path: &str, what: &str| TreeError {
+        path: path.to_string(),
+        reason: format!("{what}, so the plan is not fully applied; the lock was not written"),
+    };
+    for artifact in &plan.artifacts {
+        match (artifact.ownership, tree.read(&artifact.path)?) {
+            (_, Occupant::Absent) => return Err(unmet(artifact.path.as_str(), "is missing")),
+            (Ownership::Generated, Occupant::File(bytes))
+                if bytes != artifact.content.as_bytes() =>
+            {
+                return Err(unmet(
+                    artifact.path.as_str(),
+                    "does not have its planned content",
+                ));
+            }
+            _ => {}
+        }
+    }
+    for entry in prior.iter().flat_map(|l| &l.files) {
+        let planned = plan.artifact(entry.path.as_str()).is_some();
+        if !planned
+            && entry.ownership == LockOwnership::Generated
+            && tree.read(&entry.path)? != Occupant::Absent
+        {
+            return Err(unmet(
+                entry.path.as_str(),
+                "is no longer planned but still present",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn commit(
+    tree: &Tree,
+    plan: &Plan,
+    journal: &Journal,
+    prior: Option<&Lock>,
+    names: &TempNames,
+) -> Result<(), TreeError> {
     crate::fault::checkpoint(0)?;
     for (index, step) in journal.steps.iter().enumerate() {
         commit_step(tree, step)?;
         crate::fault::checkpoint(index + 1)?;
     }
+    verify_applied(tree, plan, prior)?;
     tree.write_state(LOCK_FILE, &names.next(), journal.lock.to_json().as_bytes())?;
     crate::fault::checkpoint(journal.steps.len() + 1)?;
     tree.remove_state(JOURNAL_FILE)

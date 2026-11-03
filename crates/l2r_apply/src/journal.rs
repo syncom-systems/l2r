@@ -1,22 +1,30 @@
 //! The generation journal: the record of a generation in progress.
 //!
 //! While a journal exists, the tree may be part-way between two plans. The
-//! journal names the plan being applied and every step with its expected
-//! before/after digests, so that [`crate::recover`] can finish the same
-//! approved plan after an interruption, verifying each step as it goes. Its
-//! exclusive creation also keeps two generations from interleaving.
+//! journal names the plan being applied, the lock it was assessed against (the
+//! *prior lock*), and every step with its expected before/after digests, so that
+//! [`crate::recover`] can finish the same approved plan after an interruption.
+//! Its exclusive creation also keeps two generations from interleaving.
+//!
+//! The journal lives in the output tree and is therefore untrusted. It confers
+//! no authority of its own: [`Journal::authorize`] admits a step only if
+//! generating the approved plan from the recorded prior lock could have produced
+//! it. Steps it omits are caught by the final-state check made before any lock
+//! is written (see [`crate::transaction`]).
 
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use l2r_model::RelPath;
+use l2r_model::{RelPath, digest};
+use l2r_plan::Plan;
 
 use crate::lock::{Lock, LockOwnership, is_digest};
 use crate::tree::TempName;
 
-/// Journal format identifier.
-pub const JOURNAL_FORMAT: &str = "l2r.journal/v0";
+/// Journal format identifier. `v1` added `prior_lock`; a `v0` journal is refused,
+/// because it cannot show which recorded state its steps were derived from.
+pub const JOURNAL_FORMAT: &str = "l2r.journal/v1";
 
 /// File name of the journal at the root of the output tree.
 pub const JOURNAL_FILE: &str = "l2r.journal.json";
@@ -29,6 +37,10 @@ pub struct Journal {
     pub format: String,
     /// Digest of the plan being applied.
     pub plan_digest: String,
+    /// Digest of the exact bytes of the lock the generation was assessed against,
+    /// or `null` when there was none. Recovery runs steps only while that same
+    /// lock is still in place.
+    pub prior_lock: Option<String>,
     /// Steps, in commit order.
     pub steps: Vec<Step>,
     /// The lock to write once every step is committed.
@@ -88,6 +100,9 @@ impl Journal {
         if !is_digest(&self.plan_digest) || self.lock.plan_digest != self.plan_digest {
             return Err("journal and its lock name different plans".into());
         }
+        if self.prior_lock.as_deref().is_some_and(|d| !is_digest(d)) {
+            return Err("malformed prior-lock digest".into());
+        }
         self.lock.validate()?;
         let mut seen = BTreeSet::new();
         for step in &self.steps {
@@ -98,9 +113,74 @@ impl Journal {
         }
         Ok(())
     }
+
+    /// Admits the journal only if every step is a transition that generating
+    /// `plan` from `prior` (the recorded prior lock) could produce. The plan and
+    /// the prior lock are the only sources of authority; the journal's own claims
+    /// about ownership and digests are checked against them, never believed.
+    pub fn authorize(&self, plan: &Plan, prior: Option<&Lock>) -> Result<(), String> {
+        for step in &self.steps {
+            step.authorize(plan, prior)
+                .map_err(|why| format!("step for `{}` {why}", step.path))?;
+        }
+        Ok(())
+    }
 }
 
 impl Step {
+    /// The permitted transitions, per path:
+    ///
+    /// | Path                                    | Permitted step                                    |
+    /// | --------------------------------------- | ------------------------------------------------- |
+    /// | planned, any ownership                  | `create` of the planned content, plan's ownership |
+    /// | planned, generated, recorded generated  | `replace` from the recorded digest to the plan's  |
+    /// | not planned, recorded generated         | `delete` of the recorded digest                   |
+    /// | anything else                           | nothing                                           |
+    ///
+    /// Ownership must agree with the plan (planned paths) and with the prior
+    /// lock (recorded paths), exactly as an ownership change is a conflict for
+    /// generation.
+    fn authorize(&self, plan: &Plan, prior: Option<&Lock>) -> Result<(), &'static str> {
+        let artifact = plan.artifact(self.path.as_str());
+        let recorded = prior.and_then(|lock| lock.entry(&self.path));
+        if recorded.is_some_and(|e| e.ownership != self.ownership) {
+            return Err("claims an ownership the prior lock does not record");
+        }
+        let Some(artifact) = artifact else {
+            // Not planned: only the deletion of a recorded generated file.
+            let collides = plan
+                .artifacts
+                .iter()
+                .any(|a| a.path.case_key() == self.path.case_key());
+            return match (self.kind, recorded) {
+                _ if collides => Err("differs from a planned path only in letter case"),
+                (StepKind::Delete, Some(e))
+                    if e.ownership == LockOwnership::Generated && e.digest == self.before =>
+                {
+                    Ok(())
+                }
+                (StepKind::Delete, _) => Err(
+                    "deletes a file the prior lock does not record as generated with that content",
+                ),
+                _ => Err("writes a file the plan does not contain"),
+            };
+        };
+        if LockOwnership::from(artifact.ownership) != self.ownership {
+            return Err("claims an ownership the plan does not give it");
+        }
+        let planned = Some(digest::sha256(artifact.content.as_bytes()));
+        match self.kind {
+            StepKind::Delete => Err("deletes a planned file"),
+            _ if self.after != planned => Err("does not match the plan's content"),
+            StepKind::Create => Ok(()),
+            StepKind::Replace => match recorded {
+                Some(e) if e.ownership == LockOwnership::Generated && e.digest == self.before => {
+                    Ok(())
+                }
+                _ => Err("replaces content the prior lock does not record as generated"),
+            },
+        }
+    }
     fn validate(&self) -> Result<(), String> {
         let digest_ok = |d: &Option<String>| d.as_deref().is_some_and(is_digest);
         let shape_ok = match self.kind {

@@ -11,6 +11,8 @@ mod plan;
 mod profiles;
 mod text;
 
+pub use text::declares_generated;
+
 pub use plan::{
     Artifact, ArtifactSummary, GeneratorIdentity, Ownership, PLAN_FORMAT, Plan, PlanSummary,
 };
@@ -92,10 +94,20 @@ pub(crate) fn planned_path(path: String) -> Result<RelPath, PlanError> {
     RelPath::parse(&path).map_err(|e| PlanError(e.to_string()))
 }
 
-/// Defense in depth: planned paths are unique, also on case-insensitive filesystems.
+/// Defense in depth: planned paths are unique, also on case-insensitive
+/// filesystems, and every generated file declares itself as generated, which is
+/// what allows the writer to delete it once it is no longer planned.
 fn check_paths(artifacts: &[Artifact]) -> Result<(), PlanError> {
     let mut seen = BTreeSet::new();
     for artifact in artifacts {
+        if artifact.ownership == Ownership::Generated
+            && !declares_generated(artifact.content.as_bytes())
+        {
+            return Err(PlanError(format!(
+                "generated artifact `{}` lacks the generated-file marker",
+                artifact.path
+            )));
+        }
         if !seen.insert(artifact.path.case_key()) {
             return Err(PlanError(format!(
                 "two artifacts planned at `{}`",

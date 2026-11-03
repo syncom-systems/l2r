@@ -13,6 +13,13 @@ the tests disagree, the tests are authoritative and this text is a bug.
 - The **output tree** (the model's `output_dir`) is shared with implementers and
   agents. Its contents, including `l2r.lock.json` and `l2r.journal.json`, are
   **untrusted input**. They may be edited, malformed, or replaced by symbolic links.
+- **Untrusted state confers no authority.** Every write, replacement and
+  deletion must be justified by the approved plan and the ownership and digests
+  recorded in the prior lock, through a permitted transition. A journal can only
+  *repeat* such a justification; it cannot add one (G7, G12). The lock is the one
+  piece of untrusted state that does carry authority, because it is L2R's only
+  record of what it wrote before; the residual risk is stated in
+  [What is not guaranteed](#what-is-not-guaranteed).
 - L2R does not defend against another process that is actively racing it with
   write access to the same tree. It does guarantee that such a process cannot make
   L2R write or delete **outside** the tree, overwrite an implementation file, or
@@ -28,11 +35,13 @@ the tests disagree, the tests are authoritative and this text is a bug.
 | G4 | Conflicts are detected before anything is written. | Every action is assessed before staging. Conflicts include: a symlink, a non-file, a foreign file, an edited generated file, an invalid lock, a pending journal, an ownership change, a case collision, and a moved implementation. | `safety.rs`, `evolution.rs` |
 | G5 | A staging failure changes no file. | New content is staged into temporaries first; on failure they are removed. New, empty parent directories may remain. | `faults.rs`: staging failure at each file |
 | G6 | An interruption at any point leaves each file in its old or its new state, and the run can be finished. | Each step is a single `linkat` (create), `renameat` (replace) or `unlinkat` (delete). The journal, written before the first step, names the plan and every step's before/after digests. | `faults.rs`: interruption after every step 0…n+1; `crash.rs`: a real `SIGABRT` followed by the real `l2r recover` |
-| G7 | Recovery writes only the approved plan's content. | `l2r recover` requires a current approval for the plan the journal names. It checks the journal's lock and every step's digest against that plan, and re-stages lost or damaged temporaries from the plan itself. | `faults.rs`: tampered journal (escaping path, forged implementation replace, injected content, other plan, missing approval); lost temporaries |
-| G8 | Implementation files are never replaced or deleted. | Creates use `linkat`, which never replaces an existing file. A journal step may replace or delete only a generated file. If an implementer creates the file first, their file wins over the stub. | `faults.rs`: concurrent implementation file; tampered journal; `evolution.rs` |
+| G7 | Recovery has no authority beyond generation of the same approved plan from the same recorded prior lock. | `l2r recover` requires a current approval for the plan the journal names. The journal records the digest of the exact lock bytes it was assessed against; steps run only while that lock is still on disk. Each step must be a permitted transition (`Journal::authorize`, shared with `generate`): *create* only a planned path, with the plan's ownership and content; *replace* only a planned generated path whose prior lock entry is generated with exactly the step's `before` digest; *delete* only a no-longer-planned path the prior lock records as generated with that digest. Ownership must agree with the plan and the prior lock. Lost temporaries are re-staged from the plan itself. If the plan's own lock is already on disk, no step runs at all. | `faults.rs`: escaping path; forged `generated` and `implementation` ownership of an implementation file; forged ownership of a new file; forged `before` over an edited generated file; deletion of a never-recorded file and of an orphaned implementation file; prior lock swapped after the interruption; forged steps after the lock was written; `v0` journal; injected content; other plan; missing approval; lost temporaries |
+| G8 | Implementation files are never replaced or deleted. | Creates use `linkat`, which never replaces an existing file. A step may replace or delete only a path the plan or prior lock records as generated (G7), and a file is deleted only if it carries L2R's generated-file marker (G13). If an implementer creates the file first, their file wins over the stub. | `faults.rs`: concurrent implementation file; forged journals; `hostile.rs`: forged lock entry; `evolution.rs` |
 | G9 | A file that changed unexpectedly is never overwritten. | Each step re-reads the target immediately before acting and proceeds only if its digest is the expected before (or after) state. Otherwise the run stops with the journal in place. | `faults.rs`: edit during interruption |
 | G10 | Two generations cannot interleave. | The journal is created exclusively (`linkat`); while it exists, `generate` refuses. | `faults.rs`: generate refused while a journal is pending |
 | G11 | An approval applies to exactly one plan. | Writes require a record whose digest equals the current plan digest. The digest covers the model, the Lean inventory, the generator, the profiles and every file's content. | `safety.rs`, `evolution.rs`, `workflow.rs` |
+| G12 | A lock is written only when it is true. | Before `generate` or `recover` writes the lock, a final-state check confirms that every planned generated file has its planned content, every planned implementation file exists, and no generated file of the prior lock that the plan no longer contains remains. A journal with omitted steps therefore stops with the journal in place instead of recording the plan as applied. | `faults.rs`: every step omitted; remaining steps omitted |
+| G13 | L2R deletes only files that declare themselves generated. | Every generated file starts with an `@generated by L2R (` marker line; the planner refuses to plan one without it (`l2r_plan::declares_generated`, one shared definition). Assessment reports a conflict, and a commit step refuses, for a deletion whose target lacks the marker, whatever the lock records. | `hostile.rs`: forged lock entry naming a foreign file; `faults.rs`: consistently forged lock and journal |
 
 ## What is not guaranteed
 
@@ -45,12 +54,29 @@ the tests disagree, the tests are authoritative and this text is a bug.
 - **Races with an active writer.** The check of a target's digest and the
   subsequent rename are two system calls. A concurrent writer can change the file
   between them; the effect is confined to the tree (G1) and to generated files (G8).
+- **A forged lock.** The lock is untrusted, yet it is L2R's record of what it
+  wrote, so it carries authority, for `generate` and `recover` alike. A forged
+  entry can still (a) direct the deletion of a no-longer-planned file that
+  carries the generated-file marker and the forged digest, and (b) make a
+  hand-edited *generated* file at a planned path look unmodified, so the edit is
+  replaced by planned content. It cannot direct writes of unplanned content,
+  replacement of implementation files, or deletion of files without the marker
+  (G7, G8, G13). Closing the rest requires treating the committed lock as
+  reviewed state, like approval records. That is a governance decision (see
+  [Approval records](#approval-records)).
+- **Moved-implementation refusal during recovery.** Generation refuses to create
+  a fresh implementation stub while an implementation of the same name is
+  orphaned. Recovery does not repeat that usability check. It may create a
+  planned stub at an absent planned path, which the plan authorizes.
 - **Recovery after the model changes.** `recover` only finishes the plan the
   journal names. If the model has changed since, restore it (the journal states
   the plan digest) or resolve by hand: delete the journal and the `.l2r-tmp.*`
   files it lists, then deal with the reported conflicts.
 - **Platforms.** The boundary uses `openat`-family calls and is Unix-only.
   `linkat` requires a filesystem with hard links.
+- **Journals from earlier versions.** A `l2r.journal/v0` journal (without a
+  recorded prior lock) is refused. Finish it with the version that wrote it, or
+  resolve by hand.
 - **Leftover temporaries after a crash during staging** (before the journal
   exists) are not cleaned up automatically. Their names start with `.l2r-tmp.`
   and they are never read.

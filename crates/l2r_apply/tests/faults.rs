@@ -405,3 +405,270 @@ fn symlinks_planted_at_the_exact_temporary_names_are_refused() {
     );
     assert!(!pending(&fixture.root));
 }
+
+// ---------------------------------------------------------------------------
+// Journal authority. A journal is untrusted: recovery may do only what a
+// generation of the same approved plan would do from the recorded prior state.
+// ---------------------------------------------------------------------------
+
+fn digest_of_file(fixture: &Fixture, path: &str) -> String {
+    l2r_model::digest::sha256(&fs::read(fixture.root.join(path)).unwrap())
+}
+
+fn planned_digest(plan: &Plan, path: &str) -> String {
+    l2r_model::digest::sha256(plan.artifact(path).unwrap().content.as_bytes())
+}
+
+/// The lock must never claim the plan unless the tree is in the plan's state.
+fn assert_lock_is_truthful(root: &Path, plan: &Plan) {
+    let files = snapshot(root);
+    if let Some(bytes) = files.get(LOCK_FILE) {
+        let lock = Lock::from_json(&String::from_utf8(bytes.clone()).unwrap()).unwrap();
+        if lock == Lock::for_plan(plan) {
+            assert_matches_plan(root, plan);
+        }
+    }
+}
+
+#[test]
+fn a_journal_cannot_forge_generated_ownership_of_an_implementation_file() {
+    let (fixture, next, mut journal) = interrupted_journal("forge-generated");
+    let target = "src/crossing/request_latch/imp.rs"; // planned, implementation-owned
+    let forged = serde_json::json!({
+        "path": target,
+        "ownership": "generated",
+        "kind": "replace",
+        "before": digest_of_file(&fixture, target),
+        "after": planned_digest(&next, target),
+        "temp": ".l2r-tmp.ab.1",
+    });
+    journal["steps"].as_array_mut().unwrap().push(forged);
+    write_journal(&fixture, &journal);
+    let result = recover(&next, &approved(&next), &fixture.root);
+    assert_implementations_preserved(&fixture.root);
+    assert!(matches!(result, Err(ApplyError::Journal(_))), "{result:?}");
+}
+
+#[test]
+fn a_journal_cannot_overwrite_an_edited_generated_file() {
+    let (fixture, next, mut journal) = interrupted_journal("forge-edited");
+    // Planned, generated, replaced by this plan; edited by hand during the interruption.
+    let target = "src/crossing/request_latch/mod.rs";
+    let edited = "// hand edit that the lock does not know\n";
+    fs::write(fixture.root.join(target), edited).unwrap();
+    let steps = journal["steps"].as_array_mut().unwrap();
+    let step = steps.iter_mut().find(|s| s["path"] == target).unwrap();
+    step["before"] = l2r_model::digest::sha256(edited.as_bytes()).into();
+    write_journal(&fixture, &journal);
+    let result = recover(&next, &approved(&next), &fixture.root);
+    assert!(result.is_err(), "{result:?}");
+    assert_eq!(
+        fs::read_to_string(fixture.root.join(target)).unwrap(),
+        edited
+    );
+}
+
+/// Appends a forged delete step for `target` and runs recovery.
+fn forged_delete(label: &str, target: &str, plant: Option<&str>) {
+    let (fixture, next, mut journal) = interrupted_journal(label);
+    if let Some(content) = plant {
+        fs::write(fixture.root.join(target), content).unwrap();
+    }
+    let before = fs::read(fixture.root.join(target)).unwrap();
+    journal["steps"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "path": target,
+            "ownership": "generated",
+            "kind": "delete",
+            "before": digest_of_file(&fixture, target),
+        }));
+    write_journal(&fixture, &journal);
+    let result = recover(&next, &approved(&next), &fixture.root);
+    assert_eq!(
+        fs::read(fixture.root.join(target)).ok(),
+        Some(before),
+        "{target} was deleted"
+    );
+    assert!(matches!(result, Err(ApplyError::Journal(_))), "{result:?}");
+}
+
+#[test]
+fn a_journal_cannot_delete_a_file_l2r_never_recorded() {
+    forged_delete(
+        "forge-delete-foreign",
+        "src/notes.txt",
+        Some("// someone's notes\n"),
+    );
+}
+
+#[test]
+fn a_journal_cannot_delete_an_orphaned_implementation_file() {
+    forged_delete("forge-delete-orphan", "src/crossing/signal/imp.rs", None);
+}
+
+/// Interrupts after `k` steps, strips every step from the journal, recovers.
+fn omitted_steps(k: usize) {
+    let fixture = Fixture::new(&format!("omit-{k}"));
+    let next = plan_for(&next_model());
+    fault::arm(k, Mode::Interrupt);
+    let _ = apply(&next, &approved(&next), &fixture.root);
+    fault::disarm();
+    let text = fs::read_to_string(fixture.root.join(JOURNAL_FILE)).unwrap();
+    let mut journal: serde_json::Value = serde_json::from_str(&text).unwrap();
+    journal["steps"] = serde_json::json!([]);
+    write_journal(&fixture, &journal);
+    let result = recover(&next, &approved(&next), &fixture.root);
+    // Recovery either completes the whole plan or refuses; it never records
+    // the plan as applied while it is not.
+    assert_lock_is_truthful(&fixture.root, &next);
+    assert!(result.is_err(), "an incomplete journal was accepted");
+    assert!(pending(&fixture.root), "the journal stays until resolved");
+    assert_implementations_preserved(&fixture.root);
+}
+
+#[test]
+fn a_journal_with_every_step_omitted_cannot_produce_a_false_lock() {
+    omitted_steps(0);
+}
+
+#[test]
+fn a_journal_with_the_remaining_steps_omitted_cannot_produce_a_false_lock() {
+    omitted_steps(1);
+}
+
+#[test]
+fn recovery_refuses_a_prior_lock_swapped_after_the_interruption() {
+    let (fixture, next, _journal) = interrupted_journal("swap-lock");
+    // Rewrite the prior lock so that the orphaned implementation file looks
+    // generated; a generation from this lock would delete it.
+    let orphan = "src/crossing/signal/imp.rs";
+    let text = fs::read_to_string(fixture.root.join(LOCK_FILE)).unwrap();
+    let mut lock: serde_json::Value = serde_json::from_str(&text).unwrap();
+    for entry in lock["files"].as_array_mut().unwrap() {
+        if entry["path"] == orphan {
+            entry["ownership"] = "generated".into();
+            entry["digest"] = digest_of_file(&fixture, orphan).into();
+        }
+    }
+    fs::write(
+        fixture.root.join(LOCK_FILE),
+        serde_json::to_string_pretty(&lock).unwrap(),
+    )
+    .unwrap();
+    let result = recover(&next, &approved(&next), &fixture.root);
+    assert!(matches!(result, Err(ApplyError::Journal(_))), "{result:?}");
+    assert_implementations_preserved(&fixture.root);
+}
+
+#[test]
+fn a_consistently_forged_lock_and_journal_still_cannot_delete_an_unmarked_file() {
+    // Forge both: the prior lock records `src/notes.txt` as generated, and the
+    // journal binds that forged lock and deletes the file. Recovery then has
+    // exactly generation's authority from that lock, which never deletes a file
+    // lacking L2R's generated-file marker.
+    let (fixture, next, mut journal) = interrupted_journal("forge-both");
+    let target = "src/notes.txt";
+    fs::write(fixture.root.join(target), "// someone's notes\n").unwrap();
+    let text = fs::read_to_string(fixture.root.join(LOCK_FILE)).unwrap();
+    let mut lock: serde_json::Value = serde_json::from_str(&text).unwrap();
+    lock["files"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "path": target, "ownership": "generated", "component": "signal",
+            "digest": digest_of_file(&fixture, target),
+        }));
+    let forged_lock = serde_json::to_string_pretty(&lock).unwrap();
+    fs::write(fixture.root.join(LOCK_FILE), &forged_lock).unwrap();
+    journal["prior_lock"] = l2r_model::digest::sha256(forged_lock.as_bytes()).into();
+    journal["steps"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "path": target, "ownership": "generated", "kind": "delete",
+            "before": digest_of_file(&fixture, target),
+        }));
+    write_journal(&fixture, &journal);
+    let result = recover(&next, &approved(&next), &fixture.root);
+    assert!(
+        fixture.root.join(target).exists(),
+        "the unmarked file was deleted"
+    );
+    assert!(result.is_err(), "{result:?}");
+    assert_lock_is_truthful(&fixture.root, &next);
+}
+
+#[test]
+fn once_the_plans_lock_is_written_recovery_runs_no_step() {
+    // Interrupted after the lock was written: the prior lock is gone, so no
+    // step can be authorized any more. A forged delete must not run.
+    let fixture = Fixture::new("verify-only");
+    let next = plan_for(&next_model());
+    let steps = step_count(&fixture, &next);
+    fault::arm(steps + 1, Mode::Interrupt);
+    let _ = apply(&next, &approved(&next), &fixture.root);
+    fault::disarm();
+    let target = "src/notes.txt";
+    fs::write(
+        fixture.root.join(target),
+        "// @generated by L2R (x). planted\n",
+    )
+    .unwrap();
+    let text = fs::read_to_string(fixture.root.join(JOURNAL_FILE)).unwrap();
+    let mut journal: serde_json::Value = serde_json::from_str(&text).unwrap();
+    journal["steps"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "path": target, "ownership": "generated", "kind": "delete",
+            "before": digest_of_file(&fixture, target),
+        }));
+    write_journal(&fixture, &journal);
+    recover(&next, &approved(&next), &fixture.root).expect("completes");
+    assert!(
+        fixture.root.join(target).exists(),
+        "a step ran after the lock was written"
+    );
+    assert!(!pending(&fixture.root));
+}
+
+#[test]
+fn a_journal_from_before_prior_lock_binding_is_refused() {
+    let (fixture, next, mut journal) = interrupted_journal("journal-v0");
+    journal["format"] = "l2r.journal/v0".into();
+    journal.as_object_mut().unwrap().remove("prior_lock");
+    write_journal(&fixture, &journal);
+    let err = recover(&next, &approved(&next), &fixture.root).unwrap_err();
+    assert!(
+        err.to_string().contains("unsupported journal format"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_journal_cannot_change_the_ownership_the_plan_gives_a_new_file() {
+    // First generation: no prior lock, so only the plan can vouch for ownership.
+    let base = scratch_dir("forge-new-ownership");
+    let root = base.join("out");
+    let first = plan_for(&example_model());
+    fault::arm(0, Mode::Interrupt);
+    let _ = apply(&first, &approved(&first), &root);
+    fault::disarm();
+    let text = fs::read_to_string(root.join(JOURNAL_FILE)).unwrap();
+    let mut journal: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let step = journal["steps"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|s| s["path"] == "src/crossing/signal/imp.rs")
+        .unwrap();
+    step["ownership"] = "generated".into();
+    fs::write(root.join(JOURNAL_FILE), journal.to_string()).unwrap();
+    let err = recover(&first, &approved(&first), &root).unwrap_err();
+    assert!(
+        err.to_string().contains("ownership the plan does not give"),
+        "{err}"
+    );
+}
