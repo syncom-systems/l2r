@@ -109,7 +109,7 @@ and never repairs the model.
 | Oversized agent-written modules | One implementation file per component, plus an optional line budget that `l2r check` enforces. |
 | Agents silently changing structure | Generated contracts are L2R-owned. The implementation must satisfy their signatures to compile, and editing them is detected. |
 | Unverified refinement claims | Generated docs state that Rust tests do not establish correspondence. Proof status is reported per obligation (see `verification/aeneas`). |
-| Formal model and deployment diverge | The inventory comes from compiled Lean and its digest is bound into the plan, so a changed inventory makes the approval stale. Whether the committed inventory matches the Lean sources is checked by `verification/aeneas/run.sh`, not yet by CI. |
+| Formal model and deployment diverge | The inventory comes from compiled Lean and its digest is bound into the plan, so a changed inventory makes the approval stale. Whether the committed inventory matches the Lean sources is checked in CI by the proof lane (`bazel test --config=verify //verification/...`). |
 
 ## Approval and write semantics
 

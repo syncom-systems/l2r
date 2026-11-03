@@ -22,3 +22,10 @@ build --@rules_rust//rust/settings:rustfmt.toml=//:rustfmt.toml
 common --enable_platform_specific_config
 build:linux --linkopt=-fuse-ld=bfd
 build:linux --host_linkopt=-fuse-ld=bfd
+
+# The proof lane: bazel test --config=verify //verification/...
+# Excluded from the default test set because it fetches ~8 GB of pinned
+# verification toolchain on first use; CI runs it as its own job.
+test --test_tag_filters=-verification
+build:verify --//bazel/verification:enabled=true
+test:verify --test_tag_filters=verification

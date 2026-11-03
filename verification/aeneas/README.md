@@ -1,77 +1,79 @@
-# Experiment: Rust-to-Lean refinement of the crossing signal
-
-**Status:** demonstrated once, on one developer machine (macOS arm64), with the
-toolchain identities recorded in [`evidence/toolchain.txt`](evidence/toolchain.txt).
-This is not yet part of `bazel test //...` or CI.
-
-## Question
-
-Can the implementation an agent writes inside an L2R scaffold be connected to the
-Lean specification by a *proof*, rather than by tests and assertion?
-
-## What was done
-
-1. [`signal_crate.rs`](signal_crate.rs) is a one-line crate root that includes the
-   **committed** `signal` module of the example: the generated contract
-   (`mod.rs`) and the implementer-owned `imp.rs`. There is no copy of the code.
-2. Charon translates that crate to LLBC, and Aeneas translates the LLBC to Lean
-   ([`proof/Extracted/SignalCrate.lean`](proof/Extracted/SignalCrate.lean),
-   committed, with Rust source line provenance in every docstring).
-3. [`proof/Refinement.lean`](proof/Refinement.lean) defines abstraction functions
-   from the extracted Rust types to the specification types and proves:
-   - `init_refines`: the implementation's initial state abstracts to `Crossing.Signal.init`;
-   - `step_refines`: for **every** state and input, the extracted `step` succeeds
-     (no panic) and its result abstracts to `Crossing.Signal.step`;
-   - `impl_walk_entered_from_amber`: the spec theorem `walk_entered_from_amber`
-     transferred to the implementation through `step_refines`.
-4. `#print axioms` shows all three depend only on `propext`; there is no `sorryAx`.
-5. **Defect detection:** `run.sh` injects a defect into a temporary copy of
-   `imp.rs` (a crossing request jumps straight to `Walk`, skipping amber),
-   re-extracts it and re-checks the same proof. The proof fails exactly at that
-   case of `step_refines` ([`evidence/defect.log`](evidence/defect.log)). The
-   script requires the failure to occur inside `step_refines`, so a setup error
-   cannot pass for a detection.
-
-Reproduce:
+# The proof lane: Rust-to-Lean refinement of the crossing example
 
 ```sh
-AENEAS_DIR=<built Aeneas checkout> RUSTUP_HOME=<rustup with Charon's nightly> \
-  verification/aeneas/run.sh
+bazel test --config=verify //verification/...                  # what CI runs
+bazel run  --config=verify //verification/aeneas:update_translation   # after changing Rust sources
 ```
 
-`run.sh` also requires the committed translation to be byte-identical to a fresh
-extraction, so the proof cannot silently drift from the code.
+The lane is a Bazel test (`:refinement_test`, tagged `verification`). It runs
+only under `--config=verify`, because its pinned toolchain (~8 GB including
+mathlib's compiled libraries) is fetched on first use. CI runs it as a separate
+job (`verification` in `.github/workflows/bazel.yml`) and uploads its evidence.
 
-## What this shows, and what it does not
+## What the lane checks
 
-| Claim | Status |
-| --- | --- |
-| `signal::imp::{init, step}` agree with `Crossing.Signal.{init, step}` on all inputs | **Proved** (modulo the trusted base below) |
-| `signal::step` never panics | **Proved** (the `Result` is always `ok`) |
-| Spec invariant `walk_entered_from_amber` holds for the implementation | **Proved** (transferred) |
-| `request_latch` implementation | Unverified (same method applies; not yet done) |
-| `routes.rs` translations | Unverified |
-| Generated `composite/v0` scheduler (`VecDeque`, round-robin) | Unverified; Aeneas support for `std` collections was not tried |
-| Properties over all message interleavings | Not modeled. The scheduler realizes one interleaving |
-| The deployed binary | Not covered: rustc and the target platform are trusted |
-
-**Trusted base:** the Lean kernel; Charon and Aeneas translating the Rust source
-faithfully (the translation is not itself verified); rustc compiling the source as
-Charon read it. Aeneas's standard library models contain `sorry` (`Aeneas.Std.Slice`,
-`Aeneas.Std.StringIter`) and an axiom for `Hash` on `isize`. The axiom report shows
-that none of them reach these theorems, but a proof that used slices could depend on them.
-
-## Why this route
-
-| Tool | What it does | Fit for L2R |
+| Gate | Check | Catches |
 | --- | --- | --- |
-| **Charon + Aeneas** | Translates a *safe Rust subset* to pure Lean (also F\*, Coq, HOL4). Documented limits include some nested-loop control flow and mutable references in generic instantiations. Unsafe code and concurrency are future work. | **Chosen.** The `transition-core` profile generates exactly the shape it handles well: pure functions over enums. The proof lives in Lean, next to the specification. |
-| **hax** | Rust to F\* (stable), Rocq, ProVerif, SSProve, EasyCrypt (experimental). Its recommended Lean route goes *through Aeneas*. | No independent advantage for a Lean-first project today. Revisit if F\* or ProVerif obligations become relevant. |
-| **Verus** | Proves Rust against specifications written in Rust syntax, using SMT. Handles code beyond plain safe Rust. | Complementary, not competing, if its specifications state only Rust-local facts: panic freedom, bounds, frame conditions. It would compete with Lean only if it restated behavior. See [`docs/verification.md`](../../docs/verification.md). A candidate for the composite scheduler's local properties. |
+| 1. Inventory | A fresh export of the Lean spec equals `examples/crossing/lean-inventory.json` | A spec edited without re-exporting; the plan would be bound to a stale inventory |
+| 2. Extraction | Charon + Aeneas translate the **committed** Rust sources (both machines' `mod.rs` + `imp.rs`, and `routes.rs`), and the result is byte-identical to `proof/Extracted/CrossingCore.lean` | A stale translation: proofs about code that is no longer the code |
+| 3. Proof | The spec, the translation and `proof/Refinement.lean` compile | Proofs that do not check |
+| 4. Audit | `proof/Audit.lean`: every expected theorem exists, is a theorem, and depends only on `propext`, `Classical.choice` and `Quot.sound`. Its statement, and the defining equations of every abstraction function, equal the reviewed `expected-statements.txt` | `sorry`, `native_decide` (`Lean.ofReduceBool`), new axioms (including the `Hash` axiom Aeneas emits), `#exit` before a theorem, weakened statements, permuted abstraction functions |
+| 4b. Kernel replay | `leanchecker` re-checks every declaration of the spec, the translation and the proof modules in the kernel | A declaration that never reached the kernel, e.g. one added with `debug.skipKernelTC`. Such a declaration compiles and uses only standard axioms, so it passes gate 4 |
+| 5. Mutants | Each seeded defect in `mutants.tsv` (a real edit of the Rust source) is re-extracted, and must make **its named theorem** fail and nothing else | A proof that cannot fail; a setup error masquerading as detection |
+| 6. Bypasses | Each attempt in `bypasses.tsv` to pass without a real proof (`sorry`, `native_decide`, a new `axiom`, a weakened statement, `#exit`, a permuted abstraction function, a proof that skipped the kernel) must be rejected by its named gate | An audit that has quietly stopped detecting what it claims to detect |
 
-## Pins (not yet reproducible from public releases alone)
+Compiling the translation alone (gate 3 without 4–6) is not accepted as
+evidence. Gates 5 and 6 run on every CI run, so the lane continuously shows
+that its own checks can fail.
 
-The experiment ran with the Charon and Aeneas builds recorded in
-`evidence/toolchain.txt`, together with Lean `v4.31.0`, which matches the Aeneas
-Lean backend. Before any of this enters CI, the next increment must pin a published
-Aeneas/Charon release by hash and fetch it hermetically.
+## What is proved
+
+For every input, without panicking (`Result.ok`), and under the pinned
+abstraction functions:
+
+| Theorem | Rust | Lean specification |
+| --- | --- | --- |
+| `latch_init_refines`, `latch_step_refines` | `request_latch::{init, step}` | `Crossing.Latch.{init, step}` |
+| `signal_init_refines`, `signal_step_refines` | `signal::{init, step}` | `Crossing.Signal.{init, step}` |
+| `latch_to_signal_refines`, `signal_to_latch_refines` | `routes::{latch_to_signal, signal_to_latch}` | `Crossing.Routes.*` |
+| `impl_walk_entered_from_amber` | spec invariant transferred to `signal::step` | `Crossing.Signal.walk_entered_from_amber` |
+| `impl_request_implies_pending` | spec invariant transferred to `request_latch::step` | `Crossing.Latch.request_implies_pending` |
+
+## What is not proved
+
+- **The composite scheduler** (`crossing/mod.rs`: `System`, `VecDeque`
+  mailboxes, round-robin). It is excluded from the harness. Translating it needs
+  Aeneas models of `VecDeque` and reasoning about `&mut self` loops; that has not
+  been attempted, so it is unverified.
+- **Any property of the composed system.** The machines and routes are each
+  correct; nothing is proved about their asynchronous composition or about all
+  interleavings (kind 4 in [`docs/verification.md`](../../docs/verification.md)).
+- **Platform behaviour.** rustc's compilation of the source is trusted.
+
+## Pins and trust
+
+All pins are in [`bazel/verification/repo.bzl`](../../bazel/verification/repo.bzl):
+
+- Aeneas + Charon: `nightly-2026.11.02-ab34bd2` release tarballs, by sha256.
+- Lean `v4.35.0` release archives, by sha256; this is the version that Aeneas
+  release's library is built with. The example spec uses the same version.
+- Rust `nightly-2026-09-17` `rustc`, `rust-std` and `rustc-dev`, by sha256 from
+  that day's channel manifest. This is the nightly Charon's driver links against.
+- mathlib at the revision in that Aeneas release's `lake-manifest.json`. Its
+  compiled libraries come from mathlib's own cache (`lake exe cache get`) and
+  are **not** pinned by a hash recorded here. They are trusted artifacts. Gate
+  4b re-checks this repository's own declarations with `leanchecker`, but not
+  the imported Aeneas and mathlib declarations. Replaying those (`leanchecker
+  --fresh`) took over 55 CPU-minutes without finishing locally. That suits a
+  scheduled job, not a PR gate, and it is not done yet.
+
+Trusted base of a passing lane: the Lean kernel; Charon and Aeneas translating
+faithfully; the mathlib and Aeneas compiled libraries (their declarations are not
+replayed, ours are); rustc; and the abstraction functions, which are pinned and
+reviewed as part of the statements.
+
+## Platforms
+
+Pinned for Linux x86_64 (CI) and macOS arm64. Elsewhere the repository rule
+produces an "unavailable" manifest and the test fails with that reason; it never
+passes vacuously.

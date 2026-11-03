@@ -46,11 +46,13 @@ Rust tests is never presented as proof of correspondence with Lean.
 - **Profiles.** `transition-core/v0` is a pure state machine. `composite/v0` is
   deterministic asynchronous composition with per-child mailboxes.
   `crate-root/v0` produces a Bazel package.
-- **A verification experiment.** The implementation of one example machine is
-  extracted with Charon and Aeneas and **proved** in Lean to refine its
-  specification. An injected defect is rejected. See
+- **A reproducible proof lane in CI.** Pinned Lean, Charon and Aeneas run under
+  Bazel. The committed Rust implementations of both example machines and both
+  message routes are re-extracted and **proved** in Lean to refine their
+  specifications, and the proofs are audited (axioms, pinned statements). Seeded
+  defects and proof bypasses must be rejected. See
   [`verification/aeneas`](verification/aeneas/README.md) for exactly what this
-  does and does not cover.
+  covers and what it does not; the composed system is not verified.
 
 ## Try it
 
@@ -58,6 +60,7 @@ Bazel is the only build and test interface (see ADR-0002). There is no Cargo bui
 
 ```sh
 bazel test //...                       # all tests, including the example's drift test
+bazel test --config=verify //...       # the proof lane (fetches the pinned toolchain, ~8 GB)
 bazel build --config=lint //...        # clippy, warnings are errors
 bazel build --config=fmt //...         # rustfmt check
 
@@ -104,9 +107,11 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
 
 ## Known limits
 
-- Lean, Charon and Aeneas are not yet hermetic Bazel toolchains. The inventory
-  export and the refinement proof run as scripts, and their outputs are
-  committed and checked.
+- The proof lane covers the transition functions and routes, not the composite
+  scheduler or any property of the composed system. mathlib's compiled
+  libraries are trusted inputs (not hash-pinned; their proofs are not
+  re-checked, while the repository's own declarations are re-checked by the
+  kernel with `leanchecker`). The lane is pinned for Linux x86_64 and macOS arm64 only.
 - v0 state types must be field-less Lean inductives. Message edges connect
   siblings only (an open decision in ADR-0003).
 - The composite scheduler realizes one deterministic interleaving. It is neither
