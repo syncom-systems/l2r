@@ -63,13 +63,21 @@ All pins are in [`bazel/verification/repo.bzl`](../../bazel/verification/repo.bz
   compiled libraries come from mathlib's own cache (`lake exe cache get`) and
   are **not** pinned by a hash recorded here. They are trusted artifacts. Gate
   4b re-checks this repository's own declarations with `leanchecker`, but not
-  the imported Aeneas and mathlib declarations. Replaying those (`leanchecker
-  --fresh`) took over 55 CPU-minutes without finishing locally. That suits a
-  scheduled job, not a PR gate, and it is not done yet.
+  the imported Aeneas and mathlib declarations: a single `leanchecker --fresh`
+  replay of them took over 55 CPU-minutes without finishing locally, which does
+  not suit a PR gate. A separate weekly job replays them instead, sharded and
+  in parallel, over the import closure of `Refinement` (see
+  [Scheduled dependency recheck](../../docs/verification.md#scheduled-dependency-recheck-separate-from-the-pr-checks)):
+  `bazel test --config=verify --test_tag_filters=dependency-recheck //verification/aeneas:dependency_recheck`
+  (`.github/workflows/dependency-recheck.yml`). It is not part of the PR lane
+  and nothing here waits for it. Its evidence is `dependency-recheck.json`,
+  with status `complete`, `failed` or `incomplete` (budget exhausted; never a
+  pass). Until a scheduled run has completed, the imported declarations are
+  trusted, not rechecked.
 
 Trusted base of a passing lane: the Lean kernel; Charon and Aeneas translating
-faithfully; the mathlib and Aeneas compiled libraries (their declarations are not
-replayed, ours are); rustc; and the abstraction functions, which are pinned and
+faithfully; the mathlib and Aeneas compiled libraries (their declarations are
+replayed only by the scheduled recheck, ours on every run); rustc; and the abstraction functions, which are pinned and
 reviewed as part of the statements.
 
 ## Platforms
