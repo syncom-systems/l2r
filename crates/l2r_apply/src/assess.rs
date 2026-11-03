@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use l2r_model::{RelPath, digest};
-use l2r_plan::{Artifact, Ownership, Plan};
+use l2r_plan::{Artifact, Ownership, Plan, declares_generated};
 
 use crate::journal::JOURNAL_FILE;
 use crate::lock::{LOCK_FILE, Lock, LockEntry, LockOwnership};
@@ -72,22 +72,35 @@ pub(crate) fn conflict(path: impl Into<String>, reason: impl Into<String>) -> Co
     }
 }
 
+/// The lock as found on disk, with the digest of its exact bytes.
+#[derive(Debug, Clone)]
+pub(crate) struct RecordedLock {
+    pub(crate) lock: Lock,
+    pub(crate) digest: String,
+}
+
 /// Reads and validates the lock. A malformed lock is a conflict, not a reset.
 pub fn read_lock(tree: &Tree) -> Result<Option<Lock>, Conflict> {
+    read_recorded_lock(tree).map(|r| r.map(|r| r.lock))
+}
+
+pub(crate) fn read_recorded_lock(tree: &Tree) -> Result<Option<RecordedLock>, Conflict> {
     match tree
         .read_state(LOCK_FILE)
         .map_err(|e| conflict(LOCK_FILE, e.reason))?
     {
         Occupant::Absent => Ok(None),
         Occupant::File(bytes) => {
+            let digest = digest::sha256(&bytes);
             let text =
                 String::from_utf8(bytes).map_err(|_| conflict(LOCK_FILE, "lock is not UTF-8"))?;
-            Lock::from_json(&text).map(Some).map_err(|e| {
+            let lock = Lock::from_json(&text).map_err(|e| {
                 conflict(
                     LOCK_FILE,
                     format!("lock is invalid ({e}); nothing it lists will be touched"),
                 )
-            })
+            })?;
+            Ok(Some(RecordedLock { lock, digest }))
         }
     }
 }
@@ -125,12 +138,18 @@ pub fn assess(plan: &Plan, root: &Path) -> Assessment {
 
 /// Computes what applying `plan` to an open tree would do.
 pub fn assess_tree(plan: &Plan, tree: &Tree) -> Assessment {
+    assess_recorded(plan, tree).0
+}
+
+/// [`assess_tree`], also returning the lock the assessment was made against.
+pub(crate) fn assess_recorded(plan: &Plan, tree: &Tree) -> (Assessment, Option<RecordedLock>) {
     let mut actions = Vec::new();
     let mut conflicts: Vec<Conflict> = journal_conflict(tree).into_iter().collect();
-    let lock = read_lock(tree).unwrap_or_else(|c| {
+    let recorded = read_recorded_lock(tree).unwrap_or_else(|c| {
         conflicts.push(c);
         None
     });
+    let lock = recorded.as_ref().map(|r| r.lock.clone());
     for artifact in &plan.artifacts {
         let entry = lock.as_ref().and_then(|l| l.entry(&artifact.path));
         let outcome = tree
@@ -148,7 +167,7 @@ pub fn assess_tree(plan: &Plan, tree: &Tree) -> Assessment {
     }
     actions.sort_by(|a, b| a.path.cmp(&b.path));
     conflicts.sort_by(|a, b| a.path.cmp(&b.path));
-    Assessment { actions, conflicts }
+    (Assessment { actions, conflicts }, recorded)
 }
 
 fn unplanned(
@@ -295,6 +314,14 @@ fn unplanned_action(entry: &LockEntry, occupant: Occupant) -> Result<Option<Acti
             entry.ownership,
             None,
         ))),
+        // The lock is untrusted: a forged entry naming someone's file with its
+        // digest must not turn it into a deletion. L2R deletes only files that
+        // declare themselves generated, as everything it generates does.
+        LockOwnership::Generated if !declares_generated(&bytes) => Err(
+            "the lock records this file as generated, but it lacks L2R's generated-file marker; it is \
+             not deleted, resolve by hand"
+                .into(),
+        ),
         LockOwnership::Generated
             if entry.digest.as_deref() == Some(digest::sha256(&bytes).as_str()) =>
         {

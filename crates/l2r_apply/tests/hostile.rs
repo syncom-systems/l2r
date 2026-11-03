@@ -115,3 +115,26 @@ fn a_lock_entry_naming_the_lock_itself_is_refused() {
         "the lock may not describe itself"
     );
 }
+
+#[test]
+fn a_forged_lock_entry_cannot_make_generate_delete_a_file_l2r_did_not_write() {
+    // The lock is untrusted. A forged "generated" entry with the right digest
+    // must not turn a file L2R never wrote into a deletion.
+    let (root, _victim) = fixture("lock-forged-delete");
+    let notes = root.join("src/notes.rs");
+    fs::write(&notes, "// the implementer's own notes\n").unwrap();
+    add_lock_entry(
+        &root,
+        "src/notes.rs",
+        Some(digest::sha256(&fs::read(&notes).unwrap())),
+    );
+    let plan = plan_for(&example_model());
+    let result = apply(&plan, &approved(&plan), &root);
+    assert!(notes.exists(), "generate deleted a file L2R never wrote");
+    // Refused during assessment, before anything is staged or journaled.
+    assert!(
+        matches!(result, Err(l2r_apply::ApplyError::Conflicts(_))),
+        "{result:?}"
+    );
+    assert!(!l2r_apply::pending(&root));
+}
