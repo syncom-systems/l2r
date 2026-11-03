@@ -424,6 +424,114 @@ theorem no_deadlock (E : Env N) {k : Config N} (h : Reachable N E k) : ¬ Blocke
   · have := enabled_signal hb rfl hg
     rw [hGn] at this; simp at this
 
+/-! ## No stranding
+
+The original example can reach a configuration from which *no* continuation ever
+acknowledges a pending latch (`request_can_be_stranded` in
+`examples/crossing`). This section proves the opposite for the repaired
+specification: from **every** reachable configuration with a pending latch, some
+permitted continuation acknowledges it.
+
+**What this is, and is not.** It is *non-stranding*: an acknowledgement stays
+possible. It is **not** liveness: it does not say the acknowledgement happens.
+That needs fairness hypotheses about the scheduler and the environment (the
+timer must keep expiring), and is not proved here. The continuation uses the
+environment's cooperation (timer expiries), so the environment is `anyEnv`, the
+weakest one, which permits every send that has room. -/
+
+theorem view_send_button (k : Config N) :
+    view (inject N k ⟨0, by decide⟩ .pressed) =
+      (latch k, signal k, latchIn k ++ [Latch.Input.buttonPressed], signalIn k) := by
+  obtain ⟨a, b, c, d⟩ := send_button k
+  simp only [view, a, b, c, d]
+
+theorem view_send_timer (k : Config N) :
+    view (inject N k ⟨1, by decide⟩ .expired) =
+      (latch k, signal k, latchIn k, signalIn k ++ [Signal.Input.timerExpired]) := by
+  obtain ⟨a, b, c, d⟩ := send_timer k
+  simp only [view, a, b, c, d]
+
+/-- Reverse simulation: every abstract successor of a bounded configuration is
+realised by a permitted step. -/
+theorem succs_realized {k : Config N} (hb : Bounded N k) {d : CCfg} (hd : d ∈ succs (view k)) :
+    ∃ k', Step N (anyEnv N) k k' ∧ view k' = d := by
+  simp only [succs, List.mem_append, Option.mem_toList] at hd
+  rcases hd with (hl | hg) | hs
+  · have he : (cdeliverL (view k)).isSome := by simp [hl]
+    obtain ⟨k', hk'⟩ := Option.isSome_iff_exists.mp (enabled_latch hb rfl he)
+    have := sim_deliver_latch hk'
+    rw [hl] at this
+    exact ⟨k', ⟨.deliver L, StepL.deliver (N := N) (E := anyEnv N) L hk'⟩, (Option.some.inj this).symm⟩
+  · have he : (cdeliverG (view k)).isSome := by simp [hg]
+    obtain ⟨k', hk'⟩ := Option.isSome_iff_exists.mp (enabled_signal hb rfl he)
+    have := sim_deliver_signal hk'
+    rw [hg] at this
+    exact ⟨k', ⟨.deliver G, StepL.deliver (N := N) (E := anyEnv N) G hk'⟩, (Option.some.inj this).symm⟩
+  · simp only [csends, view, List.mem_append] at hs
+    rcases hs with hs | hs
+    · by_cases hr : (latchIn k).length < 2
+      · simp only [hr, ite_true, List.mem_singleton] at hs
+        refine ⟨inject N k ⟨0, by decide⟩ .pressed,
+          ⟨.send ⟨0, by decide⟩ .pressed, StepL.send k ⟨0, by decide⟩ .pressed trivial hr⟩, ?_⟩
+        rw [view_send_button, hs]
+      · simp [hr] at hs
+    · by_cases hr : (signalIn k).length < 2
+      · simp only [hr, ite_true, List.mem_singleton] at hs
+        refine ⟨inject N k ⟨1, by decide⟩ .expired,
+          ⟨.send ⟨1, by decide⟩ .expired, StepL.send k ⟨1, by decide⟩ .expired trivial hr⟩, ?_⟩
+        rw [view_send_timer, hs]
+      · simp [hr] at hs
+
+/-- Layers of the abstraction by distance (in permitted steps) to an idle latch. -/
+def layers : Nat → List (List CCfg)
+  | 0 => [reach.filter fun c => c.1 == .idle]
+  | n + 1 =>
+    let prev := layers n
+    let seen := prev.flatten
+    prev ++ [reach.filter fun c => c ∉ seen && (succs c).any (· ∈ seen)]
+
+def dist (c : CCfg) : Nat := ((layers 14).findIdx fun l => c ∈ l)
+
+/-- The certificate: every pending, reachable abstract configuration has a successor
+strictly closer to an idle latch, and every idle one is at distance 0. -/
+theorem dist_certificate : ∀ c ∈ reach,
+    dist c < (layers 14).length ∧
+    (c.1 = .idle → dist c = 0) ∧
+    (c.1 = .pending → ∃ d ∈ succs c, dist d < dist c) := by
+  decide +kernel
+
+theorem star_trans {E : Env N} {a b c : Config N} (h1 : Star N E a b) (h2 : Star N E b c) :
+    Star N E a c := by
+  induction h2 with
+  | refl => exact h1
+  | tail _ hs ih => exact Star.tail ih hs
+
+/-- **No stranding.** In every environment's reachable configurations, whenever
+the latch is pending, some permitted continuation (with a cooperative
+environment) leaves it idle: the request is never lost for good. -/
+theorem no_stranding (E : Env N) {k : Config N} (h : Reachable N E k) (hp : latch k = .pending) :
+    ∃ k', Star N (anyEnv N) k k' ∧ latch k' = .idle := by
+  have key : ∀ n, ∀ k : Config N, Bounded N k → view k ∈ reach → dist (view k) = n →
+      latch k = .pending → ∃ k', Star N (anyEnv N) k k' ∧ latch k' = .idle := by
+    intro n
+    induction n using Nat.strongRecOn with
+    | _ n ih =>
+      intro k hb hr hd hpend
+      obtain ⟨_, _, hstep⟩ := dist_certificate _ hr
+      obtain ⟨d, hdmem, hlt⟩ := hstep (by simpa [view] using hpend)
+      obtain ⟨k', hk', hv⟩ := succs_realized hb hdmem
+      have hb' := step_bounded N (anyEnv N) hb hk'
+      have hr' : view k' ∈ reach := by rw [hv]; exact reach_closed _ hr _ hdmem
+      by_cases hidle : latch k' = .idle
+      · exact ⟨k', Star.tail (Star.refl k) hk', hidle⟩
+      · have hp' : latch k' = .pending := by
+          cases hl : latch k' with
+          | idle => exact absurd hl hidle
+          | pending => rfl
+        obtain ⟨k'', hs, hl⟩ := ih (dist (view k')) (by rw [hv]; omega) k' hb' hr' rfl hp'
+        exact ⟨k'', star_trans (Star.tail (Star.refl k) hk') hs, hl⟩
+  exact key _ k (h.bounded N E) (view_reachable E h) rfl hp
+
 /-! ## The generated scheduler
 
 Every property above holds in every configuration the `composite/v1`

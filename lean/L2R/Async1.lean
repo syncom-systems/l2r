@@ -463,9 +463,15 @@ inductive Progress where
   | settled
   | blocked
 
+/-- The delivery `System::step_once` performs, if any: the first child in
+round-robin order whose delivery is enabled, and the new cursor. -/
+def pick (s : Sched N) : Option (Sched N) :=
+  (order N s.next).findSome? fun c =>
+    (deliver N s.cfg c).map fun k => (⟨k, (c.val + 1) % N.size⟩ : Sched N)
+
 /-- `System::step_once`. -/
 def stepOnce (s : Sched N) : Progress N :=
-  match (order N s.next).findSome? fun c => (deliver N s.cfg c).map fun k => (⟨k, (c.val + 1) % N.size⟩ : Sched N) with
+  match pick N s with
   | some s' => .delivered s'
   | none => if (List.finRange N.size).all (fun c => (s.cfg.inbox c).isEmpty) then .settled else .blocked
 
@@ -490,6 +496,7 @@ theorem stepOnce_sound (E : Env N) {s s' : Sched N} (h : stepOnce N s = .deliver
   · rename_i s'' hs''
     injection h with h
     subst h
+    unfold pick at hs''
     obtain ⟨c, _, hc⟩ := List.exists_of_findSome?_eq_some hs''
     cases hs : deliver N s.cfg c with
     | none => simp [hs] at hc
@@ -549,25 +556,30 @@ theorem mem_order (next : Nat) (c : Fin N.size) : c ∈ order N next := by
   · rename_i hlt
     exact absurd (by rw [hval]; exact c.isLt) hlt
 
+theorem pick_isSome_iff (s : Sched N) : (pick N s).isSome ↔ ∃ c, (deliver N s.cfg c).isSome := by
+  unfold pick
+  rw [List.findSome?_isSome_iff]
+  constructor
+  · rintro ⟨c, _, hc⟩
+    exact ⟨c, by cases hd : deliver N s.cfg c <;> simp [hd] at hc ⊢⟩
+  · rintro ⟨c, hc⟩
+    exact ⟨c, mem_order N s.next c, by simpa using hc⟩
+
 /-- **Progress, exactly.** The scheduler delivers whenever some delivery is
 enabled: it reports `Settled` only when nothing is pending, and `Blocked` only
 when something is pending and no delivery is enabled. -/
 theorem stepOnce_delivered_iff (s : Sched N) :
     (∃ s', stepOnce N s = .delivered s') ↔ ∃ c, (deliver N s.cfg c).isSome := by
+  rw [← pick_isSome_iff]
   unfold stepOnce
   constructor
   · rintro ⟨s', h⟩
     split at h
     · rename_i s'' hs''
-      obtain ⟨c, _, hc⟩ := List.exists_of_findSome?_eq_some hs''
-      exact ⟨c, by cases hd : deliver N s.cfg c <;> simp [hd] at hc ⊢⟩
+      rw [hs'']; rfl
     · split at h <;> contradiction
-  · rintro ⟨c, hc⟩
-    have hsome : ((order N s.next).findSome? fun c =>
-        (deliver N s.cfg c).map fun k => (⟨k, (c.val + 1) % N.size⟩ : Sched N)).isSome := by
-      rw [List.findSome?_isSome_iff]
-      exact ⟨c, mem_order N s.next c, by simpa using hc⟩
-    obtain ⟨s'', hs''⟩ := Option.isSome_iff_exists.mp hsome
+  · intro h
+    obtain ⟨s'', hs''⟩ := Option.isSome_iff_exists.mp h
     exact ⟨s'', by simp [hs'']⟩
 
 theorem stepOnce_settled_iff (s : Sched N) :
@@ -578,8 +590,7 @@ theorem stepOnce_settled_iff (s : Sched N) :
   · intro h
     split at h
     · contradiction
-    · rename_i hnone
-      split at h
+    · split at h
       · rename_i hall
         intro c
         have := (List.all_eq_true.mp hall) c (List.mem_finRange c)
