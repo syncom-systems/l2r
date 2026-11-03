@@ -115,6 +115,7 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
 - [ADR-0001: Foundational architecture](https://github.com/syncom-systems/l2r/discussions/2) — Proposed
 - [ADR-0002: Bazel is the only build and test interface](https://github.com/syncom-systems/l2r/discussions/4) — Proposed
 - [ADR-0003: Architecture model v0, Lean inventory references, and approval semantics](https://github.com/syncom-systems/l2r/discussions/5) — Proposed
+- [ADR-0004: Asynchronous composition semantics and the scheduler relation](https://github.com/syncom-systems/l2r/discussions/9) — Proposed
 
 ## Known limits
 
