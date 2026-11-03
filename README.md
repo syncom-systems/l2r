@@ -30,7 +30,10 @@ Rust tests is never presented as proof of correspondence with Lean.
   or diff of every change. An approval record must name the digest that was
   reviewed, and a stale record is refused with the reasons. A record is
   evidence of a reviewed plan, not authorization; who may record approvals is a
-  repository-governance decision.
+  repository-governance decision (see [`docs/governance.md`](docs/governance.md)).
+  The record also names each existing generated file the plan would replace or
+  delete, with its content digest. Nothing is destroyed that it does not name;
+  the lock in the output tree is evidence, never authority.
 - **A hardened write boundary.** Every path is validated, including paths
   read back from L2R's own state files. The tree is accessed only through
   descriptor-relative, no-follow system calls. Each file change is atomic, and
