@@ -49,7 +49,17 @@ Rust tests is never presented as proof of correspondence with Lean.
   specifications, and the proofs are audited (axioms, pinned statements). Seeded
   defects and proof bypasses must be rejected. See
   [`verification/aeneas`](verification/aeneas/README.md) for exactly what this
-  covers and what it does not; the composed system is not verified.
+  covers and what it does not.
+- **System properties over every interleaving.** `lean/L2R/Async.lean` defines
+  which behaviours an asynchronous composition permits (`l2r.async/v0`).
+  `l2r lean-composition` derives each composite's network from the approved
+  model; it references the Lean `step` and translation functions and restates
+  nothing. For the example, a cross-component safety invariant is proved over
+  all permitted interleavings and carried over to a Lean model of the generated
+  scheduler. A liveness counterexample is proved too: a pedestrian request can
+  be stranded forever. The Lean scheduler model is tied to the generated Rust by
+  bounded conformance testing, not proof. See
+  [`verification/composition`](verification/composition/README.md).
 
 ## Try it
 
@@ -72,6 +82,7 @@ $L2R approve  $M --digest <digest from preview> --by "<your name>"
 $L2R generate $M                       # refuses unless the approval matches the current plan
 $L2R recover  $M                       # only after an interrupted generate
 $L2R check    $M                       # drift, staleness, budgets
+$L2R lean-composition $M               # derived Lean network for the composition proofs
 ```
 
 Edit a responsibility in the model and run `generate` again. It refuses, because
@@ -89,6 +100,9 @@ the architecture model changed, until the new plan has been previewed and approv
 | `tools/lean_inventory` | Lean exporter for the declaration inventory |
 | `examples/crossing` | Generic example: Lean spec, model, approval, generated and implemented scaffold |
 | `verification/aeneas` | Rust-to-Lean refinement experiment and its evidence |
+| `lean/L2R/Async.lean` | Generic semantics of asynchronous composition and the `composite/v0` scheduler model |
+| `examples/crossing/composition` | Derived network of the example and its system proofs |
+| `verification/composition` | The composition lane: audit, kernel replay, deviations, conformance |
 | `docs/model-reference.md` | Model schema, profiles, validation rules, write semantics |
 | `docs/generation-boundary.md` | Exact write guarantees, threat model, limits, and the tests behind them |
 | `docs/verification.md` | Kinds of evidence, the verification route, and what is and is not proved |
@@ -104,15 +118,20 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
 
 ## Known limits
 
-- The proof lane covers the transition functions and routes, not the composite
-  scheduler or any property of the composed system. mathlib's compiled
+- The Aeneas lane covers the transition functions and routes. The composite
+  scheduler is connected to the composition proofs only through a Lean model of
+  it and bounded conformance testing, and the system theorems assume an
+  environment that the generated API does not enforce. mathlib's compiled
   libraries are trusted inputs (not hash-pinned; their proofs are not
   re-checked, while the repository's own declarations are re-checked by the
   kernel with `leanchecker`). The lane is pinned for Linux x86_64 and macOS arm64 only.
 - v0 state types must be field-less Lean inductives. Message edges connect
   siblings only (an open decision in ADR-0003).
-- The composite scheduler realizes one deterministic interleaving. It is neither
-  verified nor a model of every interleaving.
+- The composite scheduler realizes one deterministic interleaving. It is not a
+  model of every interleaving; its runs are proved to be among them only for
+  its Lean model.
+- The example's composition has a proved liveness defect (a stranded request),
+  left unfixed on purpose: it shows what per-machine proofs cannot find.
 - No graphical editor; views are the CLI preview and the Mermaid rendering.
 
 ## License

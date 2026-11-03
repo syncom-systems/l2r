@@ -26,3 +26,14 @@ l2r_rust_test(
         "//crates/l2r_validate",
     ],
 )
+
+l2r_rust_test(
+    name = "l2r_plan_lean_composition_test",
+    srcs = ["tests/lean_composition.rs"],
+    compile_data = ["//examples/crossing:composition_derived"],
+    deps = [
+        ":l2r_plan",
+        "//crates/l2r_testing",
+        "//crates/l2r_validate",
+    ],
+)

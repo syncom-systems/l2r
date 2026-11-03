@@ -216,3 +216,14 @@ pub fn render(model: &Path) -> Outcome {
         Err(error) => session_error(error),
     }
 }
+
+/// `l2r lean-composition <model>`: the derived Lean composition, on stdout.
+pub fn lean_composition(model: &Path) -> Outcome {
+    match session::validated(model) {
+        Ok(v) => match l2r_plan::lean_composition(&v) {
+            Ok(text) => Outcome::ok(text),
+            Err(e) => Outcome::refused(format!("{e}\n")),
+        },
+        Err(error) => session_error(error),
+    }
+}

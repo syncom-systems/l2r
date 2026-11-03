@@ -1,0 +1,44 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+# System-level proofs over every permitted interleaving of the crossing
+# composition, and the inclusion of the composite/v0 scheduler model in them
+# (see composition_test.sh). Tagged `verification`: selected by
+# `bazel test --config=verify //...`, excluded from plain `bazel test //...`.
+sh_test(
+    name = "composition_test",
+    size = "large",
+    srcs = ["composition_test.sh"],
+    args = [
+        "$(rootpath //verification/aeneas:toolchain_manifest)",
+        "$(rootpath :scheduler_traces)",
+    ],
+    data = [
+        "Audit.lean",
+        "Conformance.lean",
+        "KernelForgery.lean",
+        "bypasses.tsv",
+        "expected-statements.txt",
+        "mutants.tsv",
+        ":scheduler_traces",
+        "//examples/crossing:composition_sources",
+        "//examples/crossing:spec_sources",
+        "//lean:sources",
+        "//verification/aeneas:toolchain.sh",
+        "//verification/aeneas:toolchain_manifest",
+    ],
+    tags = [
+        "no-remote",
+        "no-sandbox",
+        "verification",
+    ],
+)
+
+# Bounded conformance of the generated Rust scheduler with the Lean scheduler
+# model: every operation sequence up to a fixed length (see traces/main.rs).
+rust_binary(
+    name = "scheduler_traces",
+    srcs = ["traces/main.rs"],
+    edition = "2024",
+    deps = ["//examples/crossing/scaffold:crossing_scaffold"],
+)

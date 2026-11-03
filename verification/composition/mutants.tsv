@@ -1,0 +1,11 @@
+# Seeded deviations. Each is an exact-text edit (`\n` for newlines). Expected:
+#   <proof file>:<theorem>[,<theorem>]  rejected, with every error inside those theorems
+#   accepted                            still proves every theorem with the same statement
+# name	file	exact text	replacement	expected
+sched_serves_newest	lean/L2R/Async.lean	  match k.inbox c with\n  | [] => none\n  | input :: rest =>	  match (k.inbox c).reverse with\n  | [] => none\n  | input :: rest =>	lean/L2R/Async.lean:serve_eq_deliver
+sched_routes_to_front	lean/L2R/Async.lean	pushAll ⟨k.state, update k.inbox d (k.inbox d ++ [i])⟩ ms	pushAll ⟨k.state, update k.inbox d (i :: k.inbox d)⟩ ms	lean/L2R/Async.lean:pushAll_eq_foldl
+sched_drops_output	lean/L2R/Async.lean	    | some o => some (pushAll N k1 (N.route c o))	    | some _ => some k1	lean/L2R/Async.lean:serve_eq_deliver
+sched_forgets_state	lean/L2R/Async.lean	let k1 : Config N := ⟨update k.state c state, update k.inbox c rest⟩	let k1 : Config N := ⟨k.state, update k.inbox c rest⟩	lean/L2R/Async.lean:serve_eq_deliver
+sched_sticky_cursor	lean/L2R/Async.lean	(serve N s.cfg c).map fun k => ⟨k, (c.val + 1) % N.size⟩	(serve N s.cfg c).map fun k => ⟨k, c.val⟩	accepted
+spec_signal_acks_on_green	examples/crossing/spec/Crossing/Signal.lean	  | .clearance, .timerExpired => (.vehiclesGreen, none)	  | .clearance, .timerExpired => (.vehiclesGreen, some .walkStarted)	examples/crossing/composition/CrossingProperties.lean:coherent_step,stranded_step
+env_injects_requests	examples/crossing/composition/CrossingProperties.lean	  | timer : Physical G Signal.Input.timerExpired	  | timer : Physical G Signal.Input.crossingRequested	examples/crossing/composition/CrossingProperties.lean:send_timer,coherent_step,stranded_step,scheduler_strands_a_request

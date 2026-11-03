@@ -1,0 +1,45 @@
+DEFINITION L2R.Async.update := fun {n} {β} f c v d => if h : d = c then L2R.Async.update._proof_1 c d h ▸ v else f d
+DEFINITION L2R.Async.initial := fun N => { state := N.init, inbox := fun x => [] }
+DEFINITION L2R.Async.post := fun N k m => { state := k.state, inbox := L2R.Async.update k.inbox m.fst (k.inbox m.fst ++ [m.snd]) }
+DEFINITION L2R.Async.emitted := fun N c x =>
+DEFINITION L2R.Async.deliver := fun N k c =>
+DEFINITION L2R.Async.anyInput := fun N x x_1 => True
+CONSTRUCTOR L2R.Async.Step.deliver : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N} {k k' : L2R.Async.Config N} (c : Fin N.size), L2R.Async.deliver N k c = Option.some k' → L2R.Async.Step N E k k'
+CONSTRUCTOR L2R.Async.Step.send : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N} (k : L2R.Async.Config N) (c : Fin N.size) (i : N.Input c), E c i → L2R.Async.Step N E k (L2R.Async.post N k ⟨c, i⟩)
+CONSTRUCTOR L2R.Async.Reachable.init : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N}, L2R.Async.Reachable N E (L2R.Async.initial N)
+CONSTRUCTOR L2R.Async.Reachable.step : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N} {k k' : L2R.Async.Config N}, L2R.Async.Reachable N E k → L2R.Async.Step N E k k' → L2R.Async.Reachable N E k'
+CONSTRUCTOR L2R.Async.Star.refl : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N} (k : L2R.Async.Config N), L2R.Async.Star N E k k
+CONSTRUCTOR L2R.Async.Star.tail : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N} {k k' k'' : L2R.Async.Config N}, L2R.Async.Star N E k k' → L2R.Async.Step N E k' k'' → L2R.Async.Star N E k k''
+DEFINITION L2R.Async.RoundRobin.start := fun N => { cfg := L2R.Async.initial N, next := 0 }
+DEFINITION L2R.Async.RoundRobin.order := fun N next => List.filterMap (fun off => if h : (next + off) % N.size < N.size then Option.some ⟨(next + off) % N.size, h⟩ else Option.none) (List.range N.size)
+DEFINITION L2R.Async.RoundRobin.pushAll := fun N x x_1 => List.brecOn (motive := fun x => L2R.Async.Config N → L2R.Async.Config N) x_1 (L2R.Async.RoundRobin.pushAll._f N) x
+DEFINITION L2R.Async.RoundRobin.serve := fun N k c =>
+DEFINITION L2R.Async.RoundRobin.stepOnce := fun N s => List.findSome? (fun c => Option.map (fun k => { cfg := k, next := (↑c + 1) % N.size }) (L2R.Async.RoundRobin.serve N s.cfg c)) (L2R.Async.RoundRobin.order N s.next)
+DEFINITION L2R.Async.RoundRobin.send := fun N s c i => { cfg := { state := s.cfg.state, inbox := L2R.Async.update s.cfg.inbox c (s.cfg.inbox c ++ [i]) }, next := s.next }
+CONSTRUCTOR L2R.Async.RoundRobin.Run.start : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N}, L2R.Async.RoundRobin.Run N E (L2R.Async.RoundRobin.start N)
+CONSTRUCTOR L2R.Async.RoundRobin.Run.step : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N} {s s' : L2R.Async.RoundRobin.Sched N}, L2R.Async.RoundRobin.Run N E s → L2R.Async.RoundRobin.stepOnce N s = Option.some s' → L2R.Async.RoundRobin.Run N E s'
+CONSTRUCTOR L2R.Async.RoundRobin.Run.send : ∀ {N : L2R.Async.Network} {E : L2R.Async.Env N} {s : L2R.Async.RoundRobin.Sched N} (c : Fin N.size) (i : N.Input c), L2R.Async.RoundRobin.Run N E s → E c i → L2R.Async.RoundRobin.Run N E (L2R.Async.RoundRobin.send N s c i)
+CONSTRUCTOR CrossingProperties.Physical.press : CrossingProperties.Physical CrossingProperties.L Crossing.Latch.Input.buttonPressed
+CONSTRUCTOR CrossingProperties.Physical.timer : CrossingProperties.Physical CrossingProperties.G Crossing.Signal.Input.timerExpired
+DEFINITION CrossingProperties.inflight := fun k => (List.count Crossing.Signal.Input.crossingRequested (CrossingProperties.signalIn k) + if CrossingProperties.signal k = Crossing.Signal.State.vehiclesAmber then 1 else 0) + List.count Crossing.Latch.Input.acknowledged (CrossingProperties.latchIn k)
+DEFINITION CrossingProperties.Coherent := fun k => CrossingProperties.inflight k ≤ 1 ∧ (CrossingProperties.inflight k = 1 → CrossingProperties.latch k = Crossing.Latch.State.pending)
+DEFINITION CrossingProperties.Stranded := fun k => CrossingProperties.latch k = Crossing.Latch.State.pending ∧ CrossingProperties.inflight k = 0
+STATEMENT L2R.Async.reachable_invariant : ∀ (N : L2R.Async.Network) (E : L2R.Async.Env N) (P : L2R.Async.Config N → Prop), P (L2R.Async.initial N) → (∀ (k k' : L2R.Async.Config N), L2R.Async.Reachable N E k → P k → L2R.Async.Step N E k k' → P k') → ∀ (k : L2R.Async.Config N), L2R.Async.Reachable N E k → P k
+STATEMENT L2R.Async.star_invariant : ∀ (N : L2R.Async.Network) (E : L2R.Async.Env N) (P : L2R.Async.Config N → Prop), (∀ (k k' : L2R.Async.Config N), P k → L2R.Async.Step N E k k' → P k') → ∀ (k k' : L2R.Async.Config N), P k → L2R.Async.Star N E k k' → P k'
+STATEMENT L2R.Async.deliver_some : ∀ (N : L2R.Async.Network) {k k' : L2R.Async.Config N} {c : Fin N.size}, L2R.Async.deliver N k c = Option.some k' → ∃ i rest, k.inbox c = i :: rest ∧ k'.state = L2R.Async.update k.state c (N.step c (k.state c) i).fst ∧ ∀ (d : Fin N.size), k'.inbox d = L2R.Async.update k.inbox c rest d ++ L2R.Async.msgsFor N d (L2R.Async.emitted N c (N.step c (k.state c) i).snd)
+STATEMENT L2R.Async.RoundRobin.serve_eq_deliver : ∀ (N : L2R.Async.Network) (k : L2R.Async.Config N) (c : Fin N.size), L2R.Async.RoundRobin.serve N k c = L2R.Async.deliver N k c
+STATEMENT L2R.Async.RoundRobin.stepOnce_sound : ∀ (N : L2R.Async.Network) (E : L2R.Async.Env N) {s s' : L2R.Async.RoundRobin.Sched N}, L2R.Async.RoundRobin.stepOnce N s = Option.some s' → L2R.Async.Step N E s.cfg s'.cfg
+STATEMENT L2R.Async.RoundRobin.run_sound : ∀ (N : L2R.Async.Network) (E : L2R.Async.Env N) {s : L2R.Async.RoundRobin.Sched N}, L2R.Async.RoundRobin.Run N E s → L2R.Async.Reachable N E s.cfg
+STATEMENT L2R.Async.RoundRobin.run_invariant : ∀ (N : L2R.Async.Network) (E : L2R.Async.Env N) (P : L2R.Async.Config N → Prop), (∀ (k : L2R.Async.Config N), L2R.Async.Reachable N E k → P k) → ∀ {s : L2R.Async.RoundRobin.Sched N}, L2R.Async.RoundRobin.Run N E s → P s.cfg
+STATEMENT L2R.Async.RoundRobin.mem_order : ∀ (N : L2R.Async.Network) (next : Nat) (c : Fin N.size), c ∈ L2R.Async.RoundRobin.order N next
+STATEMENT L2R.Async.RoundRobin.stepOnce_none_iff : ∀ (N : L2R.Async.Network) (s : L2R.Async.RoundRobin.Sched N), L2R.Async.RoundRobin.stepOnce N s = Option.none ↔ ∀ (c : Fin N.size), s.cfg.inbox c = []
+STATEMENT CrossingProperties.coherent_step : ∀ (k k' : L2R.Async.Config CrossingProperties.N), CrossingProperties.Coherent k → L2R.Async.Step CrossingProperties.N CrossingProperties.Physical k k' → CrossingProperties.Coherent k'
+STATEMENT CrossingProperties.coherent_of_reachable : ∀ (k : L2R.Async.Config CrossingProperties.N), L2R.Async.Reachable CrossingProperties.N CrossingProperties.Physical k → CrossingProperties.Coherent k
+STATEMENT CrossingProperties.at_most_one_request : ∀ (k : L2R.Async.Config CrossingProperties.N), L2R.Async.Reachable CrossingProperties.N CrossingProperties.Physical k → List.count Crossing.Signal.Input.crossingRequested (CrossingProperties.signalIn k) ≤ 1
+STATEMENT CrossingProperties.acknowledgement_only_to_pending : ∀ (k : L2R.Async.Config CrossingProperties.N), L2R.Async.Reachable CrossingProperties.N CrossingProperties.Physical k → 0 < List.count Crossing.Latch.Input.acknowledged (CrossingProperties.latchIn k) → CrossingProperties.latch k = Crossing.Latch.State.pending
+STATEMENT CrossingProperties.no_conflicting_release : ∀ (k : L2R.Async.Config CrossingProperties.N), ¬(Crossing.Signal.vehiclesMayMove (CrossingProperties.signal k) = Bool.true ∧ Crossing.Signal.pedestriansMayWalk (CrossingProperties.signal k) = Bool.true)
+STATEMENT CrossingProperties.scheduler_coherent : ∀ {s : L2R.Async.RoundRobin.Sched CrossingProperties.N}, L2R.Async.RoundRobin.Run CrossingProperties.N CrossingProperties.Physical s → CrossingProperties.Coherent s.cfg
+STATEMENT CrossingProperties.stranded_step : ∀ (k k' : L2R.Async.Config CrossingProperties.N), CrossingProperties.Stranded k → L2R.Async.Step CrossingProperties.N CrossingProperties.Physical k k' → CrossingProperties.Stranded k'
+STATEMENT CrossingProperties.stranded_forever : ∀ (k k' : L2R.Async.Config CrossingProperties.N), CrossingProperties.Stranded k → L2R.Async.Star CrossingProperties.N CrossingProperties.Physical k k' → CrossingProperties.latch k' = Crossing.Latch.State.pending
+STATEMENT CrossingProperties.scheduler_strands_a_request : ∃ s, L2R.Async.RoundRobin.Run CrossingProperties.N CrossingProperties.Physical s ∧ CrossingProperties.Stranded s.cfg
+STATEMENT CrossingProperties.request_can_be_stranded : ∃ k, L2R.Async.Reachable CrossingProperties.N CrossingProperties.Physical k ∧ CrossingProperties.latch k = Crossing.Latch.State.pending ∧ ∀ (k' : L2R.Async.Config CrossingProperties.N), L2R.Async.Star CrossingProperties.N CrossingProperties.Physical k k' → CrossingProperties.latch k' = Crossing.Latch.State.pending

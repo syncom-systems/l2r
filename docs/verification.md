@@ -11,7 +11,7 @@ owns structure. Rust is the implementation. Verification tools produce evidence
 | **1. Specification proofs** | Does the Lean specification have the properties we want? | Lean theorems in the spec project (e.g. `Crossing.Signal.no_conflicting_release`) | Proved for the example spec; referenced from the model as `invariants` |
 | **2. Implementation correspondence** | Does the Rust implementation compute what the Lean specification says? | Charon + Aeneas translate Rust to Lean; a refinement theorem relates the translation to the spec under explicit abstraction functions | Proved in CI for both machines (`request_latch`, `signal`) and both message routes (`verification/aeneas`). **Not** for the composite scheduler |
 | **3. Rust-local properties** | Is the implementation free of panics and overflow, and are its data-structure invariants maintained, independently of behavior? | Aeneas (panic freedom follows from the `Result` being `ok`), or Verus/Kani for properties that do not restate behavior | Panic freedom proved for both machines and the routes as part of (2); nothing else yet |
-| **4. Composition exploration** | Do the machines, composed asynchronously, satisfy system properties under *all* allowed interleavings? | A Lean model of the composition (or a model checker) over the space of interleavings | **Not done.** The generated scheduler realizes *one* deterministic order (see below) |
+| **4. Composition** | Do the machines, composed asynchronously, satisfy system properties under *all* permitted interleavings, and does the scheduler choose only permitted ones? | The generic semantics `lean/L2R/Async.lean` (`l2r.async/v0`), a network derived from the model by `l2r lean-composition`, and system proofs (`verification/composition`) | Proved for the crossing example: a cross-component safety invariant over every interleaving in a stated environment, its transfer to a Lean model of the `composite/v0` scheduler, and a **liveness counterexample**. The Lean scheduler model ↔ generated Rust link is bounded conformance testing, not proof |
 | **5. Runtime and platform evidence** | Does the deployed system behave on real hardware, with real I/O and timing? | Integration tests, hardware-in-the-loop, monitoring | Out of scope for the generator; the example has unit tests only |
 
 A result of one kind never stands in for another. Passing Rust tests is kind 5
@@ -23,16 +23,43 @@ evidence for tested inputs. It is not correspondence (2). A proof about the spec
 
 `composite/v0` generates a scheduler that serves children round-robin in
 identifier order, with FIFO mailboxes. That is **one** execution order, chosen to
-be deterministic and testable. The abstract semantics of asynchronous
-composition admits every interleaving of deliveries (subject to FIFO per
-mailbox). Therefore:
+be deterministic and testable. The abstract semantics (`L2R.Async.Step`) admits
+every interleaving of atomic deliveries, with FIFO order per mailbox. Therefore:
 
-- A property proved of the generated scheduler holds for that order only.
-- A system property claimed for the architecture must be established over the
-  space of interleavings (kind 4). Then the scheduler is shown to be one of the
-  allowed behaviours (a refinement), which makes it correct by inclusion.
-- Until kind 4 exists, the docs and generated comments state that the scheduler
-  is unverified and one-of-many.
+- System properties are proved over the permitted behaviours (`Reachable`),
+  for an explicitly stated environment.
+- The scheduler is shown to choose only permitted steps
+  (`RoundRobin.run_sound`), so those properties hold for it by inclusion.
+- Inclusion does not pin the order. An unfair scheduler is also included.
+  Bounded conformance testing ties the Lean scheduler model to the generated
+  Rust's actual order.
+- Safety and liveness are separate obligations. Safety is an inductive
+  invariant over `Step`. Liveness is stated either for *every* continuation
+  (needs no fairness) or under an explicit fairness hypothesis. The crossing
+  example fails liveness in the strong sense: a pending request can be stranded
+  on every continuation.
+
+The details, the gates and the remaining gaps are in
+[`verification/composition`](../verification/composition/README.md).
+
+## Kernel replay (`leanchecker`)
+
+Both lanes run `leanchecker`. An axiom audit alone cannot see a declaration that
+never reached the kernel. A proof added with `debug.skipKernelTC` compiles and
+uses only standard axioms. Each lane keeps such a forgery as a fixture that must
+be rejected.
+
+- **Composition lane:** `leanchecker --fresh` replays everything, Lean's core
+  library included (about 30 s), because the lane imports no mathlib. No
+  compiled `.olean` is trusted.
+- **Aeneas lane:** the spec, translation and proof modules are re-checked. The
+  imported Aeneas and mathlib declarations are not replayed; a local `--fresh`
+  run did not finish within 55 CPU-minutes. They remain trusted compiled inputs.
+  A scheduled full replay is the next step.
+
+The toolchain also ships independent kernels (`lean4lean`, and `nanoda` via
+`leanexport`). Running a second, independently written kernel over the exported
+environment would cover a bug in the Lean kernel itself. It is not done yet.
 
 ## Where Verus fits
 
@@ -45,6 +72,20 @@ obligations, Verus complements Lean. Examples:
   cannot translate, such as the `VecDeque`-based scheduler);
 - bounds and data-structure invariants: mailbox capacity, index validity;
 - frame conditions: a step mutates only the owning component's state.
+
+**Evaluation (this increment).** No Verus toolchain was added. Today it would
+give little coverage that the lanes lack:
+
+- The machines and routes are pure functions, already proved panic-free by
+  Aeneas.
+- The `composite/v0` scheduler's local properties are simple. `VecDeque`
+  indexing cannot fail, and the `next` cursor is always `< n`.
+
+Verus becomes worthwhile with a bounded-mailbox scheduler: ring-buffer index
+arithmetic, capacity accounting, the absence of overflow on `push`, and frame
+conditions per child. These are exactly the Rust-local obligations that the
+Lean semantics deliberately leaves to the implementation. Its specifications
+must then refer to the Lean-derived capacity bound and never restate `step`.
 
 Rule for any such tool: its specifications may mention only Rust-local facts. If
 an obligation needs behavioral meaning, it must be stated in Lean and connected
@@ -97,6 +138,8 @@ check (4) ensures no accepted proof depends on them.
 Correspondence is practical for the code shape `transition-core/v0` generates:
 pure functions over field-less enums, with `match` and no loops, heap
 collections, traits or interior mutability. The `composite/v0` scheduler
-(`VecDeque`, `&mut self`) is outside the subset that was demonstrated. Extending
-coverage to it is planned work, with Verus (kind 3) as a candidate for its local
-properties.
+(`VecDeque`, `&mut self`) is outside the subset that was demonstrated. It is
+connected to the composition proofs through a Lean model of it and bounded
+conformance testing (kind 4 above). A proof would need an Aeneas-friendly
+scheduler profile (fixed-capacity arrays), with Verus (kind 3) as a candidate
+for its local properties.
