@@ -12,7 +12,10 @@
 #                  its statement and the abstraction functions equal the
 #                  reviewed expected-statements.txt;
 #   5. mutants     each seeded defect in the Rust sources makes its named
-#                  refinement theorem fail, and only that theorem.
+#                  refinement theorem fail, and only that theorem;
+#   6. bypasses    each attempt in bypasses.tsv to pass without a real proof
+#                  (sorry, native_decide, a new axiom, a weakened statement,
+#                  #exit, a permuted abstraction) is rejected by its gate.
 # Evidence goes to $TEST_UNDECLARED_OUTPUTS_DIR (bazel-testlogs/.../outputs).
 set -euo pipefail
 
@@ -71,4 +74,7 @@ cmp -s "$evidence/statements.txt" verification/aeneas/expected-statements.txt ||
 step "5. seeded defects are detected by the named theorem"
 run_mutants "$ws" "$spec_out" "$evidence"
 
-echo "PASS: translation current, proofs checked, audit clean, all mutants rejected" | tee "$evidence/summary.txt"
+step "6. proof bypasses are rejected"
+run_bypasses "$ws" "$spec_out" "$evidence"
+
+echo "PASS: translation current, proofs checked, audit clean, all mutants and bypasses rejected" | tee "$evidence/summary.txt"

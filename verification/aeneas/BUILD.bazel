@@ -12,6 +12,7 @@ filegroup(
 )
 
 LANE_INPUTS = [
+    "bypasses.tsv",
     "crossing_core.rs",
     "expected-statements.txt",
     "mutants.tsv",

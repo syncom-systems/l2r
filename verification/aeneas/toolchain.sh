@@ -69,6 +69,13 @@ audit_proof() {
   LEAN_PATH="$LEAN_LIBS:$spec:$out" "$LEAN" -R "$p" "$p/Audit.lean"
 }
 
+# apply_edit <exact text> <replacement> <file>: literal replacement of the first
+# occurrence; `\n` in either text stands for a newline.
+apply_edit() {
+  perl -0pi -e 'BEGIN { ($from, $to) = (shift, shift); s/\\n/\n/g for $from, $to }
+                s/\Q$from\E/$to/ or die "pattern not found\n"' "$1" "$2" "$3"
+}
+
 # Line range of `theorem <name>` in Refinement.lean: its line up to the line
 # before the next top-level declaration or section end.
 theorem_range() {
@@ -90,8 +97,7 @@ run_mutants() {
     local mws="$TEST_TMPDIR/mutant-$name"
     rm -rf "$mws"; cp -R "$ws" "$mws"
     # Literal (not regex) replacement of the first occurrence; portable across bash versions.
-    perl -0pi -e 'BEGIN { $from = shift; $to = shift } s/\Q$from\E/$to/ or die "pattern not found\n"' \
-      "$from" "$to" "$mws/$file" || fail "mutant $name: pattern not found in $file"
+    apply_edit "$from" "$to" "$mws/$file" || fail "mutant $name: pattern not found in $file"
     cmp -s "$ws/$file" "$mws/$file" && fail "mutant $name: the source did not change"
     extract "$mws" "$mws/extracted" > "$evidence/mutant-$name-extract.log" 2>&1 || fail "mutant $name: extraction failed"
     local log="$evidence/mutant-$name.log"
@@ -118,4 +124,33 @@ RUNFILES_ROOT="$PWD"
 
 sha256() {
   if command -v sha256sum > /dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi
+}
+
+# run_bypasses <workspace> <spec-oleans> <evidence>: every line of bypasses.tsv is
+#   name <TAB> proof file <TAB> exact text <TAB> replacement <TAB> gate
+# and must be rejected by that gate: `proof` (does not compile) or `audit`
+# (compiles, but the audit or the statement comparison rejects it).
+run_bypasses() {
+  local ws="$1" spec="$2" evidence="$3" count=0
+  local name file from to gate
+  while IFS=$'\t' read -r name file from to gate; do
+    [ -z "$name" ] || [ "${name:0:1}" = "#" ] && continue
+    count=$((count + 1))
+    local bws="$TEST_TMPDIR/bypass-$name" log="$evidence/bypass-$name.log"
+    rm -rf "$bws"; cp -R "$ws" "$bws"
+    apply_edit "$from" "$to" "$bws/$file" || fail "bypass $name: pattern not found in $file"
+    if ! compile_proof "$bws" "$spec" "$bws/olean" > "$log" 2>&1; then
+      [ "$gate" = proof ] || fail "bypass $name: expected the audit to reject it, but the proof did not compile"
+      echo "bypass $name: rejected by proof checking" | tee -a "$evidence/bypasses.txt"
+      continue
+    fi
+    [ "$gate" = audit ] || fail "bypass $name was NOT rejected: the proof still compiles"
+    local audited=rejected
+    if audit_proof "$bws" "$spec" "$bws/olean" >> "$log" 2>&1 && grep -q "AUDIT PASSED" "$log"; then
+      grep -E "^(DEFINITION|STATEMENT) " "$log" | cmp -s - "$bws/verification/aeneas/expected-statements.txt" && audited=accepted
+    fi
+    [ "$audited" = rejected ] || fail "bypass $name was NOT rejected by the audit"
+    echo "bypass $name: rejected by the audit ($(grep -m1 -oE 'AUDIT FAILED: .{0,120}' "$log" || echo 'statement mismatch'))" | tee -a "$evidence/bypasses.txt"
+  done < "$ws/verification/aeneas/bypasses.tsv"
+  [ "$count" -gt 0 ] || fail "no bypasses defined"
 }

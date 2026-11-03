@@ -19,9 +19,11 @@ job (`verification` in `.github/workflows/bazel.yml`) and uploads its evidence.
 | 3. Proof | The spec, the translation and `proof/Refinement.lean` compile | Proofs that do not check |
 | 4. Audit | `proof/Audit.lean`: every expected theorem exists, is a theorem, and depends only on `propext`, `Classical.choice` and `Quot.sound`. Its statement, and the defining equations of every abstraction function, equal the reviewed `expected-statements.txt` | `sorry`, `native_decide` (`Lean.ofReduceBool`), new axioms (including the `Hash` axiom Aeneas emits), `#exit` before a theorem, weakened statements, permuted abstraction functions |
 | 5. Mutants | Each seeded defect in `mutants.tsv` (a real edit of the Rust source) is re-extracted, and must make **its named theorem** fail and nothing else | A proof that cannot fail; a setup error masquerading as detection |
+| 6. Bypasses | Each attempt in `bypasses.tsv` to pass without a real proof (`sorry`, `native_decide`, a new `axiom`, a weakened statement, `#exit`, a permuted abstraction function) must be rejected by its named gate | An audit that has quietly stopped detecting what it claims to detect |
 
-Compiling the translation alone (gate 3 without 4 and 5) is not accepted as
-evidence.
+Compiling the translation alone (gate 3 without 4–6) is not accepted as
+evidence. Gates 5 and 6 run on every CI run, so the lane continuously shows
+that its own checks can fail.
 
 ## What is proved
 

@@ -1,0 +1,10 @@
+# Attempts to make the proof lane pass without a real proof. Each is applied to the
+# proof sources (exact text -> replacement, `\n` for newlines) and must be rejected
+# by the named gate: `proof` (does not compile) or `audit` (compiles, audit rejects).
+# name	file	exact text	replacement	gate
+sorry_proof	verification/aeneas/proof/Refinement.lean	  exact ⟨.VehiclesGreen, rfl, rfl⟩	  sorry	audit
+native_decide	verification/aeneas/proof/Refinement.lean	      r.map signalInput = Crossing.Routes.latchToSignal (latchOutput o) := by\n  cases o; exact ⟨_, rfl, rfl⟩	      r.map signalInput = Crossing.Routes.latchToSignal (latchOutput o) := by\n  cases o; exact ⟨_, rfl, by native_decide⟩	audit
+new_axiom	verification/aeneas/proof/Refinement.lean	theorem signal_init_refines :\n    ∃ s, signal.init = ok s ∧ signalState s = Crossing.Signal.init := by\n  exact ⟨.VehiclesGreen, rfl, rfl⟩	axiom bypass : ∃ s, signal.init = ok s ∧ signalState s = Crossing.Signal.init\n\ntheorem signal_init_refines :\n    ∃ s, signal.init = ok s ∧ signalState s = Crossing.Signal.init := by\n  exact bypass	audit
+weakened_statement	verification/aeneas/proof/Refinement.lean	    ∃ s, request_latch.init = ok s ∧ latchState s = Crossing.Latch.init := by\n  exact ⟨.Idle, rfl, rfl⟩	    ∃ s, request_latch.init = ok s := by\n  exact ⟨.Idle, rfl⟩	audit
+exit_early	verification/aeneas/proof/Refinement.lean	/-! ## Specification invariants	#exit\n/-! ## Specification invariants	audit
+permuted_abstraction	verification/aeneas/proof/Refinement.lean	  | .Walk => .walk\n  | .Clearance => .clearance	  | .Walk => .clearance\n  | .Clearance => .walk	proof
