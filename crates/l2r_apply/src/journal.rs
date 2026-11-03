@@ -119,15 +119,28 @@ impl Journal {
     /// `plan` from `prior` (the recorded prior lock) could produce. The plan and
     /// the prior lock are the only sources of authority; the journal's own claims
     /// about ownership and digests are checked against them, never believed.
+    ///
+    /// A replacement or deletion additionally needs the approval record's entry
+    /// for that content, unless `done` says the step has already happened (its
+    /// target already has the planned content, or is already gone): re-running
+    /// it destroys nothing, and a record made after an interruption cannot list
+    /// it, because it was made from a partly applied tree.
     pub fn authorize(
         &self,
         plan: &Plan,
         prior: Option<&Lock>,
         approval: &Approval,
+        done: &dyn Fn(&Step) -> bool,
     ) -> Result<(), String> {
         for step in &self.steps {
             step.authorize(plan, prior)
-                .and_then(|()| step.authorized_by(approval))
+                .and_then(|()| {
+                    if done(step) {
+                        Ok(())
+                    } else {
+                        step.authorized_by(approval)
+                    }
+                })
                 .map_err(|why| format!("step for `{}` {why}", step.path))?;
         }
         Ok(())
