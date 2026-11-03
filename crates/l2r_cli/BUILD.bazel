@@ -24,7 +24,11 @@ l2r_rust_test(
     srcs = ["tests/workflow.rs"],
     data = [":l2r"],
     env = {"L2R_BIN": "$(rootpath :l2r)"},
-    deps = ["//crates/l2r_testing"],
+    deps = [
+        "//crates/l2r_model",
+        "//crates/l2r_testing",
+        "@crates//:serde_json",
+    ],
 )
 
 l2r_rust_test(

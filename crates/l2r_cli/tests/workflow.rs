@@ -217,3 +217,57 @@ fn json_plans_are_byte_identical_across_runs() {
     assert_eq!(a.stdout, b.stdout);
     assert!(a.stdout.contains("\"content_digest\""));
 }
+
+#[test]
+fn a_responsibility_edit_shows_and_records_the_replacement_it_needs() {
+    // The security argument rests on the reviewer seeing what will be destroyed.
+    let (dir, model) = project("destructive");
+    let digest = digest_from(&l2r(&["plan", &model]).stdout);
+    assert_eq!(approve(&model, &digest).code, 0);
+    assert_eq!(l2r(&["generate", &model]).code, 0);
+    let mod_rs = dir.join("scaffold/src/crossing/signal/mod.rs");
+    let before = l2r_model::digest::sha256(&fs::read(&mod_rs).unwrap());
+
+    fs::write(
+        dir.join("architecture.toml"),
+        EXAMPLE_MODEL.replace("Cycles vehicle", "Steps vehicle"),
+    )
+    .unwrap();
+    let preview = l2r(&["preview", &model]);
+    assert!(
+        preview
+            .stdout
+            .contains("permission to destroy existing content"),
+        "{}",
+        preview.stdout
+    );
+    assert!(
+        preview.stdout.contains(&format!(
+            "Replace src/crossing/signal/mod.rs while it is {before}"
+        )),
+        "{}",
+        preview.stdout
+    );
+
+    // Without approving again, generation refuses and says why.
+    let refused = l2r(&["generate", &model]);
+    assert_eq!(refused.code, 1);
+
+    let next = digest_from(&l2r(&["plan", &model]).stdout);
+    let approved = approve(&model, &next);
+    assert_eq!(approved.code, 0, "{}", approved.stderr);
+    assert!(approved.stdout.contains("authorizes replacing or deleting"));
+    let record: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("architecture.approval.json")).unwrap())
+            .unwrap();
+    let changes = record["authorized_changes"].as_array().unwrap();
+    assert!(
+        changes
+            .iter()
+            .any(|c| c["path"] == "src/crossing/signal/mod.rs"
+                && c["change"] == "replace"
+                && c["before"] == before.as_str()),
+        "{changes:?}"
+    );
+    assert_eq!(l2r(&["generate", &model]).code, 0);
+}
