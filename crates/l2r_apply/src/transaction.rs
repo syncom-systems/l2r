@@ -130,7 +130,7 @@ pub fn apply(plan: &Plan, approval: &Approval, root: &Path) -> Result<Report, Ap
     let journal = journal_for(plan, &assessment, recorded.as_ref(), &names);
     // One definition of a permitted transition, for writing and for recovery.
     journal
-        .authorize(plan, prior, approval)
+        .authorize(plan, prior, approval, &|_| false)
         .map_err(|e| ApplyError::Journal(format!("generator defect: {e}")))?;
     stage(plan, &tree, &journal.steps).map_err(ApplyError::Staging)?;
     let created = tree
@@ -179,11 +179,18 @@ pub fn recover(plan: &Plan, approval: &Approval, root: &Path) -> Result<(), Appl
     let names = TempNames::new();
     if on_disk.as_ref().map(|r| &r.digest) == journal.prior_lock.as_ref() {
         let prior = on_disk.as_ref().map(|r| &r.lock);
-        journal.authorize(plan, prior, approval).map_err(|e| {
-            ApplyError::Journal(format!(
-                "{e}; the plan, the prior lock and the approval record do not authorize it"
-            ))
-        })?;
+        let done = |step: &Step| match (step.kind, tree.read(&step.path)) {
+            (StepKind::Replace, Ok(Occupant::File(b))) => Some(digest::sha256(&b)) == step.after,
+            (StepKind::Delete, Ok(Occupant::Absent)) => true,
+            _ => false,
+        };
+        journal
+            .authorize(plan, prior, approval, &done)
+            .map_err(|e| {
+                ApplyError::Journal(format!(
+                    "{e}; the plan, the prior lock and the approval record do not authorize it"
+                ))
+            })?;
         let mut steps = journal.steps.clone();
         restage_missing(plan, &tree, &mut steps, &names).map_err(ApplyError::Interrupted)?;
         let journal = Journal { steps, ..journal };
