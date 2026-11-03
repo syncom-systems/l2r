@@ -77,7 +77,8 @@ def pinned : List Name := [
 def pp (e : Expr) : CommandElabM String :=
   liftTermElabM do
     withOptions (fun o => (o.setBool `pp.fullNames true).setBool `pp.proofs true) do
-      return (← ppExpr e).pretty 100000
+      -- One line per declaration, so the whole body is pinned, not only its first line.
+      return ((← ppExpr e).pretty 100000).replace "\n" " "
 
 def printPinned (decl : Name) : CommandElabM Unit := do
   match (← getEnv).find? decl with
