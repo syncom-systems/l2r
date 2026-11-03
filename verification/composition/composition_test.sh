@@ -53,7 +53,8 @@ LANE=verification/composition
 ws="$TEST_TMPDIR/ws"
 mkdir -p "$ws"
 for f in $(find lean examples/crossing/spec examples/crossing/composition "$LANE" \( -type f -o -type l \) -name '*.lean') \
-         "$LANE/expected-statements.txt" "$LANE/mutants.tsv" "$LANE/bypasses.tsv"; do
+         "$LANE/expected-statements.txt" "$LANE/mutants.tsv" "$LANE/bypasses.tsv" \
+         examples/crossing/architecture.approval.json; do
   mkdir -p "$ws/$(dirname "$f")"
   cp -L "$f" "$ws/$f"
 done
@@ -96,6 +97,59 @@ cd "$ws"
 {
   for f in $(echo "$MODULES" | awk '{print $1 "/" $2}') "$LANE/Audit.lean"; do sha256 "$f"; done
 } > "$evidence/source-identity.txt"
+
+step "0. source identity (the proofs are about the approved architecture)"
+# The derived composition is not a composite/v0 scaffold file, so its link to the
+# approved plan is explicit: its header must name the model, inventory and
+# generator of the approval record, and the exact semantics file it imports.
+# (Its freshness against a re-derivation is //crates/l2r_plan's ordinary test.)
+derived=examples/crossing/composition/L2RDerived/crossing.lean
+approval=examples/crossing/architecture.approval.json
+semantics_file=lean/L2R/Async.lean
+# check_identity <derived> <approval> <semantics>: prints the identity table and
+# succeeds only if the derived file's header agrees with the approval record and
+# with the semantics file it imports.
+check_identity() {
+  local d="$1" a="$2" m="$3" sha
+  header_of() { sed -n "s/^-- $1: //p" "$d" | head -1; }
+  approved() { sed -n "s/^  \"$1\": \"\(.*\)\",\{0,1\}$/\1/p" "$a" | head -1; }
+  sha="sha256:$(sha256 "$m" | cut -d' ' -f1)"
+  echo "derived file          $d"
+  echo "generator             $(header_of generator)"
+  echo "semantics             $(header_of semantics)"
+  echo "model                 $(header_of model)"
+  echo "inventory             $(header_of inventory)"
+  echo "approval plan digest  $(approved plan_digest)"
+  echo "approval model        $(approved model_digest)"
+  echo "approval inventory    $(approved inventory_digest)"
+  echo "approval generator    $(approved generator)"
+  echo "semantics source      $sha"
+  [ -n "$(header_of model)" ] && [ -n "$(approved model_digest)" ] || { echo "identity: cannot read the derived header or the approval record"; return 1; }
+  [ "$(header_of model)" = "$(approved model_digest)" ] || { echo "identity: the derived composition is not derived from the approved model"; return 1; }
+  [ "$(header_of inventory)" = "$(approved inventory_digest)" ] || { echo "identity: the derived composition is not derived from the approved Lean inventory"; return 1; }
+  [ "$(header_of generator)" = "$(approved generator)" ] || { echo "identity: the derived composition was produced by a different generator than the approval names"; return 1; }
+  [ "$(header_of semantics)" = "l2r.async/v0 $sha" ] || { echo "identity: the derived composition names a different semantics source than $m"; return 1; }
+}
+check_identity "$derived" "$approval" "$semantics_file" > "$evidence/identity.txt" || { cat "$evidence/identity.txt" >&2; fail "the derived composition does not match the approved architecture"; }
+cat "$evidence/identity.txt"
+# The gate must be able to fail: each seeded inconsistency is rejected.
+idws="$TEST_TMPDIR/identity"
+for seeded in model inventory generator semantics async-source; do
+  rm -rf "$idws"; mkdir -p "$idws"
+  cp "$derived" "$idws/derived.lean"; cp "$approval" "$idws/approval.json"; cp "$semantics_file" "$idws/Async.lean"
+  case "$seeded" in
+    model)        sed -i.bak 's/^-- model: sha256:./-- model: sha256:0/' "$idws/derived.lean" ;;
+    inventory)    sed -i.bak 's/^-- inventory: sha256:./-- inventory: sha256:0/' "$idws/derived.lean" ;;
+    generator)    sed -i.bak 's/^-- generator: l2r/-- generator: other/' "$idws/derived.lean" ;;
+    semantics)    sed -i.bak 's/^-- semantics: l2r.async\/v0/-- semantics: l2r.async\/v1/' "$idws/derived.lean" ;;
+    async-source) echo "-- edited after derivation" >> "$idws/Async.lean" ;;
+  esac
+  if check_identity "$idws/derived.lean" "$idws/approval.json" "$idws/Async.lean" > "$evidence/identity-$seeded.log" 2>&1; then
+    fail "identity gate accepted a seeded inconsistency: $seeded"
+  fi
+  grep -q '^identity:' "$evidence/identity-$seeded.log" || fail "identity gate rejected $seeded for an unexpected reason"
+  echo "identity mismatch ($seeded): rejected" | tee -a "$evidence/identity-negative.txt"
+done
 
 step "1. proof checking"
 out="$TEST_TMPDIR/olean"

@@ -11,6 +11,8 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+exports_files(["architecture.approval.json"], visibility = ["//visibility:public"])
+
 # The Lean specification sources, for the proof lane.
 filegroup(
     name = "spec_sources",

@@ -85,6 +85,7 @@ fairness assumption rescues it. The example is **not** fixed in this increment
 
 | Gate | Check | Can fail? (seeded in this lane) |
 | --- | --- | --- |
+| 0. Identity | The derived composition's header names the **same model digest, inventory digest and generator** as the approval record, and the **exact semantics source** (`l2r.async/v0`, digest of `lean/L2R/Async.lean`) it imports. The table is written to the evidence. | A mutated model digest, inventory digest, generator, semantics version, or a semantics file edited after derivation |
 | 1. Prove | The library, the spec, the derived network and the system proofs compile with the pinned Lean. **No mathlib and no Aeneas library.** | — |
 | 2. Audit | Every expected theorem exists, uses only `propext`/`Classical.choice`/`Quot.sound`, and has its reviewed statement. The **definitions** behind the statements are pinned as well: semantics, scheduler model, environment, predicates. | `sorry`, `native_decide`, a new axiom, a weakened statement, a weakened definition, `#exit` (`bypasses.tsv`) |
 | 3. Kernel | `leanchecker --fresh` replays the proofs and everything they import, **Lean's core library included**, so no compiled `.olean` is trusted. `KernelForgery.lean`, whose proof of `False` skipped the kernel and which uses only standard axioms, must be rejected. | The forgery fixture |
@@ -94,9 +95,14 @@ fairness assumption rescues it. The example is **not** fixed in this increment
 
 The derived network's freshness is tested in the ordinary run
 (`//crates/l2r_plan:l2r_plan_lean_composition_test`). It must equal
-`l2r lean-composition` of the committed model and inventory. Its header records
-both digests. Deriving it never changes a generation plan. It is not a
-`composite/v0` artifact, so the profile's output is unchanged.
+`l2r lean-composition` of the committed model and inventory, and the same test
+ties its header to the approval record. Its header records the generator, the
+semantics version and the digest of the semantics source, the model digest and
+the inventory digest; gate 0 repeats that tie inside the proof lane, so the
+evidence that comes out of the lane names what the proofs are about. Deriving it
+never changes a generation plan. It is not a `composite/v0` artifact, so the
+profile's output is unchanged, and it has no entry in an approval record or lock.
+Its identity is therefore the header, not a plan digest.
 
 ## What is not verified
 

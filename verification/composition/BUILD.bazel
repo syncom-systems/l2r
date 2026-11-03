@@ -21,6 +21,7 @@ sh_test(
         "expected-statements.txt",
         "mutants.tsv",
         ":scheduler_traces",
+        "//examples/crossing:architecture.approval.json",
         "//examples/crossing:composition_sources",
         "//examples/crossing:spec_sources",
         "//lean:sources",
