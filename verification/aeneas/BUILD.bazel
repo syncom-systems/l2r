@@ -9,6 +9,13 @@ filegroup(
         "//bazel/verification:verify": ["@verification_tools//:manifest.txt"],
         "//conditions:default": ["//bazel/verification:unavailable_manifest.txt"],
     }),
+    visibility = ["//verification:__subpackages__"],
+)
+
+# Shared lane functions, also used by //verification/composition.
+exports_files(
+    ["toolchain.sh"],
+    visibility = ["//verification:__subpackages__"],
 )
 
 LANE_INPUTS = [

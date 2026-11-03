@@ -7,10 +7,15 @@
 //! give byte-identical plans and the same plan digest.
 
 mod layout;
+mod lean_composition;
 mod plan;
 mod profiles;
 mod text;
 
+pub use lean_composition::{
+    LEAN_COMPOSITION_FORMAT, SEMANTICS_VERSION, lean_composition, lean_composition_path,
+    semantics_digest,
+};
 pub use text::declares_generated;
 
 pub use plan::{
