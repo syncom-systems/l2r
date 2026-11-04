@@ -10,10 +10,10 @@ waits for an acknowledgement forever. Here a request that arrives during the wal
 or clearance phase is *remembered* (`walkQueued`, `clearanceQueued`): when the
 vehicle phase would return to green, the signal goes to amber instead and serves
 it, acknowledging it when the next walk phase starts. A request that arrives in
-amber is already being served. Every request therefore leads to an
-acknowledgement once the timer keeps expiring (see
-`CrossingV1.Liveness` in the composition proofs; the timer is an assumption about
-the environment, stated there).
+amber is already being served. Under the hypotheses stated and proved in
+`CrossingV1Liveness` (weakly fair deliveries, and timer expiries accepted again
+and again) every request is acknowledged; without them it need not be, and that
+file proves both directions.
 -/
 namespace CrossingV1.Signal
 

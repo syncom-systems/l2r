@@ -43,9 +43,13 @@ result (see below).
 | Example: at most one request in the system, latch pending exactly while one is | **Proved**, for every environment | `coherent_of_reachable` |
 | Example: capacities respected, no deadlock, the scheduler never reports `Blocked` | **Proved**, for every environment | `mailboxes_bounded`, `no_deadlock`, `scheduler_never_blocks` |
 | Example: a pending request is never lost for good (some continuation acknowledges it) | **Proved** — *non-stranding*, **not** liveness | `no_stranding` |
-| Example: acknowledgement happens on every fair run | **Tested, not proved**: exhaustive finite-state search finds a fair pending cycle in the original machines and none in the repaired ones, at several capacities | `verification/composition_v1/FairCycles.lean` |
-| The generated Rust scheduler behaves as the Lean scheduler model | **Tested, not proved**: every sequence of 10 operations (sends, `step_once`) agrees on results, states **and both mailboxes' contents** | gate 6 of the lane |
-| The generated Rust scheduler is Aeneas-translatable | **Demonstrated** (spike), **not proved** — see below | not in CI |
+| Example: a pending request is acknowledged on every trace that is **weakly fair** and in which timer expiries are **accepted** again and again | **Proved**, for this example at capacities (2, 2) only (finite abstraction, kernel `decide`) | `CrossingV1Liveness.pending_request_acknowledged` (instance of `fair_termination`) |
+| …those hypotheses are satisfiable, and each is needed | **Proved** (explicit traces) | `hypotheses_satisfiable`, `fairness_needed`, `starvation_possible`, `quiescent_pending`, `no_dead_end` |
+| …the same, by exhaustive search | **Tested** (cross-check; weaker than the proof, counts only accepted timer sends) | `FairCycles.lean` |
+| The round-robin scheduler *provides* weak fairness | **Not proved; assumed.** Only work conservation is proved (`stepOnce_delivered_iff`); bounded waiting of a continuously enabled child is not | — |
+| The generated Rust scheduler refines the Lean scheduler model (`new`, `step_once`, both sends; no panic under an invariant that every run preserves) | **Refinement-proved** for the crossing example (2 children, capacity 2); the Lean-side bridge is a kernel `decide` over 1,176 states and does **not** scale to larger networks | `verification/aeneas_v1` (`step_once_refines`, `rustRun_simulates`) |
+| …bounded conformance of the same link, as an independent check | **Tested** (all sequences of 10 operations, incl. mailbox contents) | gate 6 of `composition_v1` |
+| `run`, `is_settled`, `len`, `get`, and any code that builds a `System` literal violating the invariant | **Outside the refinement claim** | — |
 | Real timers, real I/O, platform behaviour | **External assumption** | — |
 
 The finite-abstraction method (`CrossingV1Properties.lean`): a configuration is
@@ -62,13 +66,14 @@ real one, with a distance certificate.
   (2,159 lines of Lean) and compiles against the pinned Aeneas library, including
   array-backed mailboxes and the unrolled scheduler. The earlier `composite/v0`
   scheduler (`VecDeque`, a `for` loop over a range iterator) was not attempted.
-- **What blocks the refinement proof today.** `Result` in this Aeneas release is an
-  interaction tree, not an inductive type: `step_once s = ok r` does not hold by
-  `rfl` for straight-line code containing binds, and kernel `decide` cannot
-  evaluate `Result.match`. A proof therefore needs Aeneas's `simp`/`progress`
-  style lemma-by-lemma (mailbox `push`/`pop`/`peek`, then each `attempt_*`, then
-  `step_once`) rather than an enumeration. That is the next step; it is not done.
-  Until then the Rust ↔ Lean-model link is bounded conformance testing.
+- **How the refinement is proved.** `Result` in this Aeneas release is an
+  interaction tree, so `rfl`/`decide` on `step_once` do not work, but specs written as
+  `f x ⦃ r => … ⦄` and discharged with `step` do: mailbox push/pop/peek, then each
+  `attempt_*`, then `step_once`, then the sends (`verification/aeneas_v1`). The Lean
+  side bridges the dependent `Network` to concrete data by a kernel `decide` over
+  every well-formed state; that enumeration grows roughly like (2^(c+1)−1)²·24 in
+  the capacity c and is specific to this network, so larger networks need a
+  symbolic `deliver` lemma. The profile's generated shape is not the obstacle.
 - **Verus.** Not added. The Rust-local obligations that remain (array indices in
   range, `len ≤ N`, `next < n`, no overflow) are exactly what an Aeneas
   refinement proof discharges as side conditions of `Result.ok`, so Verus would
@@ -81,7 +86,18 @@ real one, with a distance certificate.
 - Output ports (machines whose outputs leave the composite) are not in v1.
 - One composite per model, as the root, whose children are machines.
 - Failure semantics (loss, reordering, crashes, time) are outside the model.
-- Liveness under fairness is not proved (see above). Weak fairness alone is not
-  enough here: with bounded mailboxes a delivery can be enabled only
-  intermittently, so the example's liveness argument also needs the timer to keep
-  being sent, and relies on mailbox bounds to force deliveries.
+- Liveness is proved only under stated hypotheses (see `CrossingV1Liveness.lean`):
+  weak fairness of deliveries, and timer expiries *accepted* again and again.
+  "Accepted" is not a pure environment property: with bounded mailboxes it depends
+  on the system having room. A timer that fires periodically but is always
+  rejected does **not** satisfy it, and weak fairness does not prevent that run
+  (`starvation_possible`: a flood of presses keeps the latch's mailbox full whenever
+  the signal could acknowledge). Strong fairness of deliveries would exclude it;
+  a round-robin scheduler driven by a caller that interleaves presses does not
+  provide strong fairness. Whether to bound presses, require strong fairness, or
+  change the design is an owner decision; nothing here chooses.
+- The infinite-trace theorem says nothing about finite executions. A request can
+  be outstanding in a quiescent system that only the environment can move
+  (`quiescent_pending`); every reachable configuration has a successor
+  (`no_dead_end`), so no finite prefix is silently excluded for lack of an
+  extension.

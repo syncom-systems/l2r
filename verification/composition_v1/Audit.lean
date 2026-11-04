@@ -1,5 +1,6 @@
 import Lean
 import CrossingV1Properties
+import CrossingV1LivenessWitness
 
 /-!
 # Composition proof audit (`composite/v1`)
@@ -67,7 +68,18 @@ def expectedTheorems : List Name := [
   `CrossingV1Properties.no_stranding,
   `CrossingV1Properties.scheduler_coherent,
   `CrossingV1Properties.scheduler_bounded,
-  `CrossingV1Properties.scheduler_never_blocks
+  `CrossingV1Properties.scheduler_never_blocks,
+  -- liveness under stated assumptions, and the proofs that each is satisfiable and needed
+  `CrossingV1Liveness.live_cond,
+  `CrossingV1Liveness.step_lab,
+  `CrossingV1Liveness.enabled_real,
+  `CrossingV1Liveness.pending_request_acknowledged,
+  `CrossingV1LivenessWitness.ledges_realized,
+  `CrossingV1LivenessWitness.hypotheses_satisfiable,
+  `CrossingV1LivenessWitness.starvation_possible,
+  `CrossingV1LivenessWitness.fairness_needed,
+  `CrossingV1LivenessWitness.quiescent_pending,
+  `CrossingV1LivenessWitness.no_dead_end
 ]
 
 /-- Definitions and inductive types whose meaning the statements depend on. -/
@@ -111,7 +123,39 @@ def pinned : List Name := [
   `CrossingV1Properties.Live,
   `CrossingV1Properties.layers,
   `CrossingV1Properties.dist,
-  `CrossingV1Properties.Coherent
+  `CrossingV1Properties.Coherent,
+  `L2R.Async1.Trace,
+  `CrossingV1Liveness.ALab,
+  `CrossingV1Liveness.cpress,
+  `CrossingV1Liveness.ctick,
+  `CrossingV1Liveness.ledges,
+  `CrossingV1Liveness.isReq,
+  `CrossingV1Liveness.isAck,
+  `CrossingV1Liveness.held,
+  `CrossingV1Liveness.need,
+  `CrossingV1Liveness.pend,
+  `CrossingV1Liveness.mu,
+  `CrossingV1Liveness.hlp,
+  `CrossingV1Liveness.enabledA,
+  `CrossingV1Liveness.labOf,
+  `CrossingV1Liveness.kids,
+  `CrossingV1Liveness.LiveCond,
+  `CrossingV1Liveness.alab,
+  `CrossingV1Liveness.IsTimerSend,
+  `CrossingV1Liveness.helper,
+  `CrossingV1Liveness.rank,
+  `CrossingV1Liveness.Pend,
+  `CrossingV1LivenessWitness.ofView,
+  `CrossingV1LivenessWitness.cycle,
+  `CrossingV1LivenessWitness.cycleLabels,
+  `CrossingV1LivenessWitness.stuckA,
+  `CrossingV1LivenessWitness.stuckB,
+  `CrossingV1LivenessWitness.starveA,
+  `CrossingV1LivenessWitness.starveL,
+  `CrossingV1LivenessWitness.waitA,
+  `CrossingV1LivenessWitness.waitB,
+  `CrossingV1LivenessWitness.waitCfg,
+  `CrossingV1LivenessWitness.waitL
 ]
 
 def pp (e : Expr) : CommandElabM String :=
