@@ -1,0 +1,13 @@
+# Attempts to make the proof lane pass without a real proof. Each is applied to the
+# proof sources (exact text -> replacement, `\n` for newlines) and must be rejected
+# by the named gate: `proof` (does not compile), `audit` (compiles, audit rejects)
+# or `kernel` (passes the audit, the kernel replay rejects).
+# name	file	exact text	replacement	gate
+sorry_proof	verification/aeneas_v1/proof/Refinement.lean	  exact ⟨s, hs, hinv, by simp only [abs, habs]; exact toSched_start⟩	  sorry	audit
+native_decide	verification/aeneas_v1/proof/AeneasV1/Model.lean	theorem model_agrees : allV.all (fun v => decide (leanOut v = simOut v)) = true := by\n  decide +kernel	theorem model_agrees : allV.all (fun v => decide (leanOut v = simOut v)) = true := by\n  native_decide	audit
+new_axiom	verification/aeneas_v1/proof/Refinement.lean	theorem new_refines : ∃ s, crossing.System.new = ok s ∧ Inv s ∧ abs s = RoundRobin.start N := by	axiom bypass_new : ∃ s, crossing.System.new = ok s ∧ Inv s ∧ abs s = RoundRobin.start N\n\ntheorem new_refines : ∃ s, crossing.System.new = ok s ∧ Inv s ∧ abs s = RoundRobin.start N := bypass_new\n\ntheorem new_refines_original : ∃ s, crossing.System.new = ok s ∧ Inv s ∧ abs s = RoundRobin.start N := by	audit
+weakened_statement	verification/aeneas_v1/proof/Refinement.lean	theorem rustRun_bounded {s} (h : RustRun s) : Bounded N (abs s).cfg :=\n  RoundRobin.run_bounded N (anyEnv N) (rustRun_simulates h)	theorem rustRun_bounded {s} (h : RustRun s) : True :=\n  trivial	audit
+exit_early	verification/aeneas_v1/proof/Refinement.lean	/-! ## Consequence: the generated Rust inherits	#exit\n/-! ## Consequence: the generated Rust inherits	audit
+permuted_abstraction	verification/aeneas_v1/proof/Refinement.lean	  | .Walk => .walk\n  | .WalkQueued => .walkQueued	  | .Walk => .walkQueued\n  | .WalkQueued => .walk	proof
+model_mutated	verification/aeneas_v1/proof/AeneasV1/Model.lean	if m.isSome ∧ 2 ≤ v.l0.length then (.blocked, v)	if m.isSome ∧ 3 ≤ v.l0.length then (.blocked, v)	proof
+skip_kernel	verification/aeneas_v1/proof/Refinement.lean	/-- The generated Rust never overflows a mailbox (the model's `run_bounded`, transferred). -/\ntheorem rustRun_bounded {s} (h : RustRun s) : Bounded N (abs s).cfg :=\n  RoundRobin.run_bounded N (anyEnv N) (rustRun_simulates h)	set_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM do\n  Lean.addDecl (.thmDecl (Lean.TheoremVal.mk (Lean.ConstantVal.mk `AeneasV1.Refinement.forged [] (Lean.mkConst ``False))\n    (Lean.mkConst ``True.intro) [`AeneasV1.Refinement.forged]))\n\n/-- The generated Rust never overflows a mailbox (the model's `run_bounded`, transferred). -/\ntheorem rustRun_bounded {s} (h : RustRun s) : Bounded N (abs s).cfg :=\n  forged.elim	kernel

@@ -1,0 +1,13 @@
+# Seeded defects in the generated Rust. Each must make exactly the named theorem of
+# proof/Refinement.lean fail (errors only inside it).
+# name	rust file	exact text	replacement	theorem
+signal_is_full_off_by_one	examples/crossing_v1/scaffold/src/crossing/mod.rs	pub fn is_full(&self) -> bool {\n        self.len >= SIGNAL_CAPACITY	pub fn is_full(&self) -> bool {\n        self.len > SIGNAL_CAPACITY	signalbox_is_full_spec
+signal_push_overflows	examples/crossing_v1/scaffold/src/crossing/mod.rs	fn push(&mut self, input: signal::Input) -> bool {\n        if self.len >= SIGNAL_CAPACITY {	fn push(&mut self, input: signal::Input) -> bool {\n        if self.len > SIGNAL_CAPACITY {	signalbox_push_spec
+latch_pop_keeps_slot	examples/crossing_v1/scaffold/src/crossing/mod.rs	        self.slots[1] = None;\n        self.len -= 1;\n        first\n    }\n}\n\n/// The bounded FIFO mailbox of `signal`	        self.len -= 1;\n        first\n    }\n}\n\n/// The bounded FIFO mailbox of `signal`	latchbox_pop_spec
+signal_peek_wrong_slot	examples/crossing_v1/scaffold/src/crossing/mod.rs	fn peek(&self) -> Option<signal::Input> {\n        self.slots[0]	fn peek(&self) -> Option<signal::Input> {\n        self.slots[1]	signalbox_peek_spec
+step_once_cursor_not_advanced	examples/crossing_v1/scaffold/src/crossing/mod.rs	self.next = (child + 1) % Self::CHILDREN;\n                return Progress::Delivered;	self.next = child % Self::CHILDREN;\n                return Progress::Delivered;	step_once_spec
+step_once_retries_same_child	examples/crossing_v1/scaffold/src/crossing/mod.rs	let child = (self.next + 1) % Self::CHILDREN;	let child = self.next % Self::CHILDREN;	step_once_spec
+latch_checks_wrong_mailbox	examples/crossing_v1/scaffold/src/crossing/mod.rs	if to_latch_to_signal.is_some() && self.signal_inbox.is_full() {	if to_latch_to_signal.is_some() && self.request_latch_inbox.is_full() {	attempt_request_latch_spec
+signal_attempt_ignores_full	examples/crossing_v1/scaffold/src/crossing/mod.rs	if to_signal_to_latch.is_some() && self.request_latch_inbox.is_full() {	if to_signal_to_latch.is_some() && false {	attempt_signal_spec
+send_timer_inverted	examples/crossing_v1/scaffold/src/crossing/mod.rs	if self.signal_inbox.push(input) {\n            Ok(())\n        } else {\n            Err(Rejected)\n        }	if self.signal_inbox.push(input) {\n            Err(Rejected)\n        } else {\n            Ok(())\n        }	send_timer_spec
+route_sends_timer	examples/crossing_v1/scaffold/src/crossing/routes.rs	request_latch::Output::Requested => Some(signal::Input::CrossingRequested)	request_latch::Output::Requested => Some(signal::Input::TimerExpired)	latch_to_signal_spec
