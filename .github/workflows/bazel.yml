@@ -81,5 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: verification-evidence
-          path: bazel-testlogs/verification/aeneas/refinement_test/
+          path: |
+            bazel-testlogs/verification/aeneas/refinement_test/
+            bazel-testlogs/verification/aeneas_v1/refinement_test/
           if-no-files-found: ignore

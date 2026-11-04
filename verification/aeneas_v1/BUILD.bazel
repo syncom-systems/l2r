@@ -1,0 +1,44 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+LANE_INPUTS = [
+    "bypasses.tsv",
+    "crossing_v1_core.rs",
+    "expected-statements.txt",
+    "lane.sh",
+    "mutants.tsv",
+    "proof/AeneasV1/Model.lean",
+    "proof/Audit.lean",
+    "proof/Extracted/CrossingV1Core.lean",
+    "proof/Refinement.lean",
+    "//examples/crossing_v1:composition_derived",
+    "//examples/crossing_v1:spec_sources",
+    "//examples/crossing_v1/scaffold:l2r_files",
+    "//lean:sources",
+    "//verification/aeneas:toolchain.sh",
+    "//verification/aeneas:toolchain_manifest",
+]
+
+# Source-to-proof verification of the GENERATED composite/v1 Rust scheduler against the Lean
+# scheduler model (see refinement_test.sh). Tagged `verification`: excluded from plain
+# `bazel test //...`, selected by `bazel test --config=verify //...`.
+sh_test(
+    name = "refinement_test",
+    size = "large",
+    timeout = "eternal",  # 362 s unloaded; the 900 s default is too tight on a loaded machine
+    srcs = ["refinement_test.sh"],
+    args = ["$(rootpath //verification/aeneas:toolchain_manifest)"],
+    data = LANE_INPUTS,
+    tags = [
+        "no-remote",
+        "no-sandbox",
+        "verification",
+    ],
+)
+
+sh_binary(
+    name = "update_translation",
+    srcs = ["update_translation.sh"],
+    args = ["$(rootpath //verification/aeneas:toolchain_manifest)"],
+    data = LANE_INPUTS,
+)

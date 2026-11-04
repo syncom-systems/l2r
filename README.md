@@ -144,10 +144,13 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
   left unfixed on purpose: it shows what per-machine proofs cannot find.
   `examples/crossing_v1` repairs it at the specification level and proves safety,
   capacity, deadlock-freedom and *non-stranding* (an acknowledgement stays
-  possible). Liveness under fairness is **not proved**; it is tested by an
-  exhaustive finite-state search. The generated `composite/v1` scheduler is tied
-  to its Lean model by conformance testing; its Aeneas refinement proof is not
-  done (see `docs/composite-v1.md`).
+  possible). Liveness is proved only **under stated hypotheses** (weak fairness of
+  deliveries, and timer expiries *accepted* again and again), for the example at
+  capacities (2, 2); a periodic but always-rejected timer is a proved
+  counterexample under weak fairness alone. The generated `composite/v1` scheduler is tied
+  to its Lean model by conformance testing and, for the example, by an Aeneas refinement proof (done for the
+  example in `verification/aeneas_v1`; the technique does not yet scale to larger
+  networks, see `docs/composite-v1.md`).
 - No graphical editor; views are the CLI preview and the Mermaid rendering.
 
 ## License

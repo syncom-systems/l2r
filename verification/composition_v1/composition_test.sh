@@ -77,7 +77,9 @@ examples/crossing_v1/spec CrossingV1/Ports.lean
 examples/crossing_v1/spec CrossingV1/Routes.lean
 examples/crossing_v1/spec CrossingV1.lean
 examples/crossing_v1/composition L2RDerived/crossing_v1.lean
-examples/crossing_v1/composition CrossingV1Properties.lean"
+examples/crossing_v1/composition CrossingV1Properties.lean
+examples/crossing_v1/composition CrossingV1Liveness.lean
+examples/crossing_v1/composition CrossingV1LivenessWitness.lean"
 
 # build <workspace> <out>: compiles every module; stops at the first failure.
 build() {
@@ -175,9 +177,9 @@ cmp -s "$evidence/statements.txt" "$LANE/expected-statements.txt" || {
 }
 
 step "3. kernel replay (leanchecker --fresh)"
-PATH="$TOOLS/lean/bin:/usr/bin:/bin" LEAN_PATH="$out" "$TOOLS/lean/bin/leanchecker" --fresh CrossingV1Properties > "$evidence/leanchecker.log" 2>&1 \
+PATH="$TOOLS/lean/bin:/usr/bin:/bin" LEAN_PATH="$out" "$TOOLS/lean/bin/leanchecker" --fresh CrossingV1LivenessWitness > "$evidence/leanchecker.log" 2>&1 \
   || { cat "$evidence/leanchecker.log" >&2; fail "leanchecker rejected the environment"; }
-echo "leanchecker --fresh CrossingV1Properties: accepted (all imports replayed, Lean core included)" | tee "$evidence/kernel.txt"
+echo "leanchecker --fresh CrossingV1LivenessWitness: accepted (all imports replayed, Lean core included)" | tee "$evidence/kernel.txt"
 # The gate must be able to fail: a theorem whose proof skipped the kernel
 # compiles and uses only standard axioms, so only the replay can reject it.
 LEAN_PATH="$out" "$LEAN" -R "$ws/$LANE" "$ws/$LANE/KernelForgery.lean" -o "$out/KernelForgery.olean" \
