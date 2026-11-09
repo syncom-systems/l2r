@@ -11,10 +11,27 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+exports_files(["architecture.approval.json"], visibility = ["//visibility:public"])
+
 # The Lean specification sources, for the proof lane.
 filegroup(
     name = "spec_sources",
     srcs = glob(["spec/**/*.lean"]) + ["spec/lean-toolchain"],
+    visibility = ["//visibility:public"],
+)
+
+# The derived Lean composition (`l2r lean-composition`), checked for freshness
+# by //crates/l2r_plan:l2r_plan_lean_composition_test, and the hand-written
+# system proofs about it, for the composition lane.
+filegroup(
+    name = "composition_derived",
+    srcs = glob(["composition/L2RDerived/*.lean"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "composition_sources",
+    srcs = glob(["composition/**/*.lean"]),
     visibility = ["//visibility:public"],
 )
 

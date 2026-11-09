@@ -23,6 +23,7 @@ Usage:
   l2r recover  <model.toml>                         Finish an interrupted generation of the approved plan
   l2r check    <model.toml>                         Check the output for drift, staleness and budgets
   l2r render   <model.toml>                         Print a Mermaid view of the architecture
+  l2r lean-composition <model.toml>                 Print the derived Lean composition (L2R.Async)
   l2r --version
 ";
 
@@ -96,6 +97,7 @@ fn run(args: &[String]) -> Outcome {
         "recover" => only_flags(rest, &[]).map(|_| commands::recover_generation(&model)),
         "check" => only_flags(rest, &[]).map(|_| commands::check_output(&model)),
         "render" => only_flags(rest, &[]).map(|_| commands::render(&model)),
+        "lean-composition" => only_flags(rest, &[]).map(|_| commands::lean_composition(&model)),
         other => Err(usage_error(&format!("unknown command `{other}`"))),
     };
     result.unwrap_or_else(|outcome| outcome)

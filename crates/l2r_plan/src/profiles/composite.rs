@@ -48,7 +48,7 @@ pub fn artifacts(
 }
 
 /// Edges between children of `component`, in canonical order.
-fn edges_within<'a>(model: &'a Model, component: &Component) -> Vec<&'a MessageEdge> {
+pub(crate) fn edges_within<'a>(model: &'a Model, component: &Component) -> Vec<&'a MessageEdge> {
     let parent_of = |id: &str| model.component(id).and_then(|c| c.parent.clone());
     model
         .messages
@@ -57,7 +57,7 @@ fn edges_within<'a>(model: &'a Model, component: &Component) -> Vec<&'a MessageE
         .collect()
 }
 
-fn is_machine(c: &Component) -> bool {
+pub(crate) fn is_machine(c: &Component) -> bool {
     c.profile == profiles::TRANSITION_CORE_V0
 }
 

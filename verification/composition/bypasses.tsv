@@ -1,0 +1,10 @@
+# Attempts to make the lane pass without a real proof. Each must be rejected by the
+# named gate: `proof` (does not compile) or `audit` (compiles, audit rejects).
+# name	file	exact text	replacement	gate
+sorry_proof	examples/crossing/composition/CrossingProperties.lean	theorem initial_coherent : Coherent (initial N) := by\n  unfold Coherent inflight; decide	theorem initial_coherent : Coherent (initial N) := by\n  sorry	audit
+native_decide	examples/crossing/composition/CrossingProperties.lean	theorem initial_coherent : Coherent (initial N) := by\n  unfold Coherent inflight; decide	theorem initial_coherent : Coherent (initial N) := by\n  unfold Coherent inflight; native_decide	audit
+new_axiom	examples/crossing/composition/CrossingProperties.lean	theorem initial_coherent : Coherent (initial N) := by\n  unfold Coherent inflight; decide	axiom bypass : Coherent (initial N)\n\ntheorem initial_coherent : Coherent (initial N) := bypass	audit
+weakened_statement	examples/crossing/composition/CrossingProperties.lean	    (signalIn k).count .crossingRequested ≤ 1 := by	    (signalIn k).count .crossingRequested ≤ 2 := by	audit
+silent_environment	lean/L2R/Async.lean	  | send (k : Config N) (c : Fin N.size) (i : N.Input c) : E c i → Step E k (post N k ⟨c, i⟩)	  | send (k : Config N) (c : Fin N.size) (i : N.Input c) : E c i → Step E k k	proof
+weakened_definition	lean/L2R/Async.lean	def anyInput : Env N := fun _ _ => True	def anyInput : Env N := fun _ _ => False	audit
+exit_early	examples/crossing/composition/CrossingProperties.lean	/-! ## Liveness fails	#exit\n/-! ## Liveness fails	audit

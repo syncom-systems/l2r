@@ -1,0 +1,7 @@
+# L2R's own Lean library: the generic semantics of asynchronous composition
+# (`l2r.async/v0`), shared by every derived composition.
+filegroup(
+    name = "sources",
+    srcs = glob(["L2R/**/*.lean"]),
+    visibility = ["//visibility:public"],
+)
