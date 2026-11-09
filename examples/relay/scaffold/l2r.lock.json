@@ -1,6 +1,6 @@
 {
   "format": "l2r.lock/v0",
-  "plan_digest": "sha256:22439a0c8da134a4306e1670a2866cbbb3617776dcc03aee08e4236fc55edf15",
+  "plan_digest": "sha256:d25610221877d1062ddaad83634b9b5480970f3bce9c540e56bd86bae9ee06b0",
   "generator": "l2r 0.1.0",
   "files": [
     {
@@ -19,7 +19,7 @@
       "path": "src/plant/mod.rs",
       "ownership": "generated",
       "component": "plant",
-      "digest": "sha256:7c111642f8c9503a521082f02107a4845f6f815ddd1c07e21a9025bd16125060"
+      "digest": "sha256:1e41a9a06e8a642dfc95643a0cd154658bc5edd3697d37ced811705a9b7c5fbf"
     },
     {
       "path": "src/plant/routes.rs",
@@ -41,7 +41,7 @@
       "path": "src/plant/zone_a/cell/source/contract_tests.rs",
       "ownership": "generated",
       "component": "source",
-      "digest": "sha256:8997eb26224e00410be5e1614f3147cc44f63897ebcf1c08b4351d2eede3ea2d"
+      "digest": "sha256:3be5382bd3b6146a8cd91df29b3de58127a1d404466e4b9d45fe3b965634c48b"
     },
     {
       "path": "src/plant/zone_a/cell/source/imp.rs",
@@ -80,7 +80,7 @@
       "path": "src/plant/zone_b/sink/contract_tests.rs",
       "ownership": "generated",
       "component": "sink",
-      "digest": "sha256:9c3c4247d49088e8c1c78e540e8e15b71c1c586258c4cc1d70e725293843c16a"
+      "digest": "sha256:9c26f4911cf5238e6e607ced60e4b0f42e7b9c401d0bf1710c903a9ff9d4b593"
     },
     {
       "path": "src/plant/zone_b/sink/imp.rs",
@@ -97,7 +97,7 @@
       "path": "src/types.rs",
       "ownership": "generated",
       "component": "plant",
-      "digest": "sha256:d53d9b297de01ce19cdeddca925e9ff073ebd1f263707a7bf1c5896359a66c7f"
+      "digest": "sha256:e7543e7c8ab404c0d5b7c1e262628ee8be454b82b8768dadd370730e17fbade9"
     }
   ]
 }

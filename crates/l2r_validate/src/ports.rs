@@ -31,6 +31,14 @@ pub fn check(model: &Model, findings: &mut Findings) {
         if !ids.insert(port.id.as_str()) {
             findings.error("L2R-P001", &subject, "duplicate port id");
         }
+        // A `v1` document means what it always meant.
+        if port.direction.is_some() || port.capacity.is_some() {
+            findings.error(
+                "L2R-S015",
+                &subject,
+                "`direction` and `capacity` need `schema = \"l2r.architecture/v2\"`",
+            );
+        }
         match model.component(&port.composite) {
             Some(c) if c.profile == profiles::COMPOSITE_V1 => {}
             Some(_) => findings.error(

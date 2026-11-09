@@ -41,14 +41,23 @@ fn by_index(header: &str, arms: &[String]) -> String {
     text
 }
 
+/// A declaration of the specification, named from the root namespace: the
+/// derived file defines `State`, `Input`, `Msg`, `route`, ... in its own
+/// namespace, and a specification declaration of the same name must not be
+/// captured by them.
+fn spec(name: &str) -> String {
+    format!("_root_.{name}")
+}
+
 /// The Lean expression carrying `value` through the hops of a route.
 fn route_expr(hops: &[Hop], value: &str) -> String {
     let mut expr = String::new();
     for (i, hop) in hops.iter().enumerate() {
+        let translation = spec(&hop.translation);
         expr = match (i, hop.kind) {
-            (0, _) => format!("({} {value})", hop.translation),
-            (_, HopKind::Edge) => format!("({expr}.bind {})", hop.translation),
-            (_, HopKind::Port) => format!("({expr}.map {})", hop.translation),
+            (0, _) => format!("({translation} {value})"),
+            (_, HopKind::Edge) => format!("({expr}.bind {translation})"),
+            (_, HopKind::Port) => format!("({expr}.map {translation})"),
         };
     }
     expr
@@ -144,26 +153,26 @@ pub fn lean_composition_v2(validated: &Validated, flat: &Flat) -> Result<String,
     };
     out.push_str(&by_index(
         &format!("def State : Fin {n} → Type"),
-        &per_child(&|i| behaviors[i].owned_state.clone(), &|_| "Unit".into()),
+        &per_child(&|i| spec(&behaviors[i].owned_state), &|_| "Unit".into()),
     ));
     out.push_str(&by_index(
         &format!("def Input : Fin {n} → Type"),
-        &per_child(&|i| behaviors[i].input.clone(), &|i| {
-            flat.sinks[i].message.clone()
+        &per_child(&|i| spec(&behaviors[i].input), &|i| {
+            spec(&flat.sinks[i].message)
         }),
     ));
     out.push_str(&by_index(
         &format!("def Output : Fin {n} → Type"),
-        &per_child(&|i| behaviors[i].output.clone(), &|_| "Empty".into()),
+        &per_child(&|i| spec(&behaviors[i].output), &|_| "Empty".into()),
     ));
     out.push_str(&by_index(
         &format!("def init : (c : Fin {n}) → State c"),
-        &per_child(&|i| behaviors[i].init.clone(), &|_| "()".into()),
+        &per_child(&|i| spec(&behaviors[i].init), &|_| "()".into()),
     ));
     out.push_str(&by_index(
         &format!("def step : (c : Fin {n}) → State c → Input c → State c × Option (Output c)"),
-        &per_child(&|i| behaviors[i].step.clone(), &|i| {
-            format!("L2R.Async1.outboxStep {}", flat.sinks[i].message)
+        &per_child(&|i| spec(&behaviors[i].step), &|i| {
+            format!("L2R.Async1.outboxStep {}", spec(&flat.sinks[i].message))
         }),
     ));
 
@@ -216,7 +225,7 @@ pub fn lean_composition_v2(validated: &Validated, flat: &Flat) -> Result<String,
         Ok::<String, PlanError>(by_index(header, &arms))
     };
     out.push_str(&by_port(&format!("def Msg : Fin {p} → Type"), &|i| {
-        Ok(flat.inputs[i].message.clone())
+        Ok(spec(&flat.inputs[i].message))
     })?);
     out.push_str(&by_port(
         &format!("def target : Fin {p} → Fin {n}"),
@@ -232,7 +241,7 @@ pub fn lean_composition_v2(validated: &Validated, flat: &Flat) -> Result<String,
         &|i| {
             let mut expr = String::from("m");
             for hop in &flat.inputs[i].hops {
-                expr = format!("{} {}", hop.translation, parenthesized(&expr));
+                expr = format!("{} {}", spec(&hop.translation), parenthesized(&expr));
             }
             Ok(format!("fun m => {expr}"))
         },

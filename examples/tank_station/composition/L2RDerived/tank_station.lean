@@ -37,53 +37,53 @@ Routes, in routing order (the edges and ports each passes):
 namespace L2RDerived.«tank_station».«station»
 
 def State : Fin 5 → Type
-  | ⟨0, _⟩ => Tank.Alarm.State
-  | ⟨1, _⟩ => Tank.Controller.State
-  | ⟨2, _⟩ => Tank.Filter.State
+  | ⟨0, _⟩ => _root_.Tank.Alarm.State
+  | ⟨1, _⟩ => _root_.Tank.Controller.State
+  | ⟨2, _⟩ => _root_.Tank.Filter.State
   | ⟨3, _⟩ => Unit
   | ⟨4, _⟩ => Unit
   | ⟨_ + 5, h⟩ => absurd h (by omega)
 
 def Input : Fin 5 → Type
-  | ⟨0, _⟩ => Tank.Alarm.Input
-  | ⟨1, _⟩ => Tank.Controller.Input
-  | ⟨2, _⟩ => Tank.Filter.Input
-  | ⟨3, _⟩ => Tank.Ports.AlarmNotice
-  | ⟨4, _⟩ => Tank.Ports.ValveCommand
+  | ⟨0, _⟩ => _root_.Tank.Alarm.Input
+  | ⟨1, _⟩ => _root_.Tank.Controller.Input
+  | ⟨2, _⟩ => _root_.Tank.Filter.Input
+  | ⟨3, _⟩ => _root_.Tank.Ports.AlarmNotice
+  | ⟨4, _⟩ => _root_.Tank.Ports.ValveCommand
   | ⟨_ + 5, h⟩ => absurd h (by omega)
 
 def Output : Fin 5 → Type
-  | ⟨0, _⟩ => Tank.Alarm.Output
-  | ⟨1, _⟩ => Tank.Controller.Output
-  | ⟨2, _⟩ => Tank.Filter.Output
+  | ⟨0, _⟩ => _root_.Tank.Alarm.Output
+  | ⟨1, _⟩ => _root_.Tank.Controller.Output
+  | ⟨2, _⟩ => _root_.Tank.Filter.Output
   | ⟨3, _⟩ => Empty
   | ⟨4, _⟩ => Empty
   | ⟨_ + 5, h⟩ => absurd h (by omega)
 
 def init : (c : Fin 5) → State c
-  | ⟨0, _⟩ => Tank.Alarm.init
-  | ⟨1, _⟩ => Tank.Controller.init
-  | ⟨2, _⟩ => Tank.Filter.init
+  | ⟨0, _⟩ => _root_.Tank.Alarm.init
+  | ⟨1, _⟩ => _root_.Tank.Controller.init
+  | ⟨2, _⟩ => _root_.Tank.Filter.init
   | ⟨3, _⟩ => ()
   | ⟨4, _⟩ => ()
   | ⟨_ + 5, h⟩ => absurd h (by omega)
 
 def step : (c : Fin 5) → State c → Input c → State c × Option (Output c)
-  | ⟨0, _⟩ => Tank.Alarm.step
-  | ⟨1, _⟩ => Tank.Controller.step
-  | ⟨2, _⟩ => Tank.Filter.step
-  | ⟨3, _⟩ => L2R.Async1.outboxStep Tank.Ports.AlarmNotice
-  | ⟨4, _⟩ => L2R.Async1.outboxStep Tank.Ports.ValveCommand
+  | ⟨0, _⟩ => _root_.Tank.Alarm.step
+  | ⟨1, _⟩ => _root_.Tank.Controller.step
+  | ⟨2, _⟩ => _root_.Tank.Filter.step
+  | ⟨3, _⟩ => L2R.Async1.outboxStep _root_.Tank.Ports.AlarmNotice
+  | ⟨4, _⟩ => L2R.Async1.outboxStep _root_.Tank.Ports.ValveCommand
   | ⟨_ + 5, h⟩ => absurd h (by omega)
 
 def route : (c : Fin 5) → Output c → List ((d : Fin 5) × Input d)
   | ⟨0, _⟩ => fun o =>
-    (Tank.Routes.alarmToNotice o).toList.map (fun i => ⟨⟨3, by decide⟩, i⟩)
+    (_root_.Tank.Routes.alarmToNotice o).toList.map (fun i => ⟨⟨3, by decide⟩, i⟩)
   | ⟨1, _⟩ => fun o =>
-    (Tank.Routes.controllerToAlarm o).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩) ++
-    (Tank.Routes.controllerToValve o).toList.map (fun i => ⟨⟨4, by decide⟩, i⟩)
+    (_root_.Tank.Routes.controllerToAlarm o).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩) ++
+    (_root_.Tank.Routes.controllerToValve o).toList.map (fun i => ⟨⟨4, by decide⟩, i⟩)
   | ⟨2, _⟩ => fun o =>
-    ((Tank.Routes.filterToLevel o).bind Tank.Routes.levelToController).toList.map (fun i => ⟨⟨1, by decide⟩, i⟩)
+    ((_root_.Tank.Routes.filterToLevel o).bind _root_.Tank.Routes.levelToController).toList.map (fun i => ⟨⟨1, by decide⟩, i⟩)
   | ⟨3, _⟩ => fun _ => []
   | ⟨4, _⟩ => fun _ => []
   | ⟨_ + 5, h⟩ => absurd h (by omega)
@@ -99,9 +99,9 @@ def cap : Fin 5 → Nat
 
 /-- The input ports of the root, in identifier order: 0 = `acknowledge`, 1 = `operator`, 2 = `sample`. -/
 def Msg : Fin 3 → Type
-  | ⟨0, _⟩ => Tank.Ports.Acknowledge
-  | ⟨1, _⟩ => Tank.Ports.Operator
-  | ⟨2, _⟩ => Tank.Ports.Sample
+  | ⟨0, _⟩ => _root_.Tank.Ports.Acknowledge
+  | ⟨1, _⟩ => _root_.Tank.Ports.Operator
+  | ⟨2, _⟩ => _root_.Tank.Ports.Sample
   | ⟨_ + 3, h⟩ => absurd h (by omega)
 
 def target : Fin 3 → Fin 5
@@ -111,9 +111,9 @@ def target : Fin 3 → Fin 5
   | ⟨_ + 3, h⟩ => absurd h (by omega)
 
 def inject : (p : Fin 3) → Msg p → Input (target p)
-  | ⟨0, _⟩ => fun m => Tank.Ports.acknowledgeToAlarm m
-  | ⟨1, _⟩ => fun m => Tank.Ports.operatorToController m
-  | ⟨2, _⟩ => fun m => Tank.Ports.readingToFilter (Tank.Ports.sampleToSensing m)
+  | ⟨0, _⟩ => fun m => _root_.Tank.Ports.acknowledgeToAlarm m
+  | ⟨1, _⟩ => fun m => _root_.Tank.Ports.operatorToController m
+  | ⟨2, _⟩ => fun m => _root_.Tank.Ports.readingToFilter (_root_.Tank.Ports.sampleToSensing m)
   | ⟨_ + 3, h⟩ => absurd h (by omega)
 
 /-- The machines are the children `0 … machines-1`; the outboxes follow. -/

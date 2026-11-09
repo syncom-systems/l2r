@@ -117,6 +117,36 @@ fn each_lean_type_has_exactly_one_rust_type() {
 }
 
 #[test]
+fn sample_values_grow_with_the_sum_of_the_fields_not_their_product() {
+    // Twenty integer fields: one-at-a-time sampling needs 20 * 3 + 1 values,
+    // where a product would need 3^20.
+    let mut inventory = tank_inventory();
+    let sample = inventory
+        .declarations
+        .iter_mut()
+        .find(|d| d.name == "Tank.Ports.Sample")
+        .unwrap();
+    let field = sample.constructors[0].fields[0].clone();
+    for i in 1..20 {
+        let mut extra = field.clone();
+        extra.name = format!("f{i}");
+        sample.constructors[0].fields.push(extra);
+    }
+    sample.constructors[0].arity = 20;
+    let plan = plan_of(&tank_model(), &inventory);
+    let types = &plan.artifact("src/types.rs").unwrap().content;
+    let block = types
+        .split("impl Sample {")
+        .nth(1)
+        .and_then(|rest| rest.split("\n        }\n").next())
+        .unwrap();
+    assert_eq!(block.matches("for &v in &s").count(), 20, "{block}");
+    assert!(!block.contains("for f0 in"), "{block}");
+    // Every field reaches its largest value, whatever the others hold.
+    assert!(block.contains("f19: crate::types::samples_::last(&s19)"));
+}
+
+#[test]
 fn only_the_root_composite_schedules() {
     let plan = tank_plan();
     let root = &plan.artifact("src/station/mod.rs").unwrap().content;
@@ -235,12 +265,14 @@ fn the_derived_network_names_exactly_what_it_was_derived_from() {
 fn the_derived_network_restates_no_behaviour() {
     // Outboxes are children of the network; routes compose the Lean
     // translations in the order the generated scheduler applies them.
-    assert!(TANK_DERIVED.contains("  | ⟨3, _⟩ => L2R.Async1.outboxStep Tank.Ports.AlarmNotice"));
+    assert!(
+        TANK_DERIVED.contains("  | ⟨3, _⟩ => L2R.Async1.outboxStep _root_.Tank.Ports.AlarmNotice")
+    );
     assert!(TANK_DERIVED.contains(
-        "((Tank.Routes.filterToLevel o).bind Tank.Routes.levelToController).toList.map (fun i => ⟨⟨1, by decide⟩, i⟩)"
+        "((_root_.Tank.Routes.filterToLevel o).bind _root_.Tank.Routes.levelToController).toList.map (fun i => ⟨⟨1, by decide⟩, i⟩)"
     ));
     assert!(TANK_DERIVED.contains("def machines : Nat := 3"));
     assert!(RELAY_DERIVED.contains(
-        "fun m => Relay.Ports.cellToSource (Relay.Ports.zoneToCell (Relay.Ports.plantToZone m))"
+        "fun m => _root_.Relay.Ports.cellToSource (_root_.Relay.Ports.zoneToCell (_root_.Relay.Ports.plantToZone m))"
     ));
 }

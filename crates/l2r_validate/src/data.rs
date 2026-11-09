@@ -118,6 +118,10 @@ impl FieldType {
     }
 }
 
+/// Rust prelude types: a mirror of that name would capture the generated
+/// code's own `Option<..>` and `Vec<..>`, and confuse every implementer.
+const PRELUDE_TYPES: &[&str] = &["Box", "Option", "Result", "String", "Vec"];
+
 /// `fillLevel` → `fill_level`, `CrossingV1` → `crossing_v1`.
 pub fn snake_case(segment: &str) -> String {
     let mut out = String::new();
@@ -262,7 +266,8 @@ fn resolve_one(
         None => (Vec::new(), name),
     };
     let modules: Option<Vec<String>> = path.into_iter().map(rust_identifier).collect();
-    let rust_name = names::upper_camel(last);
+    // Names the generated code and every implementation file use unqualified.
+    let rust_name = names::upper_camel(last).filter(|n| !PRELUDE_TYPES.contains(&n.as_str()));
     let shape = if decl.structure && decl.constructors.len() == 1 {
         let ctor = &decl.constructors[0];
         let mut fields = Vec::new();
@@ -326,7 +331,10 @@ fn resolve_one(
         findings.error(
             "L2R-L007",
             subject,
-            format!("{role} `{name}` cannot be given a Rust module path and type name"),
+            format!(
+                "{role} `{name}` cannot be given a Rust module path and type name (a segment is a Rust keyword, or the type would be called {})",
+                PRELUDE_TYPES.join(", ")
+            ),
         );
         return None;
     };

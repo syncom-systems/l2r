@@ -163,7 +163,7 @@ fn mermaid_v2(model: &Model) -> String {
     }
     let node = |id: &str| {
         if model.ports.iter().any(|p| p.id == id) {
-            format!("port_{id}")
+            format!("port__{id}")
         } else {
             id.to_string()
         }
@@ -171,7 +171,7 @@ fn mermaid_v2(model: &Model) -> String {
     for port in model.ports.iter().filter(|p| !p.is_out()) {
         let _ = writeln!(
             out,
-            "  port_{} -- \"{}\" --> {}",
+            "  port__{} -- \"{}\" --> {}",
             port.id,
             quoted(port.translation_name()),
             node(port.target())
@@ -221,7 +221,7 @@ fn render_node(model: &Model, id: &str, depth: usize, out: &mut String) {
                     .unwrap_or_default();
                 let _ = writeln!(
                     out,
-                    "{indent}  port_{id}{shape_open}{direction} {id}<br/>{msg}{capacity}{shape_close}",
+                    "{indent}  port__{id}{shape_open}{direction} {id}<br/>{msg}{capacity}{shape_close}",
                     id = port.id,
                     msg = quoted(&port.message),
                 );

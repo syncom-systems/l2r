@@ -51,7 +51,10 @@ pub fn validate(model: Model, inventory: Inventory) -> Result<Validated, Vec<Dia
     // The flat network is defined only for a structurally valid model.
     let flat = if findings.is_empty() {
         match flat::flatten(&model) {
-            Ok(flat) => Some(flat),
+            Ok(flat) => {
+                check_reachable(&model, &flat, &mut findings);
+                Some(flat)
+            }
             Err(errors) => {
                 for error in errors {
                     match error {
@@ -496,23 +499,33 @@ fn check_edge_endpoints(model: &Model, edge: &MessageEdge, subject: &str, findin
     }
 }
 
-/// Names the root's generated code derives from identifiers must be distinct.
+/// Names the root's generated code derives from identifiers must be distinct:
+/// the type prefixes (`a_1` and `a1` both give `A1`), the methods and fields of
+/// `System` (`send_q` of port `q` against `<m>_state` of a machine `send_q`…),
+/// and the functions of each `routes.rs`.
 fn check_generated_names(model: &Model, findings: &mut Findings) {
     let root = root_id(model);
-    let mut seen: BTreeMap<String, String> = BTreeMap::new();
-    let machines = model
+    let machines: Vec<(String, &str)> = model
         .components
         .iter()
         .filter(|c| is_machine(c))
-        .map(|c| (subject(c), c.id.as_str()));
-    let ports = model
+        .map(|c| (subject(c), c.id.as_str()))
+        .collect();
+    let root_ports: Vec<(String, &str, bool)> = model
         .ports
         .iter()
         .filter(|p| root == Some(p.composite.as_str()))
-        .map(|p| (port_subject(p), p.id.as_str()));
-    for (subject, id) in machines.chain(ports) {
+        .map(|p| (port_subject(p), p.id.as_str(), p.is_out()))
+        .collect();
+
+    let mut types: BTreeMap<String, String> = BTreeMap::new();
+    let ids = machines
+        .iter()
+        .map(|(s, id)| (s, *id))
+        .chain(root_ports.iter().map(|(s, id, _)| (s, *id)));
+    for (subject, id) in ids {
         let type_name = names::upper_camel(id).unwrap_or_default();
-        if let Some(other) = seen.insert(type_name.clone(), subject.clone()) {
+        if let Some(other) = types.insert(type_name.clone(), subject.clone()) {
             findings.error(
                 "L2R-S020",
                 subject,
@@ -520,6 +533,43 @@ fn check_generated_names(model: &Model, findings: &mut Findings) {
             );
         }
     }
+
+    // Every method and field name of the generated `System`.
+    let mut members: Vec<(String, &String)> = Vec::new();
+    for (subject, id) in &machines {
+        for name in [
+            format!("{id}_state"),
+            format!("{id}_inbox"),
+            format!("attempt_{id}"),
+        ] {
+            members.push((name, subject));
+        }
+    }
+    for (subject, id, is_out) in &root_ports {
+        if *is_out {
+            members.push((format!("{id}_outbox"), subject));
+            members.push((format!("take_{id}"), subject));
+        } else {
+            members.push((format!("send_{id}"), subject));
+        }
+    }
+    let fixed = String::from("the generated `System` itself");
+    for name in ["attempt", "is_settled", "new", "next", "run", "step_once"] {
+        members.push((name.to_string(), &fixed));
+    }
+    let mut seen: BTreeMap<&str, &String> = BTreeMap::new();
+    for (name, subject) in &members {
+        if let Some(other) = seen.insert(name.as_str(), subject)
+            && other != *subject
+        {
+            findings.error(
+                "L2R-S020",
+                subject.as_str(),
+                format!("generates the same `System` member `{name}` as {other}"),
+            );
+        }
+    }
+
     // In `routes.rs` an edge is the function `<id>` and an input port `port_<id>`.
     for edge in &model.messages {
         if let Some(port) = edge.id.strip_prefix("port_")
@@ -529,6 +579,40 @@ fn check_generated_names(model: &Model, findings: &mut Findings) {
                 "L2R-S020",
                 format!("message `{}`", edge.id),
                 format!("generates the same function name as port `{port}`"),
+            );
+        }
+    }
+}
+
+/// Nothing approved may be dead: an edge or a nested input port that no
+/// message can ever pass would be type-checked and documented, but generate
+/// nothing, and so mislead a reader of the model.
+fn check_reachable(model: &Model, flat: &flat::Flat, findings: &mut Findings) {
+    let used: BTreeSet<&str> = flat
+        .leaves
+        .iter()
+        .flat_map(|l| l.routes.iter().flat_map(|r| r.hops.iter()))
+        .chain(flat.inputs.iter().flat_map(|i| i.hops.iter()))
+        .map(|h| h.id.as_str())
+        .collect();
+    for edge in &model.messages {
+        if !used.contains(edge.id.as_str()) {
+            findings.error(
+                "L2R-M010",
+                format!("message `{}`", edge.id),
+                format!(
+                    "can never carry a message: nothing feeds `{}`; remove the edge or connect its source",
+                    edge.from
+                ),
+            );
+        }
+    }
+    for port in model.ports.iter().filter(|p| !p.is_out()) {
+        if !used.contains(port.id.as_str()) {
+            findings.error(
+                "L2R-P010",
+                port_subject(port),
+                "can never carry a message: no input port or edge of the parent composite feeds it",
             );
         }
     }

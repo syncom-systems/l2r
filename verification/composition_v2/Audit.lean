@@ -40,7 +40,17 @@ def expectedTheorems : List Name := [
   `L2R.Async1.Ports.stepOnce_delivered_iff,
   `L2R.Async1.Ports.quiet_iff,
   `L2R.Async1.Ports.stepOnce_settled_iff,
-  `L2R.Async1.Ports.stepOnce_blocked
+  `L2R.Async1.Ports.stepOnce_blocked,
+  -- the theorems the example models name as `invariants`: proved about the
+  -- Lean specifications, and nothing more
+  `Tank.Filter.reports_only_changes,
+  `Tank.Filter.one_sample_is_not_enough,
+  `Tank.Controller.high_level_closes_valve,
+  `Tank.Controller.always_reports,
+  `Tank.Alarm.stays_active_until_acknowledged,
+  `Tank.Alarm.count_never_decreases,
+  `Relay.Source.emits_only_news,
+  `Relay.Sink.urgent_is_sticky
 ]
 
 /-- Definitions whose meaning the statements, and every system proof about a

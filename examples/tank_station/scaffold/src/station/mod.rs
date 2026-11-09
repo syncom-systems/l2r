@@ -463,7 +463,7 @@ pub enum Progress {
 /// `System::run` stopped before the system settled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stopped {
-    /// The step budget ran out with deliveries still enabled.
+    /// The step budget ran out before the system settled.
     Budget {
         /// Deliveries performed.
         steps: usize,

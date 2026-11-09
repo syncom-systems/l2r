@@ -4,7 +4,10 @@
 //! Rust type whichever machines, ports and routes mention it. Every type is
 //! plain `Copy` data. For the generated contract tests each type also has a
 //! `samples()` function returning representative values: every constructor,
-//! with boundary values in each field. Those test-only blocks are marked
+//! and every boundary value of every field at least once (the other fields
+//! held at their first value), plus every field at its last value. Their number
+//! is the sum, not the product, of the fields' sample counts, so wide
+//! structures stay cheap. Those test-only blocks are marked
 //! `#[rustfmt::skip]`: their layout depends on the lengths of the user's Lean
 //! names, and a generated file must not fail a formatting check.
 
@@ -75,15 +78,14 @@ pub fn artifact(generator: &Gen<'_>) -> Result<Artifact, PlanError> {
 const SAMPLES: &str = "/// Boundary values for the generated contract tests.\n\
 #[cfg(test)]\n\
 pub mod samples_ {\n\
-\x20   /// Most values of one type that `samples()` returns.\n\
-\x20   pub const LIMIT: usize = 256;\n\
+\x20   /// The first value: the one a field holds while another field varies.\n\
+\x20   pub fn first<T: Copy>(values: &[T]) -> T {\n\
+\x20       values[0]\n\
+\x20   }\n\
 \n\
-\x20   /// Most values tried for one field.\n\
-\x20   pub const PER_FIELD: usize = 4;\n\
-\n\
-\x20   /// At most `PER_FIELD` of `values`.\n\
-\x20   pub fn field<T>(values: Vec<T>) -> Vec<T> {\n\
-\x20       values.into_iter().take(PER_FIELD).collect()\n\
+\x20   /// The last value: for an integer, the largest.\n\
+\x20   pub fn last<T: Copy>(values: &[T]) -> T {\n\
+\x20       values[values.len() - 1]\n\
 \x20   }\n\
 \n\
 \x20   /// `None`, then every value.\n\
@@ -251,56 +253,70 @@ fn type_def(
             ));
         }
     }
-    // Representative values, for the generated contract tests.
+    // Representative values, for the generated contract tests. Each field
+    // takes every one of its sample values once while the others hold their
+    // first value, and one more value has every field at its last (for an
+    // integer, its largest) value. The number of values is the sum, not the
+    // product, of the fields' sample counts.
     out.push_str(&format!(
         "\n{pad}#[cfg(test)]\n{pad}#[rustfmt::skip]\n{pad}impl {name} {{\n\
-         {pad}    /// Representative values: every constructor, with boundary values in\n\
-         {pad}    /// each field. Not exhaustive.\n\
+         {pad}    /// Representative values: every constructor; every sample value of every\n\
+         {pad}    /// field (for an integer 0, 1 and the largest) while the other fields hold\n\
+         {pad}    /// their first value; and every field at its last value. Not exhaustive.\n\
          {pad}    #[allow(clippy::vec_init_then_push)]\n\
          {pad}    pub fn samples() -> Vec<Self> {{\n\
          {pad}        let mut out = Vec::new();\n"
     ));
+    let helper = format!("crate::types::{SAMPLES_MODULE}");
     for (constructor, fields, field_names) in &constructors {
-        let mut inner = format!("{pad}        ");
-        for (i, field) in fields.iter().enumerate() {
-            out.push_str(&format!(
-                "{inner}for f{i} in crate::types::{SAMPLES_MODULE}::field({}) {{\n",
-                samples_of(field, types)?
-            ));
-            inner.push_str("    ");
-        }
-        let value = match field_names {
-            None if fields.is_empty() => constructor.clone(),
-            None => format!(
-                "{constructor}({})",
-                (0..fields.len())
-                    .map(|i| format!("f{i}"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Some(_) if fields.is_empty() => format!("{constructor} {{}}"),
+        let value = |args: &[String]| match field_names {
+            None if args.is_empty() => constructor.clone(),
+            None => format!("{constructor}({})", args.join(", ")),
+            Some(_) if args.is_empty() => format!("{constructor} {{}}"),
             Some(names) => format!(
                 "{constructor} {{ {} }}",
                 names
                     .iter()
-                    .enumerate()
-                    .map(|(i, n)| format!("{n}: f{i}"))
+                    .zip(args)
+                    .map(|(n, a)| format!("{n}: {a}"))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
         };
-        out.push_str(&format!("{inner}out.push({value});\n"));
-        for i in (0..fields.len()).rev() {
-            inner.truncate(inner.len() - 4);
-            let _ = i;
-            out.push_str(&format!("{inner}}}\n"));
+        if fields.is_empty() {
+            out.push_str(&format!("{pad}        out.push({});\n", value(&[])));
+            continue;
         }
+        out.push_str(&format!("{pad}        {{\n"));
+        for (i, field) in fields.iter().enumerate() {
+            out.push_str(&format!(
+                "{pad}            let s{i} = {};\n",
+                samples_of(field, types)?
+            ));
+        }
+        for i in 0..fields.len() {
+            let args: Vec<String> = (0..fields.len())
+                .map(|j| {
+                    if i == j {
+                        "v".to_string()
+                    } else {
+                        format!("{helper}::first(&s{j})")
+                    }
+                })
+                .collect();
+            out.push_str(&format!(
+                "{pad}            for &v in &s{i} {{\n{pad}                out.push({});\n{pad}            }}\n",
+                value(&args)
+            ));
+        }
+        let last: Vec<String> = (0..fields.len())
+            .map(|j| format!("{helper}::last(&s{j})"))
+            .collect();
+        out.push_str(&format!(
+            "{pad}            out.push({});\n{pad}        }}\n",
+            value(&last)
+        ));
     }
-    out.push_str(&format!(
-        "{pad}        out.truncate(crate::types::{SAMPLES_MODULE}::LIMIT);\n\
-         {pad}        out\n\
-         {pad}    }}\n\
-         {pad}}}\n"
-    ));
+    out.push_str(&format!("{pad}        out\n{pad}    }}\n{pad}}}\n"));
     Ok(out)
 }

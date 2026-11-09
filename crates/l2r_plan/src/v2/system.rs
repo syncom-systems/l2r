@@ -270,7 +270,7 @@ pub fn system(generator: &Gen<'_>) -> Result<String, PlanError> {
          \x20   /// by an outbox the environment has not emptied.\n    Blocked,\n}\n\n\
          /// `System::run` stopped before the system settled.\n\
          #[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub enum Stopped {\n\
-         \x20   /// The step budget ran out with deliveries still enabled.\n    Budget {\n        /// Deliveries performed.\n        steps: usize,\n    },\n\
+         \x20   /// The step budget ran out before the system settled.\n    Budget {\n        /// Deliveries performed.\n        steps: usize,\n    },\n\
          \x20   /// Messages are pending but every delivery is blocked.\n    Blocked {\n        /// Deliveries performed before blocking.\n        steps: usize,\n    },\n}\n\n\
          enum Attempt {\n    Delivered,\n    Blocked,\n    Idle,\n}\n\n",
     );
@@ -377,7 +377,15 @@ pub fn system(generator: &Gen<'_>) -> Result<String, PlanError> {
     }
     out.push_str("        settled\n    }\n\n");
     out.push_str(
-        "    /// Serves the next machine, in round-robin order, whose delivery is enabled.\n    pub fn step_once(&mut self) -> Progress {\n        let mut blocked = false;\n",
+        "    /// Serves the next machine, in round-robin order, whose delivery is enabled.\n",
+    );
+    if flat.leaves.len() == 1 {
+        // One machine: the round-robin arithmetic is kept, so that the code has
+        // the same shape as its Lean model for every number of machines.
+        out.push_str("    #[allow(clippy::modulo_one)]\n");
+    }
+    out.push_str(
+        "    pub fn step_once(&mut self) -> Progress {\n        let mut blocked = false;\n",
     );
     for offset in 0..flat.leaves.len() {
         let position = if offset == 0 {

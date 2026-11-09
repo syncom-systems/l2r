@@ -36,47 +36,47 @@ Routes, in routing order (the edges and ports each passes):
 namespace L2RDerived.«relay».«plant»
 
 def State : Fin 4 → Type
-  | ⟨0, _⟩ => Relay.Sink.State
-  | ⟨1, _⟩ => Relay.Source.State
+  | ⟨0, _⟩ => _root_.Relay.Sink.State
+  | ⟨1, _⟩ => _root_.Relay.Source.State
   | ⟨2, _⟩ => Unit
   | ⟨3, _⟩ => Unit
   | ⟨_ + 4, h⟩ => absurd h (by omega)
 
 def Input : Fin 4 → Type
-  | ⟨0, _⟩ => Relay.Sink.Input
-  | ⟨1, _⟩ => Relay.Source.Input
-  | ⟨2, _⟩ => Relay.Ports.Report
-  | ⟨3, _⟩ => Relay.Token
+  | ⟨0, _⟩ => _root_.Relay.Sink.Input
+  | ⟨1, _⟩ => _root_.Relay.Source.Input
+  | ⟨2, _⟩ => _root_.Relay.Ports.Report
+  | ⟨3, _⟩ => _root_.Relay.Token
   | ⟨_ + 4, h⟩ => absurd h (by omega)
 
 def Output : Fin 4 → Type
-  | ⟨0, _⟩ => Relay.Sink.Output
-  | ⟨1, _⟩ => Relay.Source.Output
+  | ⟨0, _⟩ => _root_.Relay.Sink.Output
+  | ⟨1, _⟩ => _root_.Relay.Source.Output
   | ⟨2, _⟩ => Empty
   | ⟨3, _⟩ => Empty
   | ⟨_ + 4, h⟩ => absurd h (by omega)
 
 def init : (c : Fin 4) → State c
-  | ⟨0, _⟩ => Relay.Sink.init
-  | ⟨1, _⟩ => Relay.Source.init
+  | ⟨0, _⟩ => _root_.Relay.Sink.init
+  | ⟨1, _⟩ => _root_.Relay.Source.init
   | ⟨2, _⟩ => ()
   | ⟨3, _⟩ => ()
   | ⟨_ + 4, h⟩ => absurd h (by omega)
 
 def step : (c : Fin 4) → State c → Input c → State c × Option (Output c)
-  | ⟨0, _⟩ => Relay.Sink.step
-  | ⟨1, _⟩ => Relay.Source.step
-  | ⟨2, _⟩ => L2R.Async1.outboxStep Relay.Ports.Report
-  | ⟨3, _⟩ => L2R.Async1.outboxStep Relay.Token
+  | ⟨0, _⟩ => _root_.Relay.Sink.step
+  | ⟨1, _⟩ => _root_.Relay.Source.step
+  | ⟨2, _⟩ => L2R.Async1.outboxStep _root_.Relay.Ports.Report
+  | ⟨3, _⟩ => L2R.Async1.outboxStep _root_.Relay.Token
   | ⟨_ + 4, h⟩ => absurd h (by omega)
 
 def route : (c : Fin 4) → Output c → List ((d : Fin 4) × Input d)
   | ⟨0, _⟩ => fun o =>
-    ((Relay.Routes.sinkToOut o).bind Relay.Routes.outToReport).toList.map (fun i => ⟨⟨2, by decide⟩, i⟩)
+    ((_root_.Relay.Routes.sinkToOut o).bind _root_.Relay.Routes.outToReport).toList.map (fun i => ⟨⟨2, by decide⟩, i⟩)
   | ⟨1, _⟩ => fun o =>
-    ((((Relay.Routes.sourceToCell o).bind Relay.Routes.cellToZone).bind Relay.Routes.zoneToB).map Relay.Ports.tokenToSink).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩) ++
-    (((Relay.Routes.sourceToCell o).bind Relay.Routes.cellToZone).bind Relay.Routes.zoneToTap).toList.map (fun i => ⟨⟨3, by decide⟩, i⟩) ++
-    ((((Relay.Routes.sourceToCell o).bind Relay.Routes.cellToZone).bind Relay.Routes.zoneToUrgent).map Relay.Ports.urgentToSink).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩)
+    ((((_root_.Relay.Routes.sourceToCell o).bind _root_.Relay.Routes.cellToZone).bind _root_.Relay.Routes.zoneToB).map _root_.Relay.Ports.tokenToSink).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩) ++
+    (((_root_.Relay.Routes.sourceToCell o).bind _root_.Relay.Routes.cellToZone).bind _root_.Relay.Routes.zoneToTap).toList.map (fun i => ⟨⟨3, by decide⟩, i⟩) ++
+    ((((_root_.Relay.Routes.sourceToCell o).bind _root_.Relay.Routes.cellToZone).bind _root_.Relay.Routes.zoneToUrgent).map _root_.Relay.Ports.urgentToSink).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩)
   | ⟨2, _⟩ => fun _ => []
   | ⟨3, _⟩ => fun _ => []
   | ⟨_ + 4, h⟩ => absurd h (by omega)
@@ -91,7 +91,7 @@ def cap : Fin 4 → Nat
 
 /-- The input ports of the root, in identifier order: 0 = `poke`. -/
 def Msg : Fin 1 → Type
-  | ⟨0, _⟩ => Relay.Ports.Poke
+  | ⟨0, _⟩ => _root_.Relay.Ports.Poke
   | ⟨_ + 1, h⟩ => absurd h (by omega)
 
 def target : Fin 1 → Fin 4
@@ -99,7 +99,7 @@ def target : Fin 1 → Fin 4
   | ⟨_ + 1, h⟩ => absurd h (by omega)
 
 def inject : (p : Fin 1) → Msg p → Input (target p)
-  | ⟨0, _⟩ => fun m => Relay.Ports.cellToSource (Relay.Ports.zoneToCell (Relay.Ports.plantToZone m))
+  | ⟨0, _⟩ => fun m => _root_.Relay.Ports.cellToSource (_root_.Relay.Ports.zoneToCell (_root_.Relay.Ports.plantToZone m))
   | ⟨_ + 1, h⟩ => absurd h (by omega)
 
 /-- The machines are the children `0 … machines-1`; the outboxes follow. -/

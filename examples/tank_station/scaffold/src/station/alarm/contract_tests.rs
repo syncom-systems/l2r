@@ -3,10 +3,12 @@
 
 //! Contract tests: properties every implementation of `Tank.Alarm.step` must have.
 //!
-//! They check that the transition is defined (does not panic, in particular on
-//! integer overflow) on representative states and inputs: every constructor,
-//! with the boundary values of each field. They are not exhaustive and do not
-//! check agreement with the Lean specification.
+//! They check that the transition is defined (does not panic) on representative
+//! states and inputs: every constructor, and every boundary value of every
+//! field at least once, though not every combination of them. An integer
+//! overflow panics only in a build with overflow checks (Bazel's default
+//! `fastbuild` and `dbg`; not `opt`). They are not exhaustive and do not check
+//! agreement with the Lean specification.
 
 use super::{Input, State, init, step};
 

@@ -306,6 +306,97 @@ fn generated_names_must_be_distinct() {
     let mut model = tank_model();
     edge(&mut model, "filter_to_level").id = "port_reading".into();
     rejects(&model, "L2R-S020");
+    // `attempt_x` of machine `x`... and `<m>_state` of a machine `attempt_x`:
+    // machine `x_state` has the private method `attempt_x_state`, which is also
+    // the state accessor of machine `attempt_x`.
+    let mut model = tank_model();
+    component(&mut model, "alarm").id = "x_state".into();
+    component(&mut model, "controller").id = "attempt_x".into();
+    rejects(&model, "L2R-S020");
+    // `send_q` of port `q`... against the state accessor of machine `send_q`:
+    // port `q_state` has `send_q_state`.
+    let mut model = tank_model();
+    component(&mut model, "alarm").id = "send_q".into();
+    port(&mut model, "operator").id = "q_state".into();
+    rejects(&model, "L2R-S020");
+    // `take_q` of out port `q_inbox` against the mailbox accessor of machine `take_q`.
+    let mut model = tank_model();
+    component(&mut model, "alarm").id = "take_q".into();
+    port(&mut model, "valve_command").id = "q_inbox".into();
+    rejects(&model, "L2R-S020");
+    // The tank station itself has no such collision.
+    assert!(codes(&tank_model(), &tank_inventory()).is_empty());
+}
+
+#[test]
+fn a_lean_type_may_not_take_the_name_of_a_rust_prelude_type() {
+    for name in ["Vec", "Option", "Box", "String", "Result"] {
+        let mut model = tank_model();
+        let mut inventory = tank_inventory();
+        let renamed = format!("Tank.Ports.{name}");
+        for port in &mut model.ports {
+            if port.message == "Tank.Ports.Sample" {
+                port.message = renamed.clone();
+            }
+        }
+        for declaration in &mut inventory.declarations {
+            declaration.name = declaration.name.replace("Tank.Ports.Sample", &renamed);
+            declaration.type_ = declaration.type_.replace("Tank.Ports.Sample", &renamed);
+            for constructor in &mut declaration.constructors {
+                constructor.name = constructor.name.replace("Tank.Ports.Sample", &renamed);
+            }
+        }
+        let found = codes(&model, &inventory);
+        assert!(found.contains(&"L2R-L007"), "{name}: {found:?}");
+    }
+}
+
+#[test]
+fn nothing_approved_may_be_dead() {
+    // An out port nothing feeds, read by an edge that can therefore never fire.
+    let mut model = relay_model();
+    model.ports.push(Port {
+        id: "dead_out".into(),
+        composite: "zone_b".into(),
+        to: None,
+        message: "Relay.Ports.Report".into(),
+        translation: None,
+        direction: Some("out".into()),
+        capacity: None,
+    });
+    model.messages.push(MessageEdge {
+        id: "dead_edge".into(),
+        from: "dead_out".into(),
+        to: "report".into(),
+        translation: "Relay.Routes.outToReport".into(),
+    });
+    assert_eq!(codes(&model, &relay_inventory()), ["L2R-M010"]);
+
+    // A nested input port nothing forwards to.
+    let mut model = relay_model();
+    model.ports.push(Port {
+        id: "unused_in".into(),
+        composite: "zone_b".into(),
+        to: Some("sink".into()),
+        message: "Relay.Token".into(),
+        translation: Some("Relay.Ports.tokenToSink".into()),
+        direction: Some("in".into()),
+        capacity: None,
+    });
+    assert_eq!(codes(&model, &relay_inventory()), ["L2R-P010"]);
+}
+
+#[test]
+fn a_v1_model_cannot_use_v2_port_fields() {
+    for edit in [
+        |p: &mut Port| p.direction = Some("out".into()),
+        |p: &mut Port| p.capacity = Some(7),
+    ] {
+        let mut model = example_v1_model();
+        edit(&mut model.ports[0]);
+        let found = codes(&model, &example_v1_inventory());
+        assert!(found.contains(&"L2R-S015"), "{found:?}");
+    }
 }
 
 #[test]

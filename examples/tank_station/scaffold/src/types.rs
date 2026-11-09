@@ -20,15 +20,15 @@ pub mod tank {
     #[cfg(test)]
     #[rustfmt::skip]
     impl Level {
-        /// Representative values: every constructor, with boundary values in
-        /// each field. Not exhaustive.
+        /// Representative values: every constructor; every sample value of every
+        /// field (for an integer 0, 1 and the largest) while the other fields hold
+        /// their first value; and every field at its last value. Not exhaustive.
         #[allow(clippy::vec_init_then_push)]
         pub fn samples() -> Vec<Self> {
             let mut out = Vec::new();
             out.push(Level::Low);
             out.push(Level::Normal);
             out.push(Level::High);
-            out.truncate(crate::types::samples_::LIMIT);
             out
         }
     }
@@ -48,15 +48,15 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Input {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
                 out.push(Input::High);
                 out.push(Input::Cleared);
                 out.push(Input::Acknowledge);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -73,16 +73,20 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Output {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::samples_::u8s()) {
-                    out.push(Output::Raised(f0));
+                {
+                    let s0 = crate::types::samples_::u8s();
+                    for &v in &s0 {
+                        out.push(Output::Raised(v));
+                    }
+                    out.push(Output::Raised(crate::types::samples_::last(&s0)));
                 }
                 out.push(Output::Silenced);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -99,17 +103,23 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl State {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::samples_::bools()) {
-                    for f1 in crate::types::samples_::field(crate::types::samples_::u8s()) {
-                        out.push(State { active: f0, count: f1 });
+                {
+                    let s0 = crate::types::samples_::bools();
+                    let s1 = crate::types::samples_::u8s();
+                    for &v in &s0 {
+                        out.push(State { active: v, count: crate::types::samples_::first(&s1) });
                     }
+                    for &v in &s1 {
+                        out.push(State { active: crate::types::samples_::first(&s0), count: v });
+                    }
+                    out.push(State { active: crate::types::samples_::last(&s0), count: crate::types::samples_::last(&s1) });
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -130,15 +140,15 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Command {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
                 out.push(Command::SetAuto);
                 out.push(Command::ForceOpen);
                 out.push(Command::ForceClose);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -155,18 +165,26 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Input {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::tank::Level::samples()) {
-                    out.push(Input::Level(f0));
+                {
+                    let s0 = crate::types::tank::Level::samples();
+                    for &v in &s0 {
+                        out.push(Input::Level(v));
+                    }
+                    out.push(Input::Level(crate::types::samples_::last(&s0)));
                 }
-                for f0 in crate::types::samples_::field(crate::types::tank::controller::Command::samples()) {
-                    out.push(Input::Command(f0));
+                {
+                    let s0 = crate::types::tank::controller::Command::samples();
+                    for &v in &s0 {
+                        out.push(Input::Command(v));
+                    }
+                    out.push(Input::Command(crate::types::samples_::last(&s0)));
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -183,14 +201,14 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Mode {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
                 out.push(Mode::Auto);
                 out.push(Mode::Manual);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -209,19 +227,27 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Output {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::tank::controller::Valve::samples()) {
-                    for f1 in crate::types::samples_::field(crate::types::tank::Level::samples()) {
-                        for f2 in crate::types::samples_::field(crate::types::samples_::bools()) {
-                            out.push(Output { valve: f0, level: f1, changed: f2 });
-                        }
+                {
+                    let s0 = crate::types::tank::controller::Valve::samples();
+                    let s1 = crate::types::tank::Level::samples();
+                    let s2 = crate::types::samples_::bools();
+                    for &v in &s0 {
+                        out.push(Output { valve: v, level: crate::types::samples_::first(&s1), changed: crate::types::samples_::first(&s2) });
                     }
+                    for &v in &s1 {
+                        out.push(Output { valve: crate::types::samples_::first(&s0), level: v, changed: crate::types::samples_::first(&s2) });
+                    }
+                    for &v in &s2 {
+                        out.push(Output { valve: crate::types::samples_::first(&s0), level: crate::types::samples_::first(&s1), changed: v });
+                    }
+                    out.push(Output { valve: crate::types::samples_::last(&s0), level: crate::types::samples_::last(&s1), changed: crate::types::samples_::last(&s2) });
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -240,19 +266,27 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl State {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::tank::controller::Mode::samples()) {
-                    for f1 in crate::types::samples_::field(crate::types::tank::controller::Valve::samples()) {
-                        for f2 in crate::types::samples_::field(crate::types::tank::Level::samples()) {
-                            out.push(State { mode: f0, valve: f1, level: f2 });
-                        }
+                {
+                    let s0 = crate::types::tank::controller::Mode::samples();
+                    let s1 = crate::types::tank::controller::Valve::samples();
+                    let s2 = crate::types::tank::Level::samples();
+                    for &v in &s0 {
+                        out.push(State { mode: v, valve: crate::types::samples_::first(&s1), level: crate::types::samples_::first(&s2) });
                     }
+                    for &v in &s1 {
+                        out.push(State { mode: crate::types::samples_::first(&s0), valve: v, level: crate::types::samples_::first(&s2) });
+                    }
+                    for &v in &s2 {
+                        out.push(State { mode: crate::types::samples_::first(&s0), valve: crate::types::samples_::first(&s1), level: v });
+                    }
+                    out.push(State { mode: crate::types::samples_::last(&s0), valve: crate::types::samples_::last(&s1), level: crate::types::samples_::last(&s2) });
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -269,14 +303,14 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Valve {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
                 out.push(Valve::Closed);
                 out.push(Valve::Opened);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -293,15 +327,19 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Input {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::samples_::u8s()) {
-                    out.push(Input::Sample(f0));
+                {
+                    let s0 = crate::types::samples_::u8s();
+                    for &v in &s0 {
+                        out.push(Input::Sample(v));
+                    }
+                    out.push(Input::Sample(crate::types::samples_::last(&s0)));
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -316,15 +354,19 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Output {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::tank::Level::samples()) {
-                    out.push(Output::LevelChanged(f0));
+                {
+                    let s0 = crate::types::tank::Level::samples();
+                    for &v in &s0 {
+                        out.push(Output::LevelChanged(v));
+                    }
+                    out.push(Output::LevelChanged(crate::types::samples_::last(&s0)));
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -343,19 +385,27 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl State {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::tank::Level::samples()) {
-                    for f1 in crate::types::samples_::field(crate::types::tank::Level::samples()) {
-                        for f2 in crate::types::samples_::field(crate::types::samples_::u8s()) {
-                            out.push(State { reported: f0, candidate: f1, streak: f2 });
-                        }
+                {
+                    let s0 = crate::types::tank::Level::samples();
+                    let s1 = crate::types::tank::Level::samples();
+                    let s2 = crate::types::samples_::u8s();
+                    for &v in &s0 {
+                        out.push(State { reported: v, candidate: crate::types::samples_::first(&s1), streak: crate::types::samples_::first(&s2) });
                     }
+                    for &v in &s1 {
+                        out.push(State { reported: crate::types::samples_::first(&s0), candidate: v, streak: crate::types::samples_::first(&s2) });
+                    }
+                    for &v in &s2 {
+                        out.push(State { reported: crate::types::samples_::first(&s0), candidate: crate::types::samples_::first(&s1), streak: v });
+                    }
+                    out.push(State { reported: crate::types::samples_::last(&s0), candidate: crate::types::samples_::last(&s1), streak: crate::types::samples_::last(&s2) });
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -372,13 +422,13 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Acknowledge {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
                 out.push(Acknowledge::Acknowledge);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -395,17 +445,23 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl AlarmNotice {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::samples_::bools()) {
-                    for f1 in crate::types::samples_::field(crate::types::samples_::options(crate::types::samples_::u8s())) {
-                        out.push(AlarmNotice { active: f0, count: f1 });
+                {
+                    let s0 = crate::types::samples_::bools();
+                    let s1 = crate::types::samples_::options(crate::types::samples_::u8s());
+                    for &v in &s0 {
+                        out.push(AlarmNotice { active: v, count: crate::types::samples_::first(&s1) });
                     }
+                    for &v in &s1 {
+                        out.push(AlarmNotice { active: crate::types::samples_::first(&s0), count: v });
+                    }
+                    out.push(AlarmNotice { active: crate::types::samples_::last(&s0), count: crate::types::samples_::last(&s1) });
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -424,15 +480,15 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Operator {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
                 out.push(Operator::SetAuto);
                 out.push(Operator::ForceOpen);
                 out.push(Operator::ForceClose);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -447,15 +503,19 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl Sample {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
-                for f0 in crate::types::samples_::field(crate::types::samples_::u8s()) {
-                    out.push(Sample { raw: f0 });
+                {
+                    let s0 = crate::types::samples_::u8s();
+                    for &v in &s0 {
+                        out.push(Sample { raw: v });
+                    }
+                    out.push(Sample { raw: crate::types::samples_::last(&s0) });
                 }
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -472,14 +532,14 @@ pub mod tank {
         #[cfg(test)]
         #[rustfmt::skip]
         impl ValveCommand {
-            /// Representative values: every constructor, with boundary values in
-            /// each field. Not exhaustive.
+            /// Representative values: every constructor; every sample value of every
+            /// field (for an integer 0, 1 and the largest) while the other fields hold
+            /// their first value; and every field at its last value. Not exhaustive.
             #[allow(clippy::vec_init_then_push)]
             pub fn samples() -> Vec<Self> {
                 let mut out = Vec::new();
                 out.push(ValveCommand::Open);
                 out.push(ValveCommand::Close);
-                out.truncate(crate::types::samples_::LIMIT);
                 out
             }
         }
@@ -489,15 +549,14 @@ pub mod tank {
 /// Boundary values for the generated contract tests.
 #[cfg(test)]
 pub mod samples_ {
-    /// Most values of one type that `samples()` returns.
-    pub const LIMIT: usize = 256;
+    /// The first value: the one a field holds while another field varies.
+    pub fn first<T: Copy>(values: &[T]) -> T {
+        values[0]
+    }
 
-    /// Most values tried for one field.
-    pub const PER_FIELD: usize = 4;
-
-    /// At most `PER_FIELD` of `values`.
-    pub fn field<T>(values: Vec<T>) -> Vec<T> {
-        values.into_iter().take(PER_FIELD).collect()
+    /// The last value: for an integer, the largest.
+    pub fn last<T: Copy>(values: &[T]) -> T {
+        values[values.len() - 1]
     }
 
     /// `None`, then every value.

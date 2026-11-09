@@ -6,8 +6,9 @@
 //!   aliases of the mirrors of the Lean types in `crate::types`, and
 //!   `init`/`step` are wrappers whose signatures the implementation must satisfy;
 //! * `contract_tests.rs` (generated): the transition is defined (does not
-//!   panic, in particular on integer overflow) on representative states and
-//!   inputs, including the boundary values of every field;
+//!   panic; in a build with overflow checks, in particular not on integer
+//!   overflow) on representative states and inputs. Every boundary value of
+//!   every field occurs, but not every combination of them;
 //! * `imp.rs` (implementation): stubs for the implementer, created once.
 
 use l2r_model::{Behavior, Component, profiles::TRANSITION_CORE_V1};
@@ -134,10 +135,12 @@ fn contract_tests(behavior: &Behavior) -> String {
     out.push_str(&text::inner_doc(&format!(
         "Contract tests: properties every implementation of `{}` must have.\n\
          \n\
-         They check that the transition is defined (does not panic, in particular on\n\
-         integer overflow) on representative states and inputs: every constructor,\n\
-         with the boundary values of each field. They are not exhaustive and do not\n\
-         check agreement with the Lean specification.",
+         They check that the transition is defined (does not panic) on representative\n\
+         states and inputs: every constructor, and every boundary value of every\n\
+         field at least once, though not every combination of them. An integer\n\
+         overflow panics only in a build with overflow checks (Bazel's default\n\
+         `fastbuild` and `dbg`; not `opt`). They are not exhaustive and do not check\n\
+         agreement with the Lean specification.",
         behavior.step
     )));
     out.push_str(

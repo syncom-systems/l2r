@@ -1,6 +1,6 @@
 {
   "format": "l2r.lock/v0",
-  "plan_digest": "sha256:2bc093de21a5a031ec1ac46e94e8e63d5c920505778e47007189299b0789d16a",
+  "plan_digest": "sha256:2bc4429e7692412c7ed86099f47d7b5e7874c59c1d4abb33dc53254c7cad437f",
   "generator": "l2r 0.1.0",
   "files": [
     {
@@ -19,7 +19,7 @@
       "path": "src/station/alarm/contract_tests.rs",
       "ownership": "generated",
       "component": "alarm",
-      "digest": "sha256:7559b648ebe5a5851f68957e605d6f28d46dd4b04b26272a016eb883508ccf2b"
+      "digest": "sha256:62b6a4f1579b3f222982d2ee0f763e977b7427f1cda4b9e37e86b44640ac60fc"
     },
     {
       "path": "src/station/alarm/imp.rs",
@@ -36,7 +36,7 @@
       "path": "src/station/controller/contract_tests.rs",
       "ownership": "generated",
       "component": "controller",
-      "digest": "sha256:70176bf30f90a126d5576294d3bf681a4a151e979991cd06519d81d77b662f86"
+      "digest": "sha256:9125859ef250af3e50e4d491666b7496559bb58a0dcadec17011bab56f585fb3"
     },
     {
       "path": "src/station/controller/imp.rs",
@@ -53,7 +53,7 @@
       "path": "src/station/mod.rs",
       "ownership": "generated",
       "component": "station",
-      "digest": "sha256:5da6a16d84158720258d33975d155bff61500d6061a038a920d610a4cadd7be7"
+      "digest": "sha256:ab24aabd5e95f93cfb3dbb6cd274fc26bc2248d4e3bed30eff882ca1ec486e2a"
     },
     {
       "path": "src/station/routes.rs",
@@ -64,7 +64,7 @@
       "path": "src/station/sensing/filter/contract_tests.rs",
       "ownership": "generated",
       "component": "filter",
-      "digest": "sha256:78ae415395c6e7221b7b380c369f2a1d8f80a4a39960c2e17b7a0ef0c547461f"
+      "digest": "sha256:1c6e65fe53231703a225b0ec22d756e2eae695a9a62ad0d2fa082959705c3c6b"
     },
     {
       "path": "src/station/sensing/filter/imp.rs",
@@ -92,7 +92,7 @@
       "path": "src/types.rs",
       "ownership": "generated",
       "component": "station",
-      "digest": "sha256:94896717c711a8e6e09afdb45bf84e1dd9bfa6e53b1bc2fc5dfa9fa04f63e796"
+      "digest": "sha256:2439934a7749d156fd84fc814733473b8c202f5bb877015b3e30216afe5a6371"
     }
   ]
 }
