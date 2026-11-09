@@ -1,0 +1,2 @@
+status=unavailable
+reason=the verification toolchain is selected only under --config=verify

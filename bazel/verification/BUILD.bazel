@@ -1,0 +1,17 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
+# Set by --config=verify. Only then does the proof lane depend on the pinned
+# verification toolchain (@verification_tools), which is fetched on first use.
+bool_flag(
+    name = "enabled",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "verify",
+    flag_values = {":enabled": "True"},
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["unavailable_manifest.txt"])

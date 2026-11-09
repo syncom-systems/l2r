@@ -1,0 +1,31 @@
+# L2R: Bazel is the only build system. Never invoke cargo.
+common --enable_bzlmod
+build --incompatible_strict_action_env
+test --test_output=errors
+
+# bazel build --config=lint //...   (clippy; warnings are errors)
+build:lint --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+build:lint --output_groups=+clippy_checks
+build:lint --@rules_rust//rust/settings:clippy_flags=-Dwarnings
+
+# bazel build --config=fmt //...    (rustfmt check)
+build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
+build:fmt --output_groups=+rustfmt_checks
+
+# Optional per-user settings (caches etc.), never committed.
+try-import %workspace%/user.bazelrc
+
+# rustfmt reads the repository's own configuration.
+build --@rules_rust//rust/settings:rustfmt.toml=//:rustfmt.toml
+
+# Linux hosts: link with GNU ld (bfd) rather than gold, which rustc reports as deprecated.
+common --enable_platform_specific_config
+build:linux --linkopt=-fuse-ld=bfd
+build:linux --host_linkopt=-fuse-ld=bfd
+
+# The proof lane: bazel test --config=verify //verification/...
+# Excluded from the default test set because it fetches ~8 GB of pinned
+# verification toolchain on first use; CI runs it as its own job.
+test --test_tag_filters=-verification
+build:verify --//bazel/verification:enabled=true
+test:verify --test_tag_filters=verification

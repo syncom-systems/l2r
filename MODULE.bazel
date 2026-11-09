@@ -1,0 +1,70 @@
+"""L2R: human-directed architecture modeling and deterministic Rust scaffolding.
+
+Bazel is the only build and test interface. There is no Cargo build path.
+"""
+
+module(name = "l2r", version = "0.1.0")
+
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+bazel_dep(name = "rules_rust", version = "0.74.0")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    versions = ["1.97.1"],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+# Third-party crates. There is no Cargo.toml: each dependency is declared here and its
+# resolution is pinned in //bazel:crates.lock. To change one, edit its spec, then run
+#     CARGO_BAZEL_REPIN=1 bazel mod show_extension @rules_rust//crate_universe:extension.bzl%crate
+crate = use_extension("@rules_rust//crate_universe:extension.bzl", "crate")
+crate.spec(
+    features = ["derive"],
+    package = "serde",
+    version = "1",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "fs",
+        "std",
+    ],
+    package = "rustix",
+    version = "1",
+)
+crate.spec(
+    package = "serde_json",
+    version = "1",
+)
+crate.spec(
+    default_features = False,
+    features = ["parse", "serde"],
+    package = "toml",
+    version = "0.9",
+)
+crate.spec(
+    package = "sha2",
+    version = "0.10",
+)
+crate.from_specs(
+    name = "crates",
+    cargo_lockfile = "//bazel:crates.lock",
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "crates")
+
+# The proof lane's pinned toolchain (Lean, Charon, Aeneas, Aeneas Lean library).
+# Fetched only when a --config=verify build needs it; see //bazel/verification.
+verification_tools = use_repo_rule("//bazel/verification:repo.bzl", "verification_tools")
+
+verification_tools(name = "verification_tools")

@@ -1,4 +1,6 @@
+/bazel-*
 /target/
+.lake/
 .DS_Store
 *.swp
 *.swo

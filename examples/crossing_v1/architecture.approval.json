@@ -1,0 +1,16 @@
+{
+  "format": "l2r.approval/v1",
+  "plan_digest": "sha256:6bb855146029e64fdf7e13be40422a9dc8af047f5f4ef4ff30957636571aab24",
+  "model_digest": "sha256:78b78afdb22d5492effc4745da75d5175182b28e23f157d7b5f4ae199d1966c7",
+  "inventory_digest": "sha256:527e77ccb6f29ebad1fe15f76bbe833fac971f2f4e993f685947c4bae8b2450f",
+  "generator": "l2r 0.1.0",
+  "profiles": [
+    "composite/v1",
+    "crate-root/v0",
+    "transition-core/v0"
+  ],
+  "artifact_count": 10,
+  "authorized_changes": [],
+  "recorded_by": "example fixture recorded by the implementing agent; not a review or authorization",
+  "statement": "The recorder states that the generation plan with this digest, including the content of every planned file, and the listed replacements and deletions of existing generated files, were reviewed and may be applied. This record is not proof of identity or authorization."
+}

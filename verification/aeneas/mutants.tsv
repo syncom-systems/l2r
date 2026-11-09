@@ -1,0 +1,5 @@
+# Seeded defects. Each must make exactly the named refinement theorem fail.
+# name	rust file	exact text	replacement	theorem
+signal_skips_amber	examples/crossing/scaffold/src/crossing/signal/imp.rs	(State::VehiclesGreen, Input::CrossingRequested) => (State::VehiclesAmber, None)	(State::VehiclesGreen, Input::CrossingRequested) => (State::Walk, None)	signal_step_refines
+latch_repeats_request	examples/crossing/scaffold/src/crossing/request_latch/imp.rs	(State::Pending, Input::ButtonPressed) => (State::Pending, None)	(State::Pending, Input::ButtonPressed) => (State::Pending, Some(Output::Requested))	latch_step_refines
+route_sends_timer	examples/crossing/scaffold/src/crossing/routes.rs	request_latch::Output::Requested => Some(signal::Input::CrossingRequested)	request_latch::Output::Requested => Some(signal::Input::TimerExpired)	latch_to_signal_refines

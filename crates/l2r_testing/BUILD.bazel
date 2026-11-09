@@ -1,0 +1,13 @@
+load("//bazel:rust.bzl", "l2r_rust_library")
+
+l2r_rust_library(
+    name = "l2r_testing",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = [
+        "//examples/crossing:inputs",
+        "//examples/crossing_v1:inputs",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["//crates/l2r_model"],
+)
