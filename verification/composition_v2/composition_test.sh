@@ -22,7 +22,13 @@
 #   5. mutants   each seeded deviation of the scheduler model in mutants.tsv is
 #                rejected inside its named theorems;
 #   6. bypasses  each attempt in bypasses.tsv to pass without a real proof is
-#                rejected by its named gate.
+#                rejected by its named gate;
+#   7. conform   bounded testing, not proof: for every example the generated Rust
+#                scheduler and the Lean scheduler model agree on every operation
+#                sequence of length $EXHAUSTIVE and on $RANDOM_COUNT pseudo-random
+#                sequences of length $RANDOM_LENGTH (the derived harness of
+#                `l2r conformance`). A scheduler model with a different but
+#                still permitted order must disagree with the Rust here.
 #
 # The derived networks' freshness (each equals `l2r lean-composition` of the
 # committed model and inventory) is checked by //crates/l2r_plan:l2r_plan_v2_test
@@ -31,6 +37,12 @@ set -euo pipefail
 
 manifest="$1"
 l2r="$(realpath "$2")"
+traces_tank_station="$(realpath "$3")"
+traces_relay="$(realpath "$4")"
+traces_starter="$(realpath "$5")"
+EXHAUSTIVE=4
+RANDOM_COUNT=3000
+RANDOM_LENGTH=80
 if ! grep -q '^status=available' "$manifest"; then
   echo "FAIL: verification toolchain unavailable: $(sed -n 's/^reason=//p' "$manifest")" >&2
   echo "run: bazel test --config=verify //verification/composition_v2:composition_v2_test" >&2
@@ -51,7 +63,9 @@ EXAMPLES="tank_station relay starter"
 ws="$TEST_TMPDIR/ws"
 mkdir -p "$ws"
 for f in $(find lean examples/tank_station/spec examples/relay/spec examples/starter/spec examples/tank_station/composition \
-             examples/relay/composition examples/starter/composition "$LANE" tools/lean_inventory \( -type f -o -type l \) -name '*.lean') \
+             examples/relay/composition examples/starter/composition \
+             examples/tank_station/conformance examples/relay/conformance examples/starter/conformance \
+             "$LANE" tools/lean_inventory \( -type f -o -type l \) -name '*.lean') \
          "$LANE/expected-statements.txt" "$LANE/mutants.tsv" "$LANE/bypasses.tsv" \
          examples/tank_station/architecture.approval.json examples/relay/architecture.approval.json \
          examples/starter/architecture.approval.json examples/starter/lean-inventory.json \
@@ -266,4 +280,31 @@ while IFS=$'\t' read -r name file from to gate; do
 done < "$LANE/bypasses.tsv"
 [ "$count" -gt 0 ] || fail "no bypasses defined"
 
-echo "PASS: scheduler model and derived networks checked, audited, kernel-replayed; inventories fresh; all deviations and bypasses rejected" | tee "$evidence/summary.txt"
+step "7. bounded conformance of the generated Rust schedulers with the Lean model"
+# conform <example> <olean dir> <workspace> <log>
+conform() {
+  LEAN_PATH="$2" "$LEAN" --run "$3/examples/$1/conformance/Conformance.lean" "$TEST_TMPDIR/traces-$1.txt" > "$4" 2>&1
+}
+for example in $EXAMPLES; do
+  recorder="traces_$example"
+  "${!recorder}" "$EXHAUSTIVE" "$RANDOM_COUNT" "$RANDOM_LENGTH" > "$TEST_TMPDIR/traces-$example.txt" \
+    || fail "recording the Rust scheduler's traces of $example failed"
+  conform "$example" "$out" "$ws" "$evidence/conformance-$example.log" \
+    || { head -20 "$evidence/conformance-$example.log" >&2; fail "the generated Rust scheduler of $example and the Lean scheduler model disagree"; }
+  echo "$example: $(grep -m1 -oE 'CONFORMANCE .*' "$evidence/conformance-$example.log") (every sequence of $EXHAUSTIVE operations; $RANDOM_COUNT pseudo-random sequences of $RANDOM_LENGTH)" | tee -a "$evidence/conformance.txt"
+done
+# The gate must be able to fail. A scheduler that keeps serving the machine it
+# just served is still sound (every theorem about it holds), but it is not the
+# order the generated Rust uses: conformance must tell them apart.
+cws="$TEST_TMPDIR/conformance-mutant"
+rm -rf "$cws"; cp -R "$ws" "$cws"
+apply_edit '(⟨k, (c.val + 1) % machines⟩ : Sched N)' '(⟨k, c.val⟩ : Sched N)' "$cws/lean/L2R/Async1Ports.lean" \
+  || fail "conformance mutant: pattern not found"
+build "$cws" "$cws/olean" > "$evidence/conformance-mutant.log" 2>&1 \
+  || { cat "$evidence/conformance-mutant.log" >&2; fail "the sticky-cursor scheduler was expected to satisfy every theorem"; }
+if conform relay "$cws/olean" "$cws" "$evidence/conformance-mutant-relay.log"; then
+  fail "conformance did not tell a scheduler with a different order from the generated Rust"
+fi
+echo "sticky-cursor scheduler (every theorem still holds): rejected by conformance on relay ($(grep -m1 -oE 'CONFORMANCE .*' "$evidence/conformance-mutant-relay.log"))" | tee -a "$evidence/conformance.txt"
+
+echo "PASS: scheduler model and derived networks checked, audited, kernel-replayed; inventories fresh; all deviations and bypasses rejected; generated schedulers conform on the sequences tried" | tee "$evidence/summary.txt"

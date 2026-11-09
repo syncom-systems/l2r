@@ -1,4 +1,4 @@
-load("//bazel:l2r.bzl", "l2r_check_test")
+load("//bazel:l2r.bzl", "l2r_check_test", "l2r_conformance_traces")
 
 # Relay: a generator fixture for composite/v2 (deep nesting, port chains,
 # multi-edge routes, two routes to one receiver, wrapping arithmetic).
@@ -40,3 +40,19 @@ filegroup(
 # inventory: no drift in generated files, a current approval and lock, and every
 # implementation file within its budget.
 l2r_check_test(name = "scaffold_matches_approved_plan_test")
+
+# The derived conformance harness (`l2r conformance`): the recorder drives the
+# generated scheduler; conformance/Conformance.lean replays what it records on
+# the Lean scheduler model (verification/composition_v2, gate 7).
+l2r_conformance_traces(
+    name = "conformance_traces",
+    src = "conformance/traces.rs",
+    crate = "relay_scaffold",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "conformance_sources",
+    srcs = glob(["conformance/*"]),
+    visibility = ["//visibility:public"],
+)

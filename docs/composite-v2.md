@@ -125,10 +125,27 @@ code over fixed-size arrays, shaped for Rust-to-Lean translation.
 | The derived network of each example is the one the approved model determines | **Checked**: re-derived and compared byte for byte; its header is tied to the approval record and to the semantics and scheduler sources; its routes, capacities and ports are pinned in the audit | `l2r_plan_v2_test`; `verification/composition_v2` gates 0 and 2 |
 | The committed inventories are what the compiled specifications export | **Checked** in the proof lane | `verification/composition_v2` gate 4 |
 | The machines' own invariants (the interlock, the filter's confirmation, the alarm's latch; the relay's and the starter's) | **Proved** about the Lean specifications; each is audited (standard axioms only, statement pinned) and kernel-replayed in the lane | `examples/*/spec`; `verification/composition_v2` gates 2 and 3 |
-| The generated Rust `System` behaves as the Lean scheduler model | **Tested only by hand-written scenario tests** in the examples' `routes.rs`. There is **no** conformance run and **no** refinement proof for `composite/v2` yet | — |
-| The Rust machines and routes of the `v2` examples compute what their Lean specifications say | **Not established.** Contract tests check definedness on representative values; no Rust-to-Lean refinement proof exists for a `transition-core/v1` machine yet | — |
+| The generated Rust `System` behaves as the Lean scheduler model | **Tested** (bounded). `l2r conformance` derives a recorder for the Rust and a replayer for the Lean model; for each example every operation sequence of length 4 and 3,000 pseudo-random sequences of length 80 agree on every result, every machine state, every mailbox and every outbox after every operation. A scheduler model with a different but still sound order is rejected. There is **no refinement proof** for `composite/v2` | `examples/*/conformance`; `verification/composition_v2` gate 7 |
+| The Rust machines and routes of the `v2` examples compute what their Lean specifications say | **Tested, not proved**: the same conformance run drives the real `imp.rs` and `routes.rs` against the Lean `step` and translations, for the sample messages (integers 0, 1, the middle and the largest value) and the states those sequences reach. No Rust-to-Lean refinement proof exists for a `transition-core/v1` machine | as above; `contract_tests.rs` |
 | System properties of the tank station over all interleavings | **Not proved yet.** The derived network compiles and is kernel-checked; no theorem about it is stated | — |
 | Real sensors, actuators, timing | **External assumption** | — |
+
+## Conformance, for every project
+
+```sh
+l2r conformance <model> --rust > verification/traces.rs        # drives the generated System
+l2r conformance <model> --lean > verification/Conformance.lean # replays on L2R.Async1.Ports
+```
+
+Both are derived from the validated model, record the digests of what they were
+derived from, and are not part of any plan. An operation is a send of one sample
+message to an input port, a `step_once`, or a take from an output port. The
+sample messages are enumerated by the generator from the port's Lean type, the
+same values in both languages. Observations are compared as text: the Rust side
+prints `Debug`; the Lean side has a generated renderer per data type that prints
+the same. `l2r init` sets up the Lake package and the Bazel target that run it
+(`verification/README.md` in a new project). What a passing run means is in the
+table above: it is a test.
 
 ## Limits
 

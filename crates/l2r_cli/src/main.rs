@@ -28,6 +28,7 @@ Usage:
   l2r recover  <model.toml>                         Finish an interrupted generation of the approved plan
   l2r check    <model.toml>                         Check the output for drift, staleness and budgets
   l2r render   <model.toml>                         Print a Mermaid view of the architecture
+  l2r conformance <model.toml> --rust | --lean      Print one side of the derived conformance harness (schema v2)
   l2r packet   <model.toml> <component>             Print the work packet for implementing one component
   l2r lean-composition <model.toml>                 Print the derived Lean network of the composition
   l2r --version
@@ -108,6 +109,17 @@ fn run(args: &[String]) -> Outcome {
         "recover" => only_flags(rest, &[]).map(|_| commands::recover_generation(&model)),
         "check" => only_flags(rest, &[]).map(|_| commands::check_output(&model)),
         "render" => only_flags(rest, &[]).map(|_| commands::render(&model)),
+        "conformance" => match rest {
+            [side] if side == "--rust" => Ok(commands::conformance(
+                &model,
+                l2r_plan::ConformanceSide::Rust,
+            )),
+            [side] if side == "--lean" => Ok(commands::conformance(
+                &model,
+                l2r_plan::ConformanceSide::Lean,
+            )),
+            _ => Err(usage_error("`conformance` needs --rust or --lean")),
+        },
         "packet" => match rest {
             [component] => Ok(project::packet(&model, component)),
             _ => Err(usage_error(

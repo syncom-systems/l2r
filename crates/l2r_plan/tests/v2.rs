@@ -2,7 +2,9 @@
 //! derived Lean network is the committed one.
 
 use l2r_model::{Inventory, Model};
-use l2r_plan::{GeneratorIdentity, Ownership, Plan, lean_composition, plan};
+use l2r_plan::{
+    ConformanceSide, GeneratorIdentity, Ownership, Plan, conformance, lean_composition, plan,
+};
 use l2r_testing::{
     relay_inventory, relay_model, starter_inventory, starter_model, tank_inventory, tank_model,
 };
@@ -238,7 +240,10 @@ fn the_committed_derived_networks_are_current() {
 
 fn header(text: &str, key: &str) -> String {
     text.lines()
-        .find_map(|l| l.strip_prefix(&format!("-- {key}: ")))
+        .find_map(|l| {
+            l.strip_prefix(&format!("-- {key}: "))
+                .or_else(|| l.strip_prefix(&format!("// {key}: ")))
+        })
         .unwrap_or_else(|| panic!("no `-- {key}:` header line"))
         .to_string()
 }
@@ -285,4 +290,77 @@ fn the_derived_network_restates_no_behaviour() {
     assert!(RELAY_DERIVED.contains(
         "fun m => _root_.Relay.Ports.cellToSource (_root_.Relay.Ports.zoneToCell (_root_.Relay.Ports.plantToZone m))"
     ));
+}
+
+#[test]
+fn the_committed_conformance_harnesses_are_current() {
+    for (model, inventory, rust, lean, path) in [
+        (
+            tank_model(),
+            tank_inventory(),
+            include_str!("../../../examples/tank_station/conformance/traces.rs"),
+            include_str!("../../../examples/tank_station/conformance/Conformance.lean"),
+            "examples/tank_station",
+        ),
+        (
+            relay_model(),
+            relay_inventory(),
+            include_str!("../../../examples/relay/conformance/traces.rs"),
+            include_str!("../../../examples/relay/conformance/Conformance.lean"),
+            "examples/relay",
+        ),
+        (
+            starter_model(),
+            starter_inventory(),
+            include_str!("../../../examples/starter/conformance/traces.rs"),
+            include_str!("../../../examples/starter/conformance/Conformance.lean"),
+            "examples/starter",
+        ),
+    ] {
+        let validated = validate(&model, &inventory).expect("valid");
+        for (side, committed, flag) in [
+            (ConformanceSide::Rust, rust, "--rust"),
+            (ConformanceSide::Lean, lean, "--lean"),
+        ] {
+            let fresh = conformance(&validated, side).expect("derives");
+            assert!(
+                fresh == committed,
+                "{path}/conformance is stale; regenerate it with \
+                 `l2r conformance {path}/architecture.toml {flag}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn both_sides_of_the_harness_try_the_same_operations_in_the_same_order() {
+    let validated = validate(&tank_model(), &tank_inventory()).expect("valid");
+    let rust = conformance(&validated, ConformanceSide::Rust).unwrap();
+    let lean = conformance(&validated, ConformanceSide::Lean).unwrap();
+    // 1 + 3 + 4 sample messages, step_once, two takes.
+    assert!(rust.contains("const OPS: usize = 11;"), "{rust}");
+    assert!(lean.contains("  | 10 =>\n    match Ports.take N s (⟨4, by decide⟩ : Fin 5) with"));
+    assert!(!lean.contains("  | 11 =>"));
+    // The same sample message at the same index, in each language.
+    assert!(rust.contains(
+        "7 => match system.send_sample(tank_station_scaffold::types::tank::ports::Sample { raw: 255 }) {"
+    ));
+    assert!(lean.contains(
+        "  | 7 =>\n    match Ports.send N s (⟨2, by decide⟩ : Fin N.ports) (_root_.Tank.Ports.Sample.mk 255 : _root_.Tank.Ports.Sample) with"
+    ));
+    // Bound to what it was derived from, like the derived network.
+    for text in [&rust, &lean] {
+        assert_eq!(header(text, "model"), header(TANK_DERIVED, "model"));
+        assert_eq!(header(text, "scheduler"), header(TANK_DERIVED, "scheduler"));
+    }
+}
+
+#[test]
+fn conformance_is_derived_for_hierarchical_models_only() {
+    let v1 = validate(
+        &l2r_testing::example_v1_model(),
+        &l2r_testing::example_v1_inventory(),
+    )
+    .unwrap();
+    assert!(conformance(&v1, ConformanceSide::Rust).is_err());
 }

@@ -10,7 +10,7 @@
 #   generate -> tests fail: nothing implemented -> implement -> tests pass ->
 #   change the model -> check fails: stale approval, generate refuses ->
 #   re-approve, regenerate: implementation untouched -> edit a generated file ->
-#   check fails: drift -> work packet.
+#   check fails: drift -> work packet -> (derived network and conformance run).
 #
 # The implementation step copies the committed implementation of
 # examples/starter (the same system under its template names).
@@ -100,5 +100,20 @@ step "9. the work packet"
 "$L2R" packet "$M" monitor > "$work/packet.md" || fail "packet failed"
 grep -q "scaffold/src/pump_station/monitor/imp.rs" "$work/packet.md" || fail "the packet does not name the implementation file"
 grep -q "PumpStation.Monitor.alert_only_above_limit" "$work/packet.md" || fail "the packet does not list the theorems"
+
+step "10. evidence about the composed system: derived network, conformance run"
+mkdir -p "$proj/verification/L2RDerived"
+"$L2R" lean-composition "$M" > "$proj/verification/L2RDerived/pump_station.lean" || fail "lean-composition failed"
+"$L2R" conformance "$M" --rust > "$proj/verification/traces.rs" || fail "conformance --rust failed"
+"$L2R" conformance "$M" --lean > "$proj/verification/Conformance.lean" || fail "conformance --lean failed"
+bazel run //:conformance_traces -- 3 300 40 > "$work/traces.txt" 2> "$log" || fail "the conformance recorder does not build or run"
+[ "$(wc -l < "$work/traces.txt")" -gt 300 ] || fail "the conformance recorder wrote no traces"
+if command -v lake > /dev/null; then
+  (cd "$proj/verification" && lake build && lake env lean --run Conformance.lean "$work/traces.txt") > "$log" 2>&1 \
+    || fail "the generated Rust scheduler and the Lean scheduler model disagree, or the derived Lean does not build"
+  grep -E "^CONFORMANCE [0-9]+/[0-9]+ sequences agree" "$log" || fail "no conformance result"
+else
+  echo "replay skipped: \`lake\` is not installed (the proof lane replays the examples with the pinned Lean)"
+fi
 
 echo "E2E PASS: a new project, built with L2R as an external dependency, went through the whole workflow"

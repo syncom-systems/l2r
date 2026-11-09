@@ -236,3 +236,15 @@ pub fn lean_composition(model: &Path) -> Outcome {
         Err(error) => session_error(error),
     }
 }
+
+/// `l2r conformance <model> --rust|--lean`: one side of the derived
+/// conformance harness, on stdout.
+pub fn conformance(model: &Path, side: l2r_plan::ConformanceSide) -> Outcome {
+    match session::validated(model) {
+        Ok(v) => match l2r_plan::conformance(&v, side) {
+            Ok(text) => Outcome::ok(text),
+            Err(e) => Outcome::refused(format!("{e}\n")),
+        },
+        Err(error) => session_error(error),
+    }
+}

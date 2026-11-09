@@ -6,6 +6,7 @@
 //! randomness, and iterates only over sorted collections, so identical inputs
 //! give byte-identical plans and the same plan digest.
 
+mod conformance;
 mod layout;
 mod lean_composition;
 mod lean_composition_v2;
@@ -14,6 +15,7 @@ mod profiles;
 mod text;
 mod v2;
 
+pub use conformance::{CONFORMANCE_FORMAT, ConformanceSide, conformance};
 pub use lean_composition::{
     LEAN_COMPOSITION_FORMAT, LEAN_COMPOSITION_FORMAT_V1, SEMANTICS_VERSION, SEMANTICS_VERSION_V1,
     lean_composition, lean_composition_path, semantics_digest, semantics_digest_v1,

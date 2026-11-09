@@ -13,6 +13,9 @@ sh_test(
     args = [
         "$(rootpath //verification/aeneas:toolchain_manifest)",
         "$(rootpath //crates/l2r_cli:l2r)",
+        "$(rootpath //examples/tank_station:conformance_traces)",
+        "$(rootpath //examples/relay:conformance_traces)",
+        "$(rootpath //examples/starter:conformance_traces)",
     ],
     data = [
         "Audit.lean",
@@ -22,6 +25,12 @@ sh_test(
         "mutants.tsv",
         "//crates/l2r_cli:l2r",
         "//examples/relay:architecture.approval.json",
+        "//examples/relay:conformance_sources",
+        "//examples/relay:conformance_traces",
+        "//examples/starter:conformance_sources",
+        "//examples/starter:conformance_traces",
+        "//examples/tank_station:conformance_sources",
+        "//examples/tank_station:conformance_traces",
         "//examples/relay:composition_sources",
         "//examples/relay:inputs",
         "//examples/relay:spec_sources",

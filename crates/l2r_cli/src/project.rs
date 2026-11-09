@@ -103,15 +103,84 @@ fn is_lean_root(name: &str) -> bool {
     chars.next().is_some_and(|c| c.is_ascii_uppercase()) && chars.all(|c| c.is_ascii_alphanumeric())
 }
 
-fn build_file() -> String {
-    "load(\"@l2r//bazel:l2r.bzl\", \"l2r_check_test\")\n\
-     \n\
-     # Fails when the generated scaffold differs from the approved plan, when the\n\
-     # approval is stale (the model, the Lean inventory, the generator or a profile\n\
-     # changed since it was recorded), or when an implementation file exceeds its\n\
-     # budget. Until a plan has been approved and generated it fails and says so.\n\
-     l2r_check_test(name = \"scaffold_matches_approved_plan_test\")\n"
-        .to_string()
+fn build_file(id: &str) -> String {
+    format!(
+        "load(\"@l2r//bazel:l2r.bzl\", \"l2r_check_test\", \"l2r_conformance_traces\")\n\
+         \n\
+         # Fails when the generated scaffold differs from the approved plan, when the\n\
+         # approval is stale (the model, the Lean inventory, the generator or a profile\n\
+         # changed since it was recorded), or when an implementation file exceeds its\n\
+         # budget. Until a plan has been approved and generated it fails and says so.\n\
+         l2r_check_test(name = \"scaffold_matches_approved_plan_test\")\n\
+         \n\
+         # The recorder of the derived conformance harness (`l2r conformance --rust`):\n\
+         # exists once verification/traces.rs does. See verification/README.md.\n\
+         l2r_conformance_traces(\n    name = \"conformance_traces\",\n    crate = \"{id}_scaffold\",\n)\n"
+    )
+}
+
+fn verification_lakefile(id: &str, source: Option<&L2rSource>) -> String {
+    let l2r = match source {
+        Some(L2rSource::Commit(commit)) => format!(
+            "require l2r from git \"https://github.com/syncom-systems/l2r.git\" @ \"{commit}\" / \"lean\""
+        ),
+        Some(L2rSource::Path(path)) => format!("require l2r from \"{path}\" / \"lean\""),
+        None => "-- Pin this to the L2R commit your workspace uses.\n\
+                 require l2r from git \"https://github.com/syncom-systems/l2r.git\" @ \"main\" / \"lean\""
+            .to_string(),
+    };
+    format!(
+        "import Lake\nopen Lake DSL\n\n\
+         /-!\nEvidence about the composed system: the network the architecture model approves\n\
+         (derived by `l2r lean-composition`), the conformance replayer (derived by\n\
+         `l2r conformance --lean`), and your own system proofs.\n-/\n\
+         package «{id}_verification»\n\n\
+         -- The specification, and L2R's semantics of composition.\n\
+         require «{id}_spec» from \"..\" / \"spec\"\n\
+         {l2r}\n\n\
+         -- Every module under L2RDerived/ (there is no L2RDerived.lean).\n\
+         @[default_target]\nlean_lib L2RDerived where\n  globs := #[.submodules `L2RDerived]\n"
+    )
+}
+
+fn verification_readme(id: &str) -> String {
+    format!(
+        "# Evidence about the composed system\n\
+         \n\
+         Nothing here is part of the generation plan; all of it is derived from the\n\
+         model and the Lean inventory, or written by you about what was derived.\n\
+         \n\
+         ```sh\n\
+         L2R=\"bazel run @l2r//crates/l2r_cli:l2r --\"\n\
+         M=$PWD/architecture.toml\n\
+         mkdir -p verification/L2RDerived\n\
+         \n\
+         # The network your model approves, as Lean, wired to L2R's semantics.\n\
+         $L2R lean-composition $M > verification/L2RDerived/{id}.lean\n\
+         \n\
+         # Conformance: the generated Rust scheduler against its Lean model.\n\
+         $L2R conformance $M --rust > verification/traces.rs\n\
+         $L2R conformance $M --lean > verification/Conformance.lean\n\
+         bazel run //:conformance_traces -- 3 500 40 > /tmp/{id}-traces.txt\n\
+         (cd verification && lake build && lake env lean --run Conformance.lean /tmp/{id}-traces.txt)\n\
+         ```\n\
+         \n\
+         The last line must print `CONFORMANCE n/n sequences agree`. The three numbers\n\
+         are: the length up to which *every* operation sequence is tried, and the number\n\
+         and length of pseudo-random longer ones.\n\
+         \n\
+         What this establishes, and what it does not:\n\
+         \n\
+         | Claim | Kind |\n\
+         | --- | --- |\n\
+         | Every run of the Lean scheduler model is a behaviour the semantics permit | proved, in L2R, for every network |\n\
+         | The generated Rust `System` behaves like that model | **tested**, on the sequences and sample messages tried |\n\
+         | `imp.rs` and `routes.rs` compute what the Lean specification says | **tested** by the same run, through the scheduler; not proved |\n\
+         | Properties of the composed system | whatever you prove about `L2RDerived.{id}` (use `L2R.Async1.reachable_invariant`, then `L2R.Async1.Ports.run_invariant`) |\n\
+         \n\
+         Re-derive all three files after every change to the model or the Lean\n\
+         specification: each records the digests of what it was derived from.\n"
+    )
 }
 
 fn module_file(id: &str, source: &L2rSource) -> String {
@@ -185,6 +254,8 @@ fn readme(id: &str, lean_root: &str, project: &str) -> String {
          # 5. Test. The first test is the generated contract tests and your own;\n\
          #    the second fails on drift, a stale approval or a blown budget.\n\
          bazel test //...\n\
+         \n\
+         # 6. Evidence about the composed system: {project}verification/README.md.\n\
          ```\n\
          \n\
          `generate` refuses to run when anything the approval was recorded for has\n\
@@ -225,7 +296,13 @@ pub fn init(options: &InitOptions) -> Outcome {
             )
         })
         .collect();
-    files.push(("BUILD.bazel".into(), build_file()));
+    files.push(("BUILD.bazel".into(), build_file(id)));
+    files.push((
+        "verification/lakefile.lean".into(),
+        verification_lakefile(id, workspace.as_ref()),
+    ));
+    files.push(("verification/lean-toolchain".into(), LEAN_TOOLCHAIN.into()));
+    files.push(("verification/README.md".into(), verification_readme(id)));
     files.push(("README.md".into(), readme(id, lean_root, "")));
     if let Some(source) = workspace {
         files.push(("MODULE.bazel".into(), module_file(id, source)));

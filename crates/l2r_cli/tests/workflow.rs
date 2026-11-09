@@ -312,9 +312,15 @@ fn init_creates_a_valid_project_and_never_overwrites() {
         "spec/PumpStation.lean",
         "spec/PumpStation/Monitor.lean",
         "spec/PumpStation/Wiring.lean",
+        "verification/lakefile.lean",
+        "verification/lean-toolchain",
+        "verification/README.md",
     ] {
         assert!(dir.join(file).is_file(), "{file} missing");
     }
+    // The verification package depends on the project's own specification.
+    let lakefile = fs::read_to_string(dir.join("verification/lakefile.lean")).unwrap();
+    assert!(lakefile.contains("require «pump_station_spec» from \"..\" / \"spec\""));
     // Without a workspace flag, no workspace files are written.
     assert!(!dir.join("MODULE.bazel").exists());
     // The names are the project's own, everywhere.
@@ -363,6 +369,9 @@ fn init_with_a_workspace_pins_l2r() {
     assert!(module.contains("commit = \"0123abc\""));
     assert!(dir.join(".bazelversion").is_file());
     assert!(dir.join("spec/Pump/Monitor.lean").is_file());
+    // The Lean library is pinned to the same commit as the Bazel module.
+    let lakefile = fs::read_to_string(dir.join("verification/lakefile.lean")).unwrap();
+    assert!(lakefile.contains("@ \"0123abc\" / \"lean\""), "{lakefile}");
 }
 
 #[test]
@@ -425,4 +434,32 @@ fn inventory_needs_a_lake_project_and_root_modules() {
     assert!(no_project.stderr.contains("not a Lake project"));
     assert!(!dir.join("out.json").exists());
     assert_ne!(l2r(&["inventory", &project, "--out", &out]).code, 0);
+}
+
+#[test]
+fn conformance_prints_both_sides_for_a_hierarchical_model_only() {
+    let dir = scratch_dir("conformance").join("p");
+    let target = dir.display().to_string();
+    assert_eq!(l2r(&["init", &target, "--id", "pump_station"]).code, 0);
+    let model = dir.join("architecture.toml").display().to_string();
+    let rust = l2r(&["conformance", &model, "--rust"]);
+    assert_eq!(rust.code, 0, "{}", rust.stderr);
+    assert!(
+        rust.stdout
+            .contains("use pump_station_scaffold::pump_station::{Progress, System};")
+    );
+    let lean = l2r(&["conformance", &model, "--lean"]);
+    assert_eq!(lean.code, 0, "{}", lean.stderr);
+    assert!(lean.stdout.contains("import L2RDerived.pump_station"));
+    assert_eq!(l2r(&["conformance", &model]).code, 2);
+
+    // The older profiles have their own, hand-written conformance lanes.
+    let (_dir, v0) = project("conformance-v0");
+    let refused = l2r(&["conformance", &v0, "--rust"]);
+    assert_eq!(refused.code, 1);
+    assert!(
+        refused.stderr.contains("v2 models only"),
+        "{}",
+        refused.stderr
+    );
 }

@@ -41,7 +41,8 @@ MODULE.bazel  .bazelversion  .bazelrc  .gitignore   a Bazel workspace pinning L2
 architecture.toml                                    the model: one composite, one machine, three ports
 spec/                                                the Lean project: PumpStation/Monitor.lean, Wiring.lean
 lean-inventory.json                                  what that Lean exports
-BUILD.bazel                                          the drift test
+BUILD.bazel                                          the drift test, and the conformance recorder once derived
+verification/                                        a Lake package for the derived network, conformance and your proofs
 README.md                                            the loop, with this project's names
 ```
 
@@ -184,7 +185,15 @@ strength:
    by `L2R.Async1.Ports.run_invariant`. `examples/crossing_v1/composition` is a
    complete worked case (safety, deadlock-freedom, liveness under stated
    fairness).
-3. **The Rust computes what Lean says.** Translate the implementation back to
+3. **The generated scheduler and your implementation behave like the Lean
+   model, on what was tried.** `verification/README.md` in your project has the
+   five commands: `l2r conformance` derives a recorder that drives the generated
+   `System` (with your `imp.rs` and `routes.rs`) and a Lean program that replays
+   every recorded sequence on the scheduler model over your Lean `step`
+   functions. It needs no proof effort and catches a wrong transition, a wrong
+   translation, a wrong route order or an overflow on the sequences and sample
+   messages it tries. It is a test.
+4. **The Rust computes what Lean says.** Translate the implementation back to
    Lean with Charon and Aeneas and prove refinement. `verification/aeneas` and
    `verification/aeneas_v1` are worked cases, with the checks that keep such a
    proof honest (source identity, pinned statements, axiom audit, kernel replay,
@@ -194,9 +203,9 @@ What L2R gives every project without further work: the model is validated
 against compiled Lean, the plan is deterministic and bound to its inputs, the
 write boundary is safe, drift is detected, and the semantics and the scheduler
 model your system is an instance of are proved once, generically. What it does
-not give you automatically is steps 2 and 3 for *your* machines: those are
+not give you automatically is steps 2 and 4 for *your* machines: those are
 proofs you write, and until you do, the honest status of your implementation is
-"tested".
+"tested" (step 3).
 
 ## Using L2R in CI
 
