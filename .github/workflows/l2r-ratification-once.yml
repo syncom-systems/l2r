@@ -1,0 +1,85 @@
+# One-time maintainer-authorized ratification, 2026-11-09.
+# The GitHub Discussions are the authoritative PRD / ADR records.
+name: L2R governance ratification (one time)
+
+on:
+  push:
+    paths:
+      - .github/workflows/l2r-ratification-once.yml
+
+permissions:
+  discussions: write
+
+jobs:
+  ratify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Mark the PRD and ADRs accepted in GitHub Discussions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import re
+          import subprocess
+
+          owner, repo = "syncom-systems", "l2r"
+          records = [(1, "PRD v0.1"), (2, "ADR-0001"), (4, "ADR-0002"), (5, "ADR-0003"), (9, "ADR-0004")]
+          ratification = "2026-11-09"
+          query = """query($owner:String!, $name:String!, $number:Int!) {
+            repository(owner:$owner, name:$name) {
+              discussion(number:$number) { id title body }
+            }
+          }"""
+          mutation = """mutation($id:ID!, $body:String!) {
+            updateDiscussion(input:{discussionId:$id,body:$body}) {
+              discussion { id title body }
+            }
+          }"""
+
+          def graphql(query_text, args):
+              cmd = ["gh", "api", "graphql", "-f", "query=" + query_text]
+              for key, value in args.items():
+                  cmd += ["-F" if isinstance(value, int) else "-f", key + "=" + str(value)]
+              response = json.loads(subprocess.check_output(cmd, text=True))
+              if response.get("errors"):
+                  raise RuntimeError(response["errors"])
+              return response["data"]
+
+          # Fail before any writes if any discussion is missing.
+          discussions = []
+          for number, label in records:
+              payload = graphql(query, {"owner": owner, "name": repo, "number": number})
+              disc = payload["repository"]["discussion"]
+              if not disc:
+                  raise RuntimeError(f"Missing {label} discussion #{number}")
+              discussions.append((number, label, disc))
+
+          for number, label, disc in discussions:
+              body = disc["body"]
+              lines = body.splitlines(keepends=True)
+              found_status = False
+              for i, line in enumerate(lines[:45]):
+                  if re.match(r"^\s*(?:[-*]\s*)?\*\*Status:\*\*", line, flags=re.I):
+                      lines[i] = re.sub(r"(?i)(\*\*Status:\*\*)[^\n]*", r"\1 Accepted (ratified by maintainer on " + ratification + ")", line, count=1)
+                      found_status = True
+                      break
+              body = "".join(lines)
+              if not found_status:
+                  body = re.sub(r"(?m)^(# .*)$", r"\1\n\n**Status:** Accepted (ratified by maintainer on " + ratification + ")", body, count=1)
+              marker = "**Ratification record (" + ratification + "):**"
+              if marker not in body:
+                  note = ("> " + marker + " Accepted by the L2R project maintainer. "
+                          "Historical Proposed/Draft wording is superseded by this ratification. "
+                          "Future improvements may be recorded as explicit amendments.")
+                  pos = body.find("\n")
+                  body = body[:pos+1] + "\n" + note + "\n" + body[pos+1:] if pos >= 0 else note + "\n" + body
+              if body == disc["body"]:
+                  print(f"Already ratified: discussion #{number}, {label}")
+                  continue
+              changed = graphql(mutation, {"id": disc["id"], "body": body})["updateDiscussion"]["discussion"]
+              if marker not in changed["body"] or "**Status:** Accepted" not in changed["body"]:
+                  raise RuntimeError(f"Ratification verification failed on discussion #{number}")
+              print(f"RATIFIED discussion #{number}: {changed['title']}")
+          PY
