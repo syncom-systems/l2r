@@ -110,11 +110,17 @@ Three different claims are easy to conflate:
 - **Liveness under fairness**: *every* run satisfying explicit fairness
   hypotheses reaches the goal. `L2R.Async1.fair_termination` is the proof
   principle (a ranking with helpful actions over a `Trace`, with weak fairness of
-  deliveries and a recurring environment event as hypotheses). The example's
-  liveness is **not proved**; it is tested by an exhaustive finite-state search
-  (`FairCycles.lean`). Weak fairness is not sufficient with bounded mailboxes: a
-  delivery can be enabled only intermittently, so the argument also uses that
-  the timer keeps being sent and that bounds force deliveries.
+  deliveries and a recurring environment event as hypotheses). For the repaired crossing,
+  at capacities (2, 2), it is **proved** that every trace with weak fairness of
+  deliveries and timer expiries *accepted* again and again acknowledges a pending
+  request (`CrossingV1Liveness.pending_request_acknowledged`). Four further theorems
+  show the hypotheses are satisfiable and that each is needed. Weak fairness alone
+  with a merely *offered* timer is not enough with bounded mailboxes: a delivery
+  can be enabled only intermittently, and a stream of presses can keep the
+  acknowledging delivery disabled (`starvation_possible`). The exhaustive search
+  (`FairCycles.lean`) is kept as a cross-check, and counts only accepted timer
+  sends. That the round-robin scheduler provides weak fairness is **assumed**, not
+  proved.
 - **Unconditional progress**: false whenever the environment can withhold a
   required event forever (here, the timer). L2R does not claim it.
 

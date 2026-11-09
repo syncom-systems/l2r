@@ -9,6 +9,8 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 sh_test(
     name = "composition_v1_test",
     size = "large",
+    # Every mutant and bypass rebuilds the modules; the 900 s default for "large" is not enough.
+    timeout = "eternal",
     srcs = ["composition_test.sh"],
     args = [
         "$(rootpath //verification/aeneas:toolchain_manifest)",

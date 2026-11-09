@@ -8,4 +8,8 @@ weakened_statement	examples/crossing_v1/composition/CrossingV1Properties.lean	  
 silent_environment	lean/L2R/Async1.lean	      StepL E k (.send p m) (inject N k p m)	      StepL E k (.send p m) k	proof
 weakened_definition	lean/L2R/Async1.lean	def anyEnv : Env N := fun _ _ _ => True	def anyEnv : Env N := fun _ _ _ => False	proof
 weakened_capacity_check	lean/L2R/Async1.lean	    decide ((k.inbox d).length + (msgsFor N d ms).length ≤ N.cap d)	    decide ((k.inbox d).length + (msgsFor N d ms).length ≤ N.cap d + 1)	proof
-exit_early	examples/crossing_v1/composition/CrossingV1Properties.lean	/-! ## Safety, capacity and absence of deadlock -/	#exit\n/-! ## Safety, capacity and absence of deadlock -/	audit
+exit_early	examples/crossing_v1/composition/CrossingV1Properties.lean	/-! ## Safety, capacity and absence of deadlock -/	#exit\n/-! ## Safety, capacity and absence of deadlock -/	proof
+sorry_liveness_ranking	examples/crossing_v1/composition/CrossingV1Liveness.lean	theorem live_cond : ∀ c ∈ reach, LiveCond c := by decide +kernel	theorem live_cond : ∀ c ∈ reach, LiveCond c := by sorry	audit
+native_decide_liveness	examples/crossing_v1/composition/CrossingV1Liveness.lean	theorem live_cond : ∀ c ∈ reach, LiveCond c := by decide +kernel	theorem live_cond : ∀ c ∈ reach, LiveCond c := by native_decide	audit
+weakened_timer_assumption	examples/crossing_v1/composition/CrossingV1Liveness.lean	def IsTimerSend : Label N → Prop := fun l => alab l = .tick	def IsTimerSend : Label N → Prop := fun l => alab l ≠ .dL	proof
+witness_sorry	examples/crossing_v1/composition/CrossingV1LivenessWitness.lean	theorem reach_has_edge : ∀ c ∈ reach, ledges c ≠ [] := by decide +kernel	theorem reach_has_edge : ∀ c ∈ reach, ledges c ≠ [] := by sorry	audit

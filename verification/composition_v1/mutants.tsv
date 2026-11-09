@@ -9,3 +9,5 @@ sched_serves_newest	lean/L2R/Async1.lean	  match k.inbox c with\n  | [] => none\
 spec_signal_drops_queued_request	examples/crossing_v1/spec/CrossingV1/Signal.lean	  | .walk, .crossingRequested => (.walkQueued, none)	  | .walk, .crossingRequested => (.walk, none)	examples/crossing_v1/composition/CrossingV1Properties.lean:reach_coherent,dist_certificate
 port_timer_injects_requests	examples/crossing_v1/spec/CrossingV1/Ports.lean	  | .expired => .timerExpired	  | .expired => .crossingRequested	examples/crossing_v1/composition/CrossingV1Properties.lean:send_timer
 sched_sticky_cursor	lean/L2R/Async1.lean	(deliver N s.cfg c).map fun k => (⟨k, (c.val + 1) % N.size⟩ : Sched N)	(deliver N s.cfg c).map fun k => (⟨k, c.val⟩ : Sched N)	accepted
+liveness_rank_ignores_need	examples/crossing_v1/composition/CrossingV1Liveness.lean	3 * need c.2.1 + (2 - c.2.2.2.length)	need c.2.1 + (2 - c.2.2.2.length)	examples/crossing_v1/composition/CrossingV1Liveness.lean:live_cond
+liveness_helper_dropped	examples/crossing_v1/composition/CrossingV1Liveness.lean	else if held c.2.1 then none else some ⟨0, by decide⟩	else none	examples/crossing_v1/composition/CrossingV1Liveness.lean:live_cond
