@@ -6,4 +6,6 @@
 *.swo
 .idea/
 .vscode/
-user.bazelrc
+
+# Local agent state (worktrees, caches): never part of the repository.
+.claude/
