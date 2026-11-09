@@ -61,3 +61,21 @@ l2r_rust_test(
         "//crates/l2r_validate",
     ],
 )
+
+l2r_rust_test(
+    name = "l2r_plan_v2_test",
+    srcs = ["tests/v2.rs"],
+    compile_data = [
+        "//examples/relay:composition_derived",
+        "//examples/tank_station:architecture.approval.json",
+        "//examples/tank_station:composition_derived",
+        "//lean:sources",
+    ],
+    deps = [
+        ":l2r_plan",
+        "//crates/l2r_model",
+        "//crates/l2r_testing",
+        "//crates/l2r_validate",
+        "@crates//:serde_json",
+    ],
+)

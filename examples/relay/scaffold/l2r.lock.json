@@ -1,0 +1,103 @@
+{
+  "format": "l2r.lock/v0",
+  "plan_digest": "sha256:22439a0c8da134a4306e1670a2866cbbb3617776dcc03aee08e4236fc55edf15",
+  "generator": "l2r 0.1.0",
+  "files": [
+    {
+      "path": "BUILD.bazel",
+      "ownership": "generated",
+      "component": "plant",
+      "digest": "sha256:f8536b2def902b58de68b33e2293d94549fb70eb0a9e0b3da4d0932d37ef778f"
+    },
+    {
+      "path": "src/lib.rs",
+      "ownership": "generated",
+      "component": "plant",
+      "digest": "sha256:d6490fa617a79dc5ad2c8e762394c4b358399767a845071ee9a115d73ee3185d"
+    },
+    {
+      "path": "src/plant/mod.rs",
+      "ownership": "generated",
+      "component": "plant",
+      "digest": "sha256:7c111642f8c9503a521082f02107a4845f6f815ddd1c07e21a9025bd16125060"
+    },
+    {
+      "path": "src/plant/routes.rs",
+      "ownership": "implementation",
+      "component": "plant"
+    },
+    {
+      "path": "src/plant/zone_a/cell/mod.rs",
+      "ownership": "generated",
+      "component": "cell",
+      "digest": "sha256:35d2e8788e689fa99c55e6a5412af7b9dabe18903396e9645659cb96fc181659"
+    },
+    {
+      "path": "src/plant/zone_a/cell/routes.rs",
+      "ownership": "implementation",
+      "component": "cell"
+    },
+    {
+      "path": "src/plant/zone_a/cell/source/contract_tests.rs",
+      "ownership": "generated",
+      "component": "source",
+      "digest": "sha256:8997eb26224e00410be5e1614f3147cc44f63897ebcf1c08b4351d2eede3ea2d"
+    },
+    {
+      "path": "src/plant/zone_a/cell/source/imp.rs",
+      "ownership": "implementation",
+      "component": "source"
+    },
+    {
+      "path": "src/plant/zone_a/cell/source/mod.rs",
+      "ownership": "generated",
+      "component": "source",
+      "digest": "sha256:b7b5755710c21e30cb9308f3873c26bb4a77da0dbbbd8646e4b87c2b45826a62"
+    },
+    {
+      "path": "src/plant/zone_a/mod.rs",
+      "ownership": "generated",
+      "component": "zone_a",
+      "digest": "sha256:f16d49662061a2b2753c2083b736a39b7971401ba660fa755a330c2161ec7b76"
+    },
+    {
+      "path": "src/plant/zone_a/routes.rs",
+      "ownership": "implementation",
+      "component": "zone_a"
+    },
+    {
+      "path": "src/plant/zone_b/mod.rs",
+      "ownership": "generated",
+      "component": "zone_b",
+      "digest": "sha256:0f73703d25ff75155086df8fb0eecb703c2634a01c87c4121a5f60c4b2df8bcc"
+    },
+    {
+      "path": "src/plant/zone_b/routes.rs",
+      "ownership": "implementation",
+      "component": "zone_b"
+    },
+    {
+      "path": "src/plant/zone_b/sink/contract_tests.rs",
+      "ownership": "generated",
+      "component": "sink",
+      "digest": "sha256:9c3c4247d49088e8c1c78e540e8e15b71c1c586258c4cc1d70e725293843c16a"
+    },
+    {
+      "path": "src/plant/zone_b/sink/imp.rs",
+      "ownership": "implementation",
+      "component": "sink"
+    },
+    {
+      "path": "src/plant/zone_b/sink/mod.rs",
+      "ownership": "generated",
+      "component": "sink",
+      "digest": "sha256:4904e018451e42703df599281fda05a98d0190e72d35299e9ef518ae65a2403c"
+    },
+    {
+      "path": "src/types.rs",
+      "ownership": "generated",
+      "component": "plant",
+      "digest": "sha256:d53d9b297de01ce19cdeddca925e9ff073ebd1f263707a7bf1c5896359a66c7f"
+    }
+  ]
+}

@@ -38,6 +38,39 @@ pub fn example_v1_inventory() -> Inventory {
     load::parse_inventory(EXAMPLE_V1_INVENTORY).expect("v1 example inventory parses")
 }
 
+/// The hierarchical (`v2`) example model: the tank filling station.
+pub const TANK_MODEL: &str = include_str!("../../../examples/tank_station/architecture.toml");
+
+/// The tank station's Lean inventory (`l2r.lean-inventory/v1`).
+pub const TANK_INVENTORY: &str = include_str!("../../../examples/tank_station/lean-inventory.json");
+
+/// Parses the tank station model.
+pub fn tank_model() -> Model {
+    load::parse_model(TANK_MODEL).expect("tank model parses")
+}
+
+/// Parses the tank station inventory.
+pub fn tank_inventory() -> Inventory {
+    load::parse_inventory(TANK_INVENTORY).expect("tank inventory parses")
+}
+
+/// The relay generator fixture (`v2`): deep nesting, port chains, two routes
+/// to one receiver.
+pub const RELAY_MODEL: &str = include_str!("../../../examples/relay/architecture.toml");
+
+/// The relay fixture's Lean inventory.
+pub const RELAY_INVENTORY: &str = include_str!("../../../examples/relay/lean-inventory.json");
+
+/// Parses the relay model.
+pub fn relay_model() -> Model {
+    load::parse_model(RELAY_MODEL).expect("relay model parses")
+}
+
+/// Parses the relay inventory.
+pub fn relay_inventory() -> Inventory {
+    load::parse_inventory(RELAY_INVENTORY).expect("relay inventory parses")
+}
+
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
 /// Creates a fresh, empty directory under the test's scratch area.

@@ -47,7 +47,7 @@ pub fn check(model: &Model, findings: &mut Findings) {
                 format!("composite `{}` does not exist", port.composite),
             ),
         }
-        match model.component(&port.to) {
+        match model.component(port.target()) {
             Some(child)
                 if child.profile == profiles::TRANSITION_CORE_V0
                     && child.parent.as_deref() == Some(port.composite.as_str()) => {}
@@ -56,7 +56,8 @@ pub fn check(model: &Model, findings: &mut Findings) {
                 &subject,
                 format!(
                     "`{}` is not a machine inside composite `{}`",
-                    port.to, port.composite
+                    port.target(),
+                    port.composite
                 ),
             ),
         }
@@ -107,12 +108,12 @@ pub fn resolve(
         };
         let message = refs.resolve_enum(&port.message, "message", findings);
         if let Some(input) = model
-            .component(&port.to)
+            .component(port.target())
             .and_then(|c| c.behavior.as_ref())
             .map(|b| b.input.as_str())
         {
             refs.expect_typed(
-                &port.translation,
+                port.translation_name(),
                 "translation",
                 DeclKind::Definition,
                 &port_translation_type(&port.message, input),

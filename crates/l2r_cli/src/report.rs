@@ -123,6 +123,9 @@ fn quoted(text: &str) -> String {
 /// A Mermaid view of the architecture: containment as nested subgraphs, state
 /// ownership on each machine, approved message edges as arrows.
 pub fn mermaid(model: &Model) -> String {
+    if model.schema == l2r_model::MODEL_SCHEMA_V2 {
+        return mermaid_v2(model);
+    }
     let mut out = String::from("flowchart TB\n");
     if let Some(root) = model.components.iter().find(|c| c.parent.is_none()) {
         render_node(model, &root.id, 1, &mut out);
@@ -143,7 +146,44 @@ pub fn mermaid(model: &Model) -> String {
             "  env_{id}([\"port {id}: {msg}\"]) -- \"{id}\" --> {to}",
             id = port.id,
             msg = quoted(&port.message),
-            to = port.to
+            to = port.target()
+        );
+    }
+    out
+}
+
+/// The view of a hierarchical (`v2`) model. Ports are drawn as nodes on the
+/// boundary of their composite, because message edges name them: an `in` port
+/// points at what it feeds, and edges enter and leave composites only through
+/// ports.
+fn mermaid_v2(model: &Model) -> String {
+    let mut out = String::from("flowchart TB\n");
+    if let Some(root) = model.components.iter().find(|c| c.parent.is_none()) {
+        render_node(model, &root.id, 1, &mut out);
+    }
+    let node = |id: &str| {
+        if model.ports.iter().any(|p| p.id == id) {
+            format!("port_{id}")
+        } else {
+            id.to_string()
+        }
+    };
+    for port in model.ports.iter().filter(|p| !p.is_out()) {
+        let _ = writeln!(
+            out,
+            "  port_{} -- \"{}\" --> {}",
+            port.id,
+            quoted(port.translation_name()),
+            node(port.target())
+        );
+    }
+    for edge in &model.messages {
+        let _ = writeln!(
+            out,
+            "  {} -- \"{}\" --> {}",
+            node(&edge.from),
+            quoted(&edge.id),
+            node(&edge.to)
         );
     }
     out
@@ -154,7 +194,13 @@ fn render_node(model: &Model, id: &str, depth: usize, out: &mut String) {
         return;
     };
     let indent = "  ".repeat(depth);
-    if component.profile == profiles::COMPOSITE_V0 || component.profile == profiles::COMPOSITE_V1 {
+    if [
+        profiles::COMPOSITE_V0,
+        profiles::COMPOSITE_V1,
+        profiles::COMPOSITE_V2,
+    ]
+    .contains(&component.profile.as_str())
+    {
         let _ = writeln!(
             out,
             "{indent}subgraph {}[\"{} ({})\"]",
@@ -162,6 +208,25 @@ fn render_node(model: &Model, id: &str, depth: usize, out: &mut String) {
             quoted(&component.name),
             component.profile
         );
+        if component.profile == profiles::COMPOSITE_V2 {
+            for port in model.ports.iter().filter(|p| p.composite == component.id) {
+                let (shape_open, shape_close, direction) = if port.is_out() {
+                    ("[/\"", "\"/]", "out")
+                } else {
+                    ("[\\\"", "\"\\]", "in")
+                };
+                let capacity = port
+                    .capacity
+                    .map(|n| format!("<br/>outbox {n}"))
+                    .unwrap_or_default();
+                let _ = writeln!(
+                    out,
+                    "{indent}  port_{id}{shape_open}{direction} {id}<br/>{msg}{capacity}{shape_close}",
+                    id = port.id,
+                    msg = quoted(&port.message),
+                );
+            }
+        }
         for child in model.children(id) {
             render_node(model, &child.id, depth + 1, out);
         }

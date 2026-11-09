@@ -15,8 +15,14 @@ pub const MODEL_SCHEMA: &str = "l2r.architecture/v0";
 /// (profile `composite/v1`). Every `v0` model is also accepted unchanged.
 pub const MODEL_SCHEMA_V1: &str = "l2r.architecture/v1";
 
+/// The model schema for hierarchical composition (profile `composite/v2`):
+/// nested composites, input and output ports, and machines whose Lean types
+/// carry data (profile `transition-core/v1`). A `v2` model uses only those two
+/// component profiles; `v0` and `v1` models are unchanged.
+pub const MODEL_SCHEMA_V2: &str = "l2r.architecture/v2";
+
 /// Every model schema this generator accepts.
-pub const SUPPORTED_SCHEMAS: &[&str] = &[MODEL_SCHEMA, MODEL_SCHEMA_V1];
+pub const SUPPORTED_SCHEMAS: &[&str] = &[MODEL_SCHEMA, MODEL_SCHEMA_V1, MODEL_SCHEMA_V2];
 
 /// A complete architectural model, as authored by the architect.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,21 +127,54 @@ pub struct MessageEdge {
     pub translation: String,
 }
 
-/// A typed input port of a composite: the only way the environment can add a
-/// message to the composite's children.
+/// A typed port of a composite: the only way messages cross its boundary.
+///
+/// Schema `v1` has input ports only, each feeding one child machine. Schema
+/// `v2` adds a `direction`: an `in` port forwards to one child machine or to an
+/// `in` port of a child composite; an `out` port is fed by message edges inside
+/// its composite and, on the root, holds what the system emits to the
+/// environment in a bounded outbox.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Port {
-    /// Stable identifier; also names the generated `send_<id>` function.
+    /// Stable identifier; also names the generated `send_<id>` or `take_<id>`.
     pub id: String,
-    /// The `composite/v1` component this port belongs to.
+    /// The composite this port belongs to.
     pub composite: String,
-    /// The child machine whose mailbox the port feeds.
-    pub to: String,
-    /// Lean inductive type (constructors without fields) of the messages the port accepts.
+    /// What an input port feeds: a child machine, or (schema `v2`) an `in`
+    /// port of a child composite. Absent on `out` ports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Lean type of the messages the port carries.
     pub message: String,
-    /// Lean function `PortMessage → ToInput` (total) giving the message's meaning.
-    pub translation: String,
+    /// Lean function `PortMessage → Target` (total) giving an input port
+    /// message's meaning to what the port feeds. Absent on `out` ports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
+    /// `"in"` or `"out"` (schema `v2`; `v1` ports are all inputs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<String>,
+    /// Capacity of the outbox of an `out` port of the root composite (schema
+    /// `v2`). Part of the behavioral semantics: a full outbox blocks senders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capacity: Option<u32>,
+}
+
+impl Port {
+    /// The port's target, or the empty string when it has none.
+    pub fn target(&self) -> &str {
+        self.to.as_deref().unwrap_or_default()
+    }
+
+    /// The port's translation, or the empty string when it has none.
+    pub fn translation_name(&self) -> &str {
+        self.translation.as_deref().unwrap_or_default()
+    }
+
+    /// True for an `out` port (schema `v2`).
+    pub fn is_out(&self) -> bool {
+        self.direction.as_deref() == Some("out")
+    }
 }
 
 impl Model {

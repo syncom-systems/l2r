@@ -7,6 +7,8 @@ l2r_rust_library(
     compile_data = [
         "//examples/crossing:inputs",
         "//examples/crossing_v1:inputs",
+        "//examples/relay:inputs",
+        "//examples/tank_station:inputs",
     ],
     visibility = ["//visibility:public"],
     deps = ["//crates/l2r_model"],

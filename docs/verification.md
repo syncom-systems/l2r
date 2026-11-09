@@ -19,6 +19,15 @@ evidence for tested inputs. It is not correspondence (2). A proof about the spec
 (1) says nothing about the code until (2) exists. A verified transition function
 (2) does not verify the composed system (4).
 
+**Hierarchical models (`composite/v2`).** A hierarchical model has no semantics
+of its own: its behaviour is the `l2r.async/v1` network of its machines, with
+one extra child per output port of the root (the outbox; the environment taking
+a message is that child's delivery step). `lean/L2R/Async1Ports.lean` proves
+that the generated scheduler's Lean model, which serves machines only, chooses
+only permitted steps. What is and is not yet established for the `v2` examples
+is listed in [`composite-v2.md`](composite-v2.md); in particular the generated
+Rust is not yet tied to that model by conformance testing or proof.
+
 ## Scheduler order vs. the space of interleavings
 
 `composite/v0` generates a scheduler that serves children round-robin in

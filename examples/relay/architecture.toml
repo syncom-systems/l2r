@@ -1,0 +1,198 @@
+# Relay: a generator fixture, not an illustration of good design.
+#
+# It exercises what the tank station does not: a machine three composites deep,
+# a chain of forwarded input ports, routes that pass several edges, one output
+# that reaches the same receiver twice in one delivery, and wrapping arithmetic.
+
+schema = "l2r.architecture/v2"
+
+[system]
+id = "relay"
+name = "Relay fixture"
+rust_crate = "relay_scaffold"
+lean_inventory = "lean-inventory.json"
+output_dir = "scaffold"
+
+[[component]]
+id = "plant"
+name = "Plant"
+profile = "composite/v2"
+responsibility = "Holds the two zones and the system's ports."
+rust_module = "plant"
+
+[[component]]
+id = "zone_a"
+name = "Zone A"
+parent = "plant"
+profile = "composite/v2"
+responsibility = "Wraps the cell that holds the source."
+rust_module = "zone_a"
+
+[[component]]
+id = "cell"
+name = "Cell"
+parent = "zone_a"
+profile = "composite/v2"
+responsibility = "The innermost boundary around the source."
+rust_module = "cell"
+
+[[component]]
+id = "source"
+name = "Source"
+parent = "cell"
+profile = "transition-core/v1"
+responsibility = "Remembers the last number poked and emits it when it is new."
+rust_module = "source"
+mailbox_capacity = 1
+
+[component.behavior]
+owned_state = "Relay.Source.State"
+input = "Relay.Source.Input"
+output = "Relay.Source.Output"
+init = "Relay.Source.init"
+step = "Relay.Source.step"
+invariants = ["Relay.Source.emits_only_news"]
+
+[[component]]
+id = "zone_b"
+name = "Zone B"
+parent = "plant"
+profile = "composite/v2"
+responsibility = "Wraps the sink."
+rust_module = "zone_b"
+
+[[component]]
+id = "sink"
+name = "Sink"
+parent = "zone_b"
+profile = "transition-core/v1"
+responsibility = "Adds up every value it receives, wrapping at 2^16, and remembers whether any was urgent."
+rust_module = "sink"
+notes = "The sum wraps exactly as Lean's UInt16 does. Rust's `+` does not."
+mailbox_capacity = 2
+
+[component.behavior]
+owned_state = "Relay.Sink.State"
+input = "Relay.Sink.Input"
+output = "Relay.Sink.Output"
+init = "Relay.Sink.init"
+step = "Relay.Sink.step"
+invariants = ["Relay.Sink.urgent_is_sticky"]
+
+# Input: plant -> zone_a -> cell -> source, three forwarded ports.
+[[port]]
+id = "poke"
+composite = "plant"
+direction = "in"
+message = "Relay.Ports.Poke"
+to = "zone_a_in"
+translation = "Relay.Ports.plantToZone"
+
+[[port]]
+id = "zone_a_in"
+composite = "zone_a"
+direction = "in"
+message = "Relay.Ports.Poke"
+to = "cell_in"
+translation = "Relay.Ports.zoneToCell"
+
+[[port]]
+id = "cell_in"
+composite = "cell"
+direction = "in"
+message = "Relay.Ports.Poke"
+to = "source"
+translation = "Relay.Ports.cellToSource"
+
+# Output of the source, climbing two boundaries.
+[[port]]
+id = "cell_out"
+composite = "cell"
+direction = "out"
+message = "Relay.Token"
+
+[[port]]
+id = "zone_a_out"
+composite = "zone_a"
+direction = "out"
+message = "Relay.Token"
+
+# Zone B takes tokens on two ports, both feeding the sink.
+[[port]]
+id = "zone_b_in"
+composite = "zone_b"
+direction = "in"
+message = "Relay.Token"
+to = "sink"
+translation = "Relay.Ports.tokenToSink"
+
+[[port]]
+id = "zone_b_urgent"
+composite = "zone_b"
+direction = "in"
+message = "Relay.Token"
+to = "sink"
+translation = "Relay.Ports.urgentToSink"
+
+[[port]]
+id = "zone_b_out"
+composite = "zone_b"
+direction = "out"
+message = "Relay.Ports.Report"
+
+# What the plant emits.
+[[port]]
+id = "tap"
+composite = "plant"
+direction = "out"
+message = "Relay.Token"
+capacity = 1
+
+[[port]]
+id = "report"
+composite = "plant"
+direction = "out"
+message = "Relay.Ports.Report"
+capacity = 2
+
+[[message]]
+id = "source_to_cell"
+from = "source"
+to = "cell_out"
+translation = "Relay.Routes.sourceToCell"
+
+[[message]]
+id = "cell_to_zone"
+from = "cell_out"
+to = "zone_a_out"
+translation = "Relay.Routes.cellToZone"
+
+[[message]]
+id = "zone_to_b"
+from = "zone_a_out"
+to = "zone_b_in"
+translation = "Relay.Routes.zoneToB"
+
+[[message]]
+id = "zone_to_urgent"
+from = "zone_a_out"
+to = "zone_b_urgent"
+translation = "Relay.Routes.zoneToUrgent"
+
+[[message]]
+id = "zone_to_tap"
+from = "zone_a_out"
+to = "tap"
+translation = "Relay.Routes.zoneToTap"
+
+[[message]]
+id = "sink_to_out"
+from = "sink"
+to = "zone_b_out"
+translation = "Relay.Routes.sinkToOut"
+
+[[message]]
+id = "out_to_report"
+from = "zone_b_out"
+to = "report"
+translation = "Relay.Routes.outToReport"

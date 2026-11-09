@@ -84,4 +84,5 @@ jobs:
           path: |
             bazel-testlogs/verification/aeneas/refinement_test/
             bazel-testlogs/verification/aeneas_v1/refinement_test/
+            bazel-testlogs/verification/composition_v2/composition_v2_test/
           if-no-files-found: ignore

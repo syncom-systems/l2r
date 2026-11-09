@@ -1,0 +1,38 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# The composite/v2 lane: the Lean model of the generated scheduler (machines
+# only; outboxes are emptied by the environment) and the flat networks derived
+# from the hierarchical examples. See composition_test.sh. Tagged
+# `verification`: selected by `bazel test --config=verify //...`, excluded from
+# plain `bazel test //...`.
+sh_test(
+    name = "composition_v2_test",
+    size = "large",
+    timeout = "long",
+    srcs = ["composition_test.sh"],
+    args = ["$(rootpath //verification/aeneas:toolchain_manifest)"],
+    data = [
+        "Audit.lean",
+        "KernelForgery.lean",
+        "bypasses.tsv",
+        "expected-statements.txt",
+        "mutants.tsv",
+        "//examples/relay:architecture.approval.json",
+        "//examples/relay:composition_sources",
+        "//examples/relay:inputs",
+        "//examples/relay:spec_sources",
+        "//examples/tank_station:architecture.approval.json",
+        "//examples/tank_station:composition_sources",
+        "//examples/tank_station:inputs",
+        "//examples/tank_station:spec_sources",
+        "//lean:sources",
+        "//tools/lean_inventory:exporter",
+        "//verification/aeneas:toolchain.sh",
+        "//verification/aeneas:toolchain_manifest",
+    ],
+    tags = [
+        "no-remote",
+        "no-sandbox",
+        "verification",
+    ],
+)

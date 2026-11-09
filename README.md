@@ -1,6 +1,6 @@
 # L2R (Lean to Rust)
 
-**Status:** early, working vertical slice. The maintainer ratified the [PRD](https://github.com/syncom-systems/l2r/discussions/1) and [ADR-0001 through ADR-0004](https://github.com/syncom-systems/l2r/discussions/categories/adrs) on 2026-11-09; the GitHub Discussion bodies have not yet been synchronized with this decision.
+**Status:** early, working vertical slice. The maintainer ratified the [PRD](https://github.com/syncom-systems/l2r/discussions/1) and [ADR-0001 through ADR-0004](https://github.com/syncom-systems/l2r/discussions/categories/adrs) on 2026-11-09 (recorded in each Discussion).
 
 L2R is a human-directed architecture modeling and scaffolding tool. A **human
 architect** describes the components, their nesting, state ownership and
@@ -49,6 +49,13 @@ Rust tests is never presented as proof of correspondence with Lean.
   adds explicit mailbox capacities with backpressure (nothing is dropped), typed
   input ports with explicit rejection, and a scheduler that reports `Blocked`
   instead of stalling silently; see [`docs/composite-v1.md`](docs/composite-v1.md).
+- **Hierarchy, output ports and data** (model schema `v2`). Composites nest to
+  any depth behind typed ports; the root's `out` ports are bounded outboxes the
+  environment empties; states and messages may be Lean structures and
+  inductives with fields (`Bool`, fixed-width integers, `Option`, other such
+  types). Hierarchy is structure: the behaviour is that of the flat network of
+  the machines, so the existing semantics and its theorems apply unchanged. See
+  [`docs/composite-v2.md`](docs/composite-v2.md) and `examples/tank_station`.
 - **A reproducible proof lane in CI.** Pinned Lean, Charon and Aeneas run under
   Bazel. The committed Rust implementations of both example machines and both
   message routes are re-extracted and **proved** in Lean to refine their
@@ -112,6 +119,11 @@ the architecture model changed, until the new plan has been previewed and approv
 | `verification/composition` | The composition lane: audit, kernel replay, deviations, conformance |
 | `verification/composition_v1` | The same lane for `composite/v1`, with mailbox-content conformance and a fair-cycle search |
 | `lean/L2R/Async1.lean` | Semantics `l2r.async/v1`: bounded mailboxes, backpressure, typed ports, fair-termination principle |
+| `examples/tank_station` | Hierarchical example for schema `v2`: a nested subsystem, forwarded ports, two outboxes, data in every message |
+| `examples/relay` | Generator fixture for schema `v2`: deep nesting, port chains, two routes to one receiver, wrapping arithmetic |
+| `lean/L2R/Async1Ports.lean` | Output ports as children of an `l2r.async/v1` network, and the Lean model of the `composite/v2` scheduler |
+| `verification/composition_v2` | The lane for `composite/v2`: scheduler model, derived flat networks, inventory freshness |
+| `docs/composite-v2.md` | Hierarchical composition, output ports, data types: decisions, generated code, what is and is not established |
 | `docs/model-reference.md` | Model schema, profiles, validation rules, write semantics |
 | `docs/generation-boundary.md` | Exact write guarantees, threat model, limits, and the tests behind them |
 | `docs/verification.md` | Kinds of evidence, the verification route, and what is and is not proved |
@@ -121,10 +133,10 @@ the architecture model changed, until the new plan has been previewed and approv
 PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r/discussions):
 
 - [Product Requirements Document (PRD v0.1)](https://github.com/syncom-systems/l2r/discussions/1)
-- [ADR-0001: Foundational architecture](https://github.com/syncom-systems/l2r/discussions/2) — Proposed
-- [ADR-0002: Bazel is the only build and test interface](https://github.com/syncom-systems/l2r/discussions/4) — Proposed
-- [ADR-0003: Architecture model v0, Lean inventory references, and approval semantics](https://github.com/syncom-systems/l2r/discussions/5) — Proposed
-- [ADR-0004: Asynchronous composition semantics and the scheduler relation](https://github.com/syncom-systems/l2r/discussions/9) — Proposed
+- [ADR-0001: Foundational architecture](https://github.com/syncom-systems/l2r/discussions/2) — Accepted 2026-11-09
+- [ADR-0002: Bazel is the only build and test interface](https://github.com/syncom-systems/l2r/discussions/4) — Accepted 2026-11-09
+- [ADR-0003: Architecture model v0, Lean inventory references, and approval semantics](https://github.com/syncom-systems/l2r/discussions/5) — Accepted 2026-11-09
+- [ADR-0004: Asynchronous composition semantics and the scheduler relation](https://github.com/syncom-systems/l2r/discussions/9) — Accepted 2026-11-09
 
 ## Known limits
 
@@ -135,8 +147,14 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
   libraries are trusted inputs (not hash-pinned; their proofs are not
   re-checked, while the repository's own declarations are re-checked by the
   kernel with `leanchecker`). The lane is pinned for Linux x86_64 and macOS arm64 only.
-- v0 state types must be field-less Lean inductives. Message edges connect
-  siblings only (an open decision in ADR-0003).
+- In schemas `v0` and `v1`, state types must be field-less Lean inductives.
+  Schema `v2` supports a closed data subset (no `Nat`, strings, collections or
+  recursive types). Message edges connect siblings only (ADR-0003 D7); in `v2`
+  a boundary is crossed through declared ports.
+- For `composite/v2` the link between the generated Rust and Lean is weaker than
+  for the crossing examples: there is no conformance run and no refinement proof
+  yet, and no system theorem about the tank station. `docs/composite-v2.md`
+  lists exactly what is proved, checked, tested and not established.
 - The composite scheduler realizes one deterministic interleaving. It is not a
   model of every interleaving; its runs are proved to be among them only for
   its Lean model.

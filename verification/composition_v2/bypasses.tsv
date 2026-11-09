@@ -1,0 +1,8 @@
+# Attempts to make the lane pass without a real proof. Each must be rejected by the
+# named gate: `proof` (does not compile) or `audit` (compiles, audit rejects).
+# name	file	exact text	replacement	gate
+sorry_proof	lean/L2R/Async1Ports.lean	  obtain ⟨c, _, hc⟩ := stepOnce_delivers N machines h\n  exact ⟨.deliver c, StepL.deliver c hc⟩	  sorry	audit
+new_axiom	lean/L2R/Async1Ports.lean	theorem take_sound (E : Env N) {s s' : Sched N} (c : Fin N.size)\n    (h : take N s c = some s') : Step N E s.cfg s'.cfg := by	axiom take_axiom (E : Env N) {s s' : Sched N} (c : Fin N.size)\n    (h : take N s c = some s') : Step N E s.cfg s'.cfg\n\ntheorem take_sound (E : Env N) {s s' : Sched N} (c : Fin N.size)\n    (h : take N s c = some s') : Step N E s.cfg s'.cfg := by\n  exact take_axiom N E c h\n\ntheorem take_sound_unused (E : Env N) {s s' : Sched N} (c : Fin N.size)\n    (h : take N s c = some s') : Step N E s.cfg s'.cfg := by	audit
+weakened_statement	lean/L2R/Async1Ports.lean	theorem run_bounded (E : Env N) {s : Sched N} (h : Run N machines E s) : Bounded N s.cfg :=\n  (run_sound N machines E h).bounded N E	theorem run_bounded (E : Env N) {s : Sched N} (_h : Run N machines E s) : True :=\n  trivial	audit
+weakened_take	lean/L2R/Async1Ports.lean	  (deliver N s.cfg c).map fun k => (⟨k, s.next⟩ : Sched N)	  (deliver N s.cfg c).map fun _ => s	proof
+route_edited_after_derivation	examples/tank_station/composition/L2RDerived/tank_station.lean	    (Tank.Routes.controllerToAlarm o).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩) ++	    ([] : List Tank.Alarm.Input).map (fun i => ⟨⟨0, by decide⟩, i⟩) ++	audit

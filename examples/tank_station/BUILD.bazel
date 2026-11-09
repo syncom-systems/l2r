@@ -1,0 +1,52 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# The tank filling station: the hierarchical example for composite/v2. A nested
+# composite, machines whose types carry data, forwarded input ports and output
+# ports. Model, Lean inventory, approval and the generated scaffold (its own
+# Bazel package, //examples/tank_station/scaffold).
+exports_files(["architecture.approval.json"], visibility = ["//visibility:public"])
+
+filegroup(
+    name = "inputs",
+    srcs = [
+        "architecture.toml",
+        "lean-inventory.json",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# The Lean specification sources, for the proof lanes.
+filegroup(
+    name = "spec_sources",
+    srcs = glob(["spec/**/*.lean"]) + ["spec/lean-toolchain"],
+    visibility = ["//visibility:public"],
+)
+
+# The derived Lean composition (`l2r lean-composition`) and the hand-written
+# system proofs about it.
+filegroup(
+    name = "composition_derived",
+    srcs = glob(["composition/L2RDerived/*.lean"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "composition_sources",
+    srcs = glob(["composition/**/*.lean"]),
+    visibility = ["//visibility:public"],
+)
+
+# The committed scaffold must equal the approved plan of the committed model and
+# inventory: no drift in generated files, a current approval and lock, and every
+# implementation file within its budget.
+sh_test(
+    name = "scaffold_matches_approved_plan_test",
+    srcs = ["check_scaffold.sh"],
+    args = ["$(rootpath //crates/l2r_cli:l2r)"],
+    data = [
+        "architecture.approval.json",
+        ":inputs",
+        "//crates/l2r_cli:l2r",
+        "//examples/tank_station/scaffold:l2r_files",
+    ],
+)

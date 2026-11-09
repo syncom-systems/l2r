@@ -1,0 +1,193 @@
+# Tank filling station: a hierarchical example for composite/v2.
+#
+# It exists to show what the pedestrian crossing examples do not: a nested
+# composite, machines whose states and messages carry data, input ports that are
+# forwarded into a subsystem, and output ports through which the system tells
+# the environment something (bounded outboxes, with backpressure).
+#
+# Behavior lives in the Lean project under spec/. This file owns only structure.
+
+schema = "l2r.architecture/v2"
+
+[system]
+id = "tank_station"
+name = "Tank filling station"
+rust_crate = "tank_station_scaffold"
+lean_inventory = "lean-inventory.json"
+output_dir = "scaffold"
+
+[[component]]
+id = "station"
+name = "Filling station"
+profile = "composite/v2"
+responsibility = "Composes level sensing, the valve controller and the high-level alarm. Owns no behavioral state of its own."
+rust_module = "station"
+
+# --- Level sensing: a subsystem with its own boundary ------------------------
+
+[[component]]
+id = "sensing"
+name = "Level sensing"
+parent = "station"
+profile = "composite/v2"
+responsibility = "Turns raw level samples into confirmed level changes. Nothing outside it sees a raw sample being filtered."
+rust_module = "sensing"
+
+[[component]]
+id = "filter"
+name = "Level filter"
+parent = "sensing"
+profile = "transition-core/v1"
+responsibility = "Classifies raw samples and reports a change of level only after it was confirmed by consecutive samples."
+rust_module = "filter"
+notes = "Pure function. The streak counter saturates; it never wraps."
+implementation_budget_lines = 80
+mailbox_capacity = 2
+
+[component.behavior]
+owned_state = "Tank.Filter.State"
+input = "Tank.Filter.Input"
+output = "Tank.Filter.Output"
+init = "Tank.Filter.init"
+step = "Tank.Filter.step"
+invariants = [
+  "Tank.Filter.one_sample_is_not_enough",
+  "Tank.Filter.reports_only_changes",
+]
+
+# --- Valve controller --------------------------------------------------------
+
+[[component]]
+id = "controller"
+name = "Valve controller"
+parent = "station"
+profile = "transition-core/v1"
+responsibility = "Decides the inlet valve position from the confirmed level and the operator's commands; a high level closes the valve in every mode."
+rust_module = "controller"
+notes = "The interlock is unconditional. Do not add a bypass."
+implementation_budget_lines = 80
+mailbox_capacity = 4
+
+[component.behavior]
+owned_state = "Tank.Controller.State"
+input = "Tank.Controller.Input"
+output = "Tank.Controller.Output"
+init = "Tank.Controller.init"
+step = "Tank.Controller.step"
+invariants = [
+  "Tank.Controller.always_reports",
+  "Tank.Controller.high_level_closes_valve",
+]
+
+# --- Alarm -------------------------------------------------------------------
+
+[[component]]
+id = "alarm"
+name = "High-level alarm"
+parent = "station"
+profile = "transition-core/v1"
+responsibility = "Raises once when the level becomes high and stays raised until the operator acknowledges it."
+rust_module = "alarm"
+implementation_budget_lines = 60
+mailbox_capacity = 2
+
+[component.behavior]
+owned_state = "Tank.Alarm.State"
+input = "Tank.Alarm.Input"
+output = "Tank.Alarm.Output"
+init = "Tank.Alarm.init"
+step = "Tank.Alarm.step"
+invariants = [
+  "Tank.Alarm.count_never_decreases",
+  "Tank.Alarm.stays_active_until_acknowledged",
+]
+
+# --- Ports of the station: its whole interface with the environment ----------
+
+[[port]]
+id = "sample"
+composite = "station"
+direction = "in"
+message = "Tank.Ports.Sample"
+to = "reading"
+translation = "Tank.Ports.sampleToSensing"
+
+[[port]]
+id = "operator"
+composite = "station"
+direction = "in"
+message = "Tank.Ports.Operator"
+to = "controller"
+translation = "Tank.Ports.operatorToController"
+
+[[port]]
+id = "acknowledge"
+composite = "station"
+direction = "in"
+message = "Tank.Ports.Acknowledge"
+to = "alarm"
+translation = "Tank.Ports.acknowledgeToAlarm"
+
+[[port]]
+id = "valve_command"
+composite = "station"
+direction = "out"
+message = "Tank.Ports.ValveCommand"
+capacity = 2
+
+[[port]]
+id = "alarm_notice"
+composite = "station"
+direction = "out"
+message = "Tank.Ports.AlarmNotice"
+capacity = 1
+
+# --- Ports of the sensing subsystem ------------------------------------------
+
+[[port]]
+id = "reading"
+composite = "sensing"
+direction = "in"
+message = "Tank.Ports.Sample"
+to = "filter"
+translation = "Tank.Ports.readingToFilter"
+
+[[port]]
+id = "level_changed"
+composite = "sensing"
+direction = "out"
+message = "Tank.Level"
+
+# --- Message edges -----------------------------------------------------------
+
+# Inside sensing.
+[[message]]
+id = "filter_to_level"
+from = "filter"
+to = "level_changed"
+translation = "Tank.Routes.filterToLevel"
+
+# Inside the station.
+[[message]]
+id = "level_to_controller"
+from = "level_changed"
+to = "controller"
+translation = "Tank.Routes.levelToController"
+
+[[message]]
+id = "controller_to_valve"
+from = "controller"
+to = "valve_command"
+translation = "Tank.Routes.controllerToValve"
+
+[[message]]
+id = "controller_to_alarm"
+from = "controller"
+to = "alarm"
+translation = "Tank.Routes.controllerToAlarm"
+
+[[message]]
+id = "alarm_to_notice"
+from = "alarm"
+to = "alarm_notice"
+translation = "Tank.Routes.alarmToNotice"

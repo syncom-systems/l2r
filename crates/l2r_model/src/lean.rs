@@ -8,14 +8,20 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The only inventory schema this generator accepts.
+/// The original inventory schema: constructors carry only their arity.
 pub const INVENTORY_SCHEMA: &str = "l2r.lean-inventory/v0";
+
+/// The inventory schema that also records, for every inductive type, whether
+/// it is a structure, its parameters and indices, and the name and type of
+/// every constructor field (`tools/lean_inventory/Main.lean --v1`). Required by
+/// model schema `v2`, whose types may carry data.
+pub const INVENTORY_SCHEMA_V1: &str = "l2r.lean-inventory/v1";
 
 /// Exported declarations of one Lean project.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Inventory {
-    /// Schema identifier; must equal [`INVENTORY_SCHEMA`].
+    /// Schema identifier: [`INVENTORY_SCHEMA`] or [`INVENTORY_SCHEMA_V1`].
     pub schema: String,
     /// Lean version that elaborated the declarations.
     pub lean_version: String,
@@ -39,6 +45,23 @@ pub struct Declaration {
     /// Constructors, for inductive types only.
     #[serde(default)]
     pub constructors: Vec<Constructor>,
+    /// True when the inductive type is a Lean `structure` (inventory `v1`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub structure: bool,
+    /// Number of type parameters (inventory `v1`).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub params: u32,
+    /// Number of type indices (inventory `v1`).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub indices: u32,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// Kinds of Lean declaration distinguished by L2R.
@@ -67,6 +90,20 @@ pub struct Constructor {
     pub name: String,
     /// Number of explicit and implicit fields, excluding type parameters.
     pub arity: u32,
+    /// The fields, in order (inventory `v1`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<Field>,
+}
+
+/// One field of a constructor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Field {
+    /// The binder's name (a structure field's name).
+    pub name: String,
+    /// The field's type, pretty-printed with fully qualified names.
+    #[serde(rename = "type")]
+    pub type_: String,
 }
 
 impl Inventory {
