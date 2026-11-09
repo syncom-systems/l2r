@@ -1,6 +1,10 @@
+/bazel-*
 /target/
+.lake/
 .DS_Store
 *.swp
 *.swo
 .idea/
 .vscode/
+user.bazelrc
+verification/aeneas/proof/lake-manifest.json

@@ -1,0 +1,46 @@
+# Bazel is the only build and test interface: this workflow runs exactly what a
+# developer runs locally.
+name: bazel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bazel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Bazel caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel-disk
+            ~/.cache/bazel-repo
+          key: bazel-${{ runner.os }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'bazel/crates.lock') }}-${{ github.sha }}
+          restore-keys: |
+            bazel-${{ runner.os }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'bazel/crates.lock') }}-
+            bazel-${{ runner.os }}-
+
+      - name: Cache flags
+        run: echo "common --disk_cache=$HOME/.cache/bazel-disk --repository_cache=$HOME/.cache/bazel-repo" > user.bazelrc
+
+      - name: Test
+        run: bazel test //...
+
+      - name: Clippy (warnings are errors)
+        run: bazel build --config=lint //...
+
+      - name: rustfmt
+        run: bazel build --config=fmt //...

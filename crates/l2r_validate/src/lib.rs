@@ -1,0 +1,43 @@
+//! Validation of architectural models against their Lean inventory.
+//!
+//! Validation never repairs or guesses: an inconsistent model is rejected with
+//! every finding listed, and only a fully valid model yields a [`Validated`].
+
+mod diagnostic;
+mod lean_refs;
+mod messages;
+pub mod names;
+mod resolved;
+mod structure;
+
+pub use diagnostic::Diagnostic;
+pub use lean_refs::{step_type, translation_type};
+pub use resolved::{ResolvedEnum, ResolvedMachine, Validated, Variant};
+
+use l2r_model::{Inventory, Model};
+
+/// Validates `model` against `inventory`.
+///
+/// Both inputs are canonicalized first, so the result does not depend on the
+/// order in which the architect wrote components, edges or invariants.
+pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<Diagnostic>> {
+    let model = model.canonical();
+    let inventory = inventory.canonical();
+    let mut findings = diagnostic::Findings::default();
+
+    structure::check(&model, &mut findings);
+    lean_refs::check_ownership(&model, &mut findings);
+    let inventory_ok = lean_refs::check_inventory(&inventory, &mut findings);
+    let usable_inventory = inventory_ok.then_some(&inventory);
+    messages::check(&model, usable_inventory, &mut findings);
+    let machines = match usable_inventory {
+        Some(inventory) => lean_refs::resolve_machines(&model, inventory, &mut findings),
+        None => Default::default(),
+    };
+
+    if findings.is_empty() {
+        Ok(Validated::new(model, inventory, machines))
+    } else {
+        Err(findings.into_sorted())
+    }
+}
