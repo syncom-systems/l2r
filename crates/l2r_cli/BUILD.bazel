@@ -3,6 +3,12 @@ load("//bazel:rust.bzl", "l2r_rust_binary", "l2r_rust_test")
 l2r_rust_binary(
     name = "l2r",
     srcs = glob(["src/**/*.rs"]),
+    # The starter project `l2r init` writes and the exporter `l2r inventory` runs.
+    compile_data = [
+        "//examples/starter:spec_sources",
+        "//examples/starter:inputs",
+        "//tools/lean_inventory:exporter",
+    ],
     crate_root = "src/main.rs",
     visibility = ["//visibility:public"],
     deps = [
@@ -16,6 +22,11 @@ l2r_rust_binary(
 
 l2r_rust_test(
     name = "l2r_cli_unit_test",
+    compile_data = [
+        "//examples/starter:spec_sources",
+        "//examples/starter:inputs",
+        "//tools/lean_inventory:exporter",
+    ],
     crate = ":l2r",
 )
 

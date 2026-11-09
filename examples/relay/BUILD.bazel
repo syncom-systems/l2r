@@ -1,4 +1,4 @@
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//bazel:l2r.bzl", "l2r_check_test")
 
 # Relay: a generator fixture for composite/v2 (deep nesting, port chains,
 # multi-edge routes, two routes to one receiver, wrapping arithmetic).
@@ -39,14 +39,4 @@ filegroup(
 # The committed scaffold must equal the approved plan of the committed model and
 # inventory: no drift in generated files, a current approval and lock, and every
 # implementation file within its budget.
-sh_test(
-    name = "scaffold_matches_approved_plan_test",
-    srcs = ["check_scaffold.sh"],
-    args = ["$(rootpath //crates/l2r_cli:l2r)"],
-    data = [
-        "architecture.approval.json",
-        ":inputs",
-        "//crates/l2r_cli:l2r",
-        "//examples/relay/scaffold:l2r_files",
-    ],
-)
+l2r_check_test(name = "scaffold_matches_approved_plan_test")

@@ -18,7 +18,7 @@ pub struct Outcome {
 }
 
 impl Outcome {
-    fn ok(stdout: String) -> Self {
+    pub(crate) fn ok(stdout: String) -> Self {
         Self {
             stdout,
             stderr: String::new(),
@@ -26,7 +26,7 @@ impl Outcome {
         }
     }
 
-    fn refused(stderr: String) -> Self {
+    pub(crate) fn refused(stderr: String) -> Self {
         Self {
             stdout: String::new(),
             stderr,

@@ -74,6 +74,15 @@ Rust tests is never presented as proof of correspondence with Lean.
   bounded conformance testing, not proof. See
   [`verification/composition`](verification/composition/README.md).
 
+## Start a project of your own
+
+[`docs/getting-started.md`](docs/getting-started.md) is the whole workflow for a
+new system in a new repository: `l2r init`, the Lean specification, `l2r
+inventory`, the model, preview/approve/generate, the work packet for the
+implementer, the drift test, and the kinds of evidence. CI runs it end to end in
+a fresh workspace that uses L2R only as an external Bazel dependency
+(`tools/e2e/new_project.sh`).
+
 ## Try it
 
 Bazel is the only build and test interface (see ADR-0002). There is no Cargo build.
@@ -96,6 +105,10 @@ $L2R generate $M                       # refuses unless the approval matches the
 $L2R recover  $M                       # only after an interrupted generate
 $L2R check    $M                       # drift, staleness, budgets
 $L2R lean-composition $M               # derived Lean network for the composition proofs
+$L2R packet   $M signal                # work packet for implementing one component
+
+$L2R init <dir> --id <system_id>       # a new project: model, Lean spec, inventory
+$L2R inventory <lake-dir> --out <file> <Root>...   # export the inventory (runs `lake`)
 ```
 
 Edit a responsibility in the model and run `generate` again. It refuses, because
@@ -119,6 +132,10 @@ the architecture model changed, until the new plan has been previewed and approv
 | `verification/composition` | The composition lane: audit, kernel replay, deviations, conformance |
 | `verification/composition_v1` | The same lane for `composite/v1`, with mailbox-content conformance and a fair-cycle search |
 | `lean/L2R/Async1.lean` | Semantics `l2r.async/v1`: bounded mailboxes, backpressure, typed ports, fair-termination principle |
+| `examples/starter` | The project `l2r init` creates, generated and implemented; its model, Lean spec and inventory are the templates |
+| `bazel/l2r.bzl` | `l2r_check_test`: the drift test, for projects that use L2R |
+| `tools/e2e/new_project.sh` | A new project in a new workspace, end to end |
+| `docs/getting-started.md` | The workflow for a project of your own |
 | `examples/tank_station` | Hierarchical example for schema `v2`: a nested subsystem, forwarded ports, two outboxes, data in every message |
 | `examples/relay` | Generator fixture for schema `v2`: deep nesting, port chains, two routes to one receiver, wrapping arithmetic |
 | `lean/L2R/Async1Ports.lean` | Output ports as children of an `l2r.async/v1` network, and the Lean model of the `composite/v2` scheduler |

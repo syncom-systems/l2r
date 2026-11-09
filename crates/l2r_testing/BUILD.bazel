@@ -8,6 +8,7 @@ l2r_rust_library(
         "//examples/crossing:inputs",
         "//examples/crossing_v1:inputs",
         "//examples/relay:inputs",
+        "//examples/starter:inputs",
         "//examples/tank_station:inputs",
     ],
     visibility = ["//visibility:public"],

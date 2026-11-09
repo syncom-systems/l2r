@@ -1,0 +1,76 @@
+# Architecture model of `starter`.
+#
+# This file owns structure: components, containment, state ownership, ports and
+# message edges. Behaviour lives in the Lean project under spec/ and is referred
+# to by qualified name. See docs/model-reference.md and docs/composite-v2.md in
+# the L2R repository.
+
+schema = "l2r.architecture/v2"
+
+[system]
+id = "starter"
+name = "Starter"
+rust_crate = "starter_scaffold"
+lean_inventory = "lean-inventory.json"
+output_dir = "scaffold"
+
+# The root composite owns the system's ports and generates the scheduler.
+[[component]]
+id = "starter"
+name = "Starter"
+profile = "composite/v2"
+responsibility = "Composes the system's machines. Owns no behavioral state of its own."
+rust_module = "starter"
+
+[[component]]
+id = "monitor"
+name = "Monitor"
+parent = "starter"
+profile = "transition-core/v1"
+responsibility = "Watches readings, raises an alert for each reading above the limit, and counts alerts until reset."
+rust_module = "monitor"
+notes = "Pure function: no clocks, I/O or shared state. The alert count saturates; it never wraps."
+implementation_budget_lines = 60
+mailbox_capacity = 4
+
+[component.behavior]
+owned_state = "Starter.Monitor.State"
+input = "Starter.Monitor.Input"
+output = "Starter.Monitor.Output"
+init = "Starter.Monitor.init"
+step = "Starter.Monitor.step"
+invariants = [
+  "Starter.Monitor.alert_only_above_limit",
+  "Starter.Monitor.reset_clears",
+]
+
+# The only ways in.
+[[port]]
+id = "sample"
+composite = "starter"
+direction = "in"
+message = "Starter.Ports.Sample"
+to = "monitor"
+translation = "Starter.Ports.sampleToMonitor"
+
+[[port]]
+id = "command"
+composite = "starter"
+direction = "in"
+message = "Starter.Ports.Command"
+to = "monitor"
+translation = "Starter.Ports.commandToMonitor"
+
+# The only way out: a bounded outbox the environment empties.
+[[port]]
+id = "notice"
+composite = "starter"
+direction = "out"
+message = "Starter.Ports.Notice"
+capacity = 4
+
+[[message]]
+id = "monitor_to_notice"
+from = "monitor"
+to = "notice"
+translation = "Starter.Routes.monitorToNotice"

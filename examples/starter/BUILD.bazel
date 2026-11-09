@@ -1,0 +1,42 @@
+load("//bazel:l2r.bzl", "l2r_check_test")
+
+# The project `l2r init` creates, generated and implemented: the smallest
+# complete v2 system. Its model, Lean spec and inventory are the templates.
+# Model, Lean inventory, approval and the generated scaffold (its own
+# Bazel package, //examples/starter/scaffold).
+exports_files(["architecture.approval.json"], visibility = ["//visibility:public"])
+
+filegroup(
+    name = "inputs",
+    srcs = [
+        "architecture.toml",
+        "lean-inventory.json",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# The Lean specification sources, for the proof lanes.
+filegroup(
+    name = "spec_sources",
+    srcs = glob(["spec/**/*.lean"]) + ["spec/lean-toolchain"],
+    visibility = ["//visibility:public"],
+)
+
+# The derived Lean composition (`l2r lean-composition`) and the hand-written
+# system proofs about it.
+filegroup(
+    name = "composition_derived",
+    srcs = glob(["composition/L2RDerived/*.lean"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "composition_sources",
+    srcs = glob(["composition/**/*.lean"]),
+    visibility = ["//visibility:public"],
+)
+
+# The committed scaffold must equal the approved plan of the committed model and
+# inventory: no drift in generated files, a current approval and lock, and every
+# implementation file within its budget.
+l2r_check_test(name = "scaffold_matches_approved_plan_test")

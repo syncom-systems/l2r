@@ -2,6 +2,7 @@ import Lean
 import L2R.Async1Ports
 import L2RDerived.tank_station
 import L2RDerived.relay
+import L2RDerived.starter
 
 /-!
 # Audit of the `composite/v2` scheduler model and the derived flat networks
@@ -50,7 +51,9 @@ def expectedTheorems : List Name := [
   `Tank.Alarm.stays_active_until_acknowledged,
   `Tank.Alarm.count_never_decreases,
   `Relay.Source.emits_only_news,
-  `Relay.Sink.urgent_is_sticky
+  `Relay.Sink.urgent_is_sticky,
+  `Starter.Monitor.alert_only_above_limit,
+  `Starter.Monitor.reset_clears
 ]
 
 /-- Definitions whose meaning the statements, and every system proof about a
@@ -74,7 +77,12 @@ def pinned : List Name := [
   `L2RDerived.relay.plant.cap,
   `L2RDerived.relay.plant.route,
   `L2RDerived.relay.plant.target,
-  `L2RDerived.relay.plant.inject
+  `L2RDerived.relay.plant.inject,
+  `L2RDerived.starter.starter.machines,
+  `L2RDerived.starter.starter.cap,
+  `L2RDerived.starter.starter.route,
+  `L2RDerived.starter.starter.target,
+  `L2RDerived.starter.starter.inject
 ]
 
 def pp (e : Expr) : CommandElabM String :=

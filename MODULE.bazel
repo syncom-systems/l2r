@@ -20,7 +20,8 @@ use_repo(rust, "rust_toolchains")
 register_toolchains("@rust_toolchains//:all")
 
 # Third-party crates. There is no Cargo.toml: each dependency is declared here and its
-# resolution is pinned in //bazel:crates.lock. To change one, edit its spec, then run
+# resolution is pinned in //bazel:crates.lock and //bazel:crates.bazel.lock.json. To
+# change one, edit its spec, then run
 #     CARGO_BAZEL_REPIN=1 bazel mod show_extension @rules_rust//crate_universe:extension.bzl%crate
 crate = use_extension("@rules_rust//crate_universe:extension.bzl", "crate")
 crate.spec(
@@ -54,6 +55,9 @@ crate.spec(
 crate.from_specs(
     name = "crates",
     cargo_lockfile = "//bazel:crates.lock",
+    # Needed for L2R to be usable as a dependency of another Bazel module:
+    # crate_universe does not repin across module boundaries.
+    lockfile = "//bazel:crates.bazel.lock.json",
     supported_platform_triples = [
         "aarch64-apple-darwin",
         "aarch64-unknown-linux-gnu",

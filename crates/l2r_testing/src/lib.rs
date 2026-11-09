@@ -71,6 +71,22 @@ pub fn relay_inventory() -> Inventory {
     load::parse_inventory(RELAY_INVENTORY).expect("relay inventory parses")
 }
 
+/// The starter project `l2r init` is based on (`v2`).
+pub const STARTER_MODEL: &str = include_str!("../../../examples/starter/architecture.toml");
+
+/// The starter project's Lean inventory.
+pub const STARTER_INVENTORY: &str = include_str!("../../../examples/starter/lean-inventory.json");
+
+/// Parses the starter model.
+pub fn starter_model() -> Model {
+    load::parse_model(STARTER_MODEL).expect("starter model parses")
+}
+
+/// Parses the starter inventory.
+pub fn starter_inventory() -> Inventory {
+    load::parse_inventory(STARTER_INVENTORY).expect("starter inventory parses")
+}
+
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
 /// Creates a fresh, empty directory under the test's scratch area.

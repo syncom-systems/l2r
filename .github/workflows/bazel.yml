@@ -45,6 +45,33 @@ jobs:
       - name: rustfmt
         run: bazel build --config=fmt //...
 
+  # A new project in a new Bazel workspace, with L2R as an external dependency:
+  # docs/getting-started.md, step by step, with every refusal on the way.
+  new-project:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Bazel caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel-disk
+            ~/.cache/bazel-repo
+          key: bazel-e2e-${{ runner.os }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'bazel/crates.lock') }}-${{ github.sha }}
+          restore-keys: |
+            bazel-e2e-${{ runner.os }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock', 'bazel/crates.lock') }}-
+            bazel-e2e-${{ runner.os }}-
+
+      # A home bazelrc, so that the new workspace uses the caches too.
+      - name: Cache flags
+        run: echo "common --disk_cache=$HOME/.cache/bazel-disk --repository_cache=$HOME/.cache/bazel-repo" > "$HOME/.bazelrc"
+
+      - name: New project, end to end
+        run: tools/e2e/new_project.sh
+
   # The proof lane: pinned Lean, Charon and Aeneas, fetched by Bazel; the
   # refinement proofs are re-checked against a fresh extraction of the committed
   # Rust sources, audited, and every seeded defect must be rejected.

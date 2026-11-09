@@ -1,0 +1,53 @@
+{
+  "format": "l2r.lock/v0",
+  "plan_digest": "sha256:4abba8632e9a2b97b0d478a2752c7bed8b77979469cbd7ef4cd5d873d638715e",
+  "generator": "l2r 0.1.0",
+  "files": [
+    {
+      "path": "BUILD.bazel",
+      "ownership": "generated",
+      "component": "starter",
+      "digest": "sha256:12ff24f87e5b7398efb593f67dace2e594f63b2afcc475bc90f3e756544c14b5"
+    },
+    {
+      "path": "src/lib.rs",
+      "ownership": "generated",
+      "component": "starter",
+      "digest": "sha256:31eab9e6f166a0e46be90ef505be7e53906b4b77fc7375bcb405d54ca72945b4"
+    },
+    {
+      "path": "src/starter/mod.rs",
+      "ownership": "generated",
+      "component": "starter",
+      "digest": "sha256:e4e6fdb9eafa088f882826c22248e7284aa5215ad20c4450a36c4430f0e7fcc6"
+    },
+    {
+      "path": "src/starter/monitor/contract_tests.rs",
+      "ownership": "generated",
+      "component": "monitor",
+      "digest": "sha256:290c3d1bc90ffd66ca20f4f3aa7576f60c82557f86437422840b9606728e2b6f"
+    },
+    {
+      "path": "src/starter/monitor/imp.rs",
+      "ownership": "implementation",
+      "component": "monitor"
+    },
+    {
+      "path": "src/starter/monitor/mod.rs",
+      "ownership": "generated",
+      "component": "monitor",
+      "digest": "sha256:e34a13036283fd800d08da61a9451d57dbf2dec478e72e12e42a986ff5087d8d"
+    },
+    {
+      "path": "src/starter/routes.rs",
+      "ownership": "implementation",
+      "component": "starter"
+    },
+    {
+      "path": "src/types.rs",
+      "ownership": "generated",
+      "component": "starter",
+      "digest": "sha256:eaef3b2b080435db6a0b3c493ab59c9b8095d8f97f339f0329ae57ac77b502b7"
+    }
+  ]
+}

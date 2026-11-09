@@ -1,1 +1,5 @@
-exports_files(["crates.lock"])
+exports_files([
+    "check_scaffold.sh",
+    "crates.bazel.lock.json",
+    "crates.lock",
+])

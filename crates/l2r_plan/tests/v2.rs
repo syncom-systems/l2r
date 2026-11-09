@@ -3,7 +3,9 @@
 
 use l2r_model::{Inventory, Model};
 use l2r_plan::{GeneratorIdentity, Ownership, Plan, lean_composition, plan};
-use l2r_testing::{relay_inventory, relay_model, tank_inventory, tank_model};
+use l2r_testing::{
+    relay_inventory, relay_model, starter_inventory, starter_model, tank_inventory, tank_model,
+};
 use l2r_validate::validate;
 
 fn plan_of(model: &Model, inventory: &Inventory) -> Plan {
@@ -195,6 +197,8 @@ const TANK_DERIVED: &str =
     include_str!("../../../examples/tank_station/composition/L2RDerived/tank_station.lean");
 const RELAY_DERIVED: &str =
     include_str!("../../../examples/relay/composition/L2RDerived/relay.lean");
+const STARTER_DERIVED: &str =
+    include_str!("../../../examples/starter/composition/L2RDerived/starter.lean");
 const TANK_APPROVAL: &str =
     include_str!("../../../examples/tank_station/architecture.approval.json");
 const SEMANTICS: &str = include_str!("../../../lean/L2R/Async1.lean");
@@ -214,6 +218,12 @@ fn the_committed_derived_networks_are_current() {
             relay_inventory(),
             RELAY_DERIVED,
             "examples/relay",
+        ),
+        (
+            starter_model(),
+            starter_inventory(),
+            STARTER_DERIVED,
+            "examples/starter",
         ),
     ] {
         let validated = validate(&model, &inventory).expect("valid");
