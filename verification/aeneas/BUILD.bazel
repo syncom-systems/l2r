@@ -56,3 +56,24 @@ sh_binary(
     args = ["$(rootpath :toolchain_manifest)"],
     data = LANE_INPUTS,
 )
+
+# Scheduled kernel replay of the imported dependencies (mathlib, Aeneas' Lean library) that the
+# PR lane trusts. Not part of any PR check: `manual` keeps it out of wildcards, and the
+# `dependency-recheck` tag is outside both the default (-verification) and the --config=verify
+# (verification) filters. Run it with
+#   bazel test --config=verify --test_tag_filters=dependency-recheck --test_timeout=6600 \
+#       //verification/aeneas:dependency_recheck
+# (.github/workflows/dependency-recheck.yml does this weekly; docs/verification.md has the bounds.)
+sh_test(
+    name = "dependency_recheck",
+    size = "enormous",
+    srcs = ["dependency_recheck.sh"],
+    args = ["$(rootpath :toolchain_manifest)"],
+    data = LANE_INPUTS + ["DependencyClosure.lean"],
+    tags = [
+        "dependency-recheck",
+        "manual",
+        "no-remote",
+        "no-sandbox",
+    ],
+)
