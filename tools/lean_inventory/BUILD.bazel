@@ -1,0 +1,7 @@
+# The Lean inventory exporter, run by the proof lane to check the committed
+# inventory against the specification.
+filegroup(
+    name = "exporter",
+    srcs = ["Main.lean"],
+    visibility = ["//visibility:public"],
+)

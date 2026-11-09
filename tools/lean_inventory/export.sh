@@ -4,9 +4,10 @@
 #   tools/lean_inventory/export.sh <lake-project-dir> <output.json> <RootModule>...
 #
 # Builds the Lake project with the toolchain its `lean-toolchain` file pins, then runs
-# the exporter against the compiled modules. Lean is not yet a hermetic Bazel
-# toolchain in this repository, so this step runs outside Bazel; the inventory it
-# writes is committed, and its digest is bound into every generation plan.
+# the exporter against the compiled modules. This is the developer convenience for
+# regenerating the committed inventory; CI checks it independently with the pinned
+# Lean toolchain (`bazel test --config=verify //verification/...`), and its digest
+# is bound into every generation plan.
 set -euo pipefail
 project="$1"; out="$2"; shift 2
 here="$(cd "$(dirname "$0")" && pwd)"
