@@ -19,7 +19,7 @@ Rust tests is never presented as proof of correspondence with Lean.
   a component hierarchy, responsibilities, a single owner for each state,
   message edges, Rust mappings, implementer notes and size budgets. Unknown
   fields are rejected.
-- **Validation** with 28 stable rule codes, all findings reported at once. Every
+- **Validation** with 37 stable rule codes, all findings reported at once. Every
   Lean reference must exist in an inventory exported from *compiled* Lean, with
   the right kind and exact type.
 - **Deterministic plan.** Every planned file has a path, an ownership class
@@ -45,7 +45,10 @@ Rust tests is never presented as proof of correspondence with Lean.
   journal and budget overruns.
 - **Profiles.** `transition-core/v0` is a pure state machine. `composite/v0` is
   deterministic asynchronous composition with per-child mailboxes.
-  `crate-root/v0` produces a Bazel package.
+  `crate-root/v0` produces a Bazel package. `composite/v1` (model schema `v1`)
+  adds explicit mailbox capacities with backpressure (nothing is dropped), typed
+  input ports with explicit rejection, and a scheduler that reports `Blocked`
+  instead of stalling silently; see [`docs/composite-v1.md`](docs/composite-v1.md).
 - **A reproducible proof lane in CI.** Pinned Lean, Charon and Aeneas run under
   Bazel. The committed Rust implementations of both example machines and both
   message routes are re-extracted and **proved** in Lean to refine their
@@ -101,11 +104,14 @@ the architecture model changed, until the new plan has been previewed and approv
 | `crates/l2r_apply` | Approval, assessment of disk actions, safe writing, drift checks |
 | `crates/l2r_cli` | The `l2r` command |
 | `tools/lean_inventory` | Lean exporter for the declaration inventory |
-| `examples/crossing` | Generic example: Lean spec, model, approval, generated and implemented scaffold |
+| `examples/crossing` | Generic example: Lean spec, model, approval, generated and implemented scaffold. Its liveness defect is kept on purpose |
+| `examples/crossing_v1` | The same system repaired and bounded, for `composite/v1`: typed ports, capacities, system proofs |
 | `verification/aeneas` | Rust-to-Lean refinement experiment and its evidence |
 | `lean/L2R/Async.lean` | Generic semantics of asynchronous composition and the `composite/v0` scheduler model |
 | `examples/crossing/composition` | Derived network of the example and its system proofs |
 | `verification/composition` | The composition lane: audit, kernel replay, deviations, conformance |
+| `verification/composition_v1` | The same lane for `composite/v1`, with mailbox-content conformance and a fair-cycle search |
+| `lean/L2R/Async1.lean` | Semantics `l2r.async/v1`: bounded mailboxes, backpressure, typed ports, fair-termination principle |
 | `docs/model-reference.md` | Model schema, profiles, validation rules, write semantics |
 | `docs/generation-boundary.md` | Exact write guarantees, threat model, limits, and the tests behind them |
 | `docs/verification.md` | Kinds of evidence, the verification route, and what is and is not proved |
@@ -136,6 +142,12 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
   its Lean model.
 - The example's composition has a proved liveness defect (a stranded request),
   left unfixed on purpose: it shows what per-machine proofs cannot find.
+  `examples/crossing_v1` repairs it at the specification level and proves safety,
+  capacity, deadlock-freedom and *non-stranding* (an acknowledgement stays
+  possible). Liveness under fairness is **not proved**; it is tested by an
+  exhaustive finite-state search. The generated `composite/v1` scheduler is tied
+  to its Lean model by conformance testing; its Aeneas refinement proof is not
+  done (see `docs/composite-v1.md`).
 - No graphical editor; views are the CLI preview and the Mermaid rendering.
 
 ## License

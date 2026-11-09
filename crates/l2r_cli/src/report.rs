@@ -136,6 +136,16 @@ pub fn mermaid(model: &Model) -> String {
             edge.to
         );
     }
+    // Typed input ports: the only way the environment reaches a composite/v1.
+    for port in &model.ports {
+        let _ = writeln!(
+            out,
+            "  env_{id}([\"port {id}: {msg}\"]) -- \"{id}\" --> {to}",
+            id = port.id,
+            msg = quoted(&port.message),
+            to = port.to
+        );
+    }
     out
 }
 
@@ -144,7 +154,7 @@ fn render_node(model: &Model, id: &str, depth: usize, out: &mut String) {
         return;
     };
     let indent = "  ".repeat(depth);
-    if component.profile == profiles::COMPOSITE_V0 {
+    if component.profile == profiles::COMPOSITE_V0 || component.profile == profiles::COMPOSITE_V1 {
         let _ = writeln!(
             out,
             "{indent}subgraph {}[\"{} ({})\"]",
@@ -162,9 +172,13 @@ fn render_node(model: &Model, id: &str, depth: usize, out: &mut String) {
             .as_ref()
             .map(|b| b.owned_state.as_str())
             .unwrap_or("-");
+        let capacity = component
+            .mailbox_capacity
+            .map(|n| format!("<br/>mailbox {n}"))
+            .unwrap_or_default();
         let _ = writeln!(
             out,
-            "{indent}{}[\"{}<br/>owns {}<br/>{}\"]",
+            "{indent}{}[\"{}<br/>owns {}<br/>{}{capacity}\"]",
             component.id,
             quoted(&component.name),
             quoted(owns),

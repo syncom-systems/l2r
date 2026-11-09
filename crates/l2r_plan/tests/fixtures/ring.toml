@@ -1,0 +1,95 @@
+schema = "l2r.architecture/v1"
+
+[system]
+id = "ring"
+name = "Ring"
+rust_crate = "ring_scaffold"
+lean_inventory = "lean-inventory.json"
+output_dir = "scaffold"
+
+[[component]]
+id = "ring"
+name = "Ring"
+profile = "composite/v1"
+responsibility = "Passes a token around."
+rust_module = "ring"
+
+[[component]]
+id = "a"
+name = "Node A"
+parent = "ring"
+profile = "transition-core/v0"
+responsibility = "Node A."
+rust_module = "a"
+mailbox_capacity = 1
+
+[component.behavior]
+owned_state = "Ring.A.State"
+input = "Ring.A.Input"
+output = "Ring.A.Output"
+init = "Ring.A.init"
+step = "Ring.A.step"
+
+[[component]]
+id = "b"
+name = "Node B"
+parent = "ring"
+profile = "transition-core/v0"
+responsibility = "Node B."
+rust_module = "b"
+mailbox_capacity = 3
+
+[component.behavior]
+owned_state = "Ring.B.State"
+input = "Ring.B.Input"
+output = "Ring.B.Output"
+init = "Ring.B.init"
+step = "Ring.B.step"
+
+[[component]]
+id = "c"
+name = "Node C"
+parent = "ring"
+profile = "transition-core/v0"
+responsibility = "Node C."
+rust_module = "c"
+mailbox_capacity = 2
+
+[component.behavior]
+owned_state = "Ring.C.State"
+input = "Ring.C.Input"
+output = "Ring.C.Output"
+init = "Ring.C.init"
+step = "Ring.C.step"
+
+[[message]]
+id = "a_to_b"
+from = "a"
+to = "b"
+translation = "Ring.Routes.aToB"
+
+[[message]]
+id = "b_to_c"
+from = "b"
+to = "c"
+translation = "Ring.Routes.bToC"
+
+[[message]]
+id = "c_to_a"
+from = "c"
+to = "a"
+translation = "Ring.Routes.cToA"
+
+[[port]]
+id = "first"
+composite = "ring"
+to = "a"
+message = "Ring.Ping"
+translation = "Ring.Ports.toA"
+
+[[port]]
+id = "second"
+composite = "ring"
+to = "c"
+message = "Ring.Ping"
+translation = "Ring.Ports.toC"

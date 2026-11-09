@@ -14,6 +14,7 @@ pub struct Validated {
     model: Model,
     inventory: Inventory,
     machines: BTreeMap<String, ResolvedMachine>,
+    port_messages: BTreeMap<String, ResolvedEnum>,
 }
 
 /// A state machine component with its Lean types resolved to enumerations.
@@ -50,11 +51,13 @@ impl Validated {
         model: Model,
         inventory: Inventory,
         machines: BTreeMap<String, ResolvedMachine>,
+        port_messages: BTreeMap<String, ResolvedEnum>,
     ) -> Self {
         Self {
             model,
             inventory,
             machines,
+            port_messages,
         }
     }
 
@@ -66,6 +69,11 @@ impl Validated {
     /// The canonical inventory.
     pub fn inventory(&self) -> &Inventory {
         &self.inventory
+    }
+
+    /// The resolved message type of a port id.
+    pub fn port_message(&self, port_id: &str) -> Option<&ResolvedEnum> {
+        self.port_messages.get(port_id)
     }
 
     /// The resolved machine for a component id, if it is a machine.

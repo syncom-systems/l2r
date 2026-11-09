@@ -1,0 +1,11 @@
+# Attempts to make the lane pass without a real proof. Each must be rejected by the
+# named gate: `proof` (does not compile) or `audit` (compiles, audit rejects).
+# name	file	exact text	replacement	gate
+sorry_proof	examples/crossing_v1/composition/CrossingV1Properties.lean	theorem reach_has_initial : initialC ∈ reach := by decide +kernel	theorem reach_has_initial : initialC ∈ reach := by sorry	audit
+native_decide	examples/crossing_v1/composition/CrossingV1Properties.lean	theorem reach_has_initial : initialC ∈ reach := by decide +kernel	theorem reach_has_initial : initialC ∈ reach := by native_decide	audit
+new_axiom	examples/crossing_v1/composition/CrossingV1Properties.lean	theorem reach_has_initial : initialC ∈ reach := by decide +kernel	axiom bypass : initialC ∈ reach\n\ntheorem reach_has_initial : initialC ∈ reach := bypass	audit
+weakened_statement	examples/crossing_v1/composition/CrossingV1Properties.lean	    (signalIn k).count .crossingRequested ≤ 1 := by	    (signalIn k).count .crossingRequested ≤ 2 := by	audit
+silent_environment	lean/L2R/Async1.lean	      StepL E k (.send p m) (inject N k p m)	      StepL E k (.send p m) k	proof
+weakened_definition	lean/L2R/Async1.lean	def anyEnv : Env N := fun _ _ _ => True	def anyEnv : Env N := fun _ _ _ => False	proof
+weakened_capacity_check	lean/L2R/Async1.lean	    decide ((k.inbox d).length + (msgsFor N d ms).length ≤ N.cap d)	    decide ((k.inbox d).length + (msgsFor N d ms).length ≤ N.cap d + 1)	proof
+exit_early	examples/crossing_v1/composition/CrossingV1Properties.lean	/-! ## Safety, capacity and absence of deadlock -/	#exit\n/-! ## Safety, capacity and absence of deadlock -/	audit

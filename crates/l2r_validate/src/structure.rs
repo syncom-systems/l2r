@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use l2r_model::{Component, MODEL_SCHEMA, Model, profiles};
+use l2r_model::{Component, MODEL_SCHEMA, Model, SUPPORTED_SCHEMAS, profiles};
 
 use crate::diagnostic::Findings;
 use crate::names;
@@ -23,15 +23,32 @@ pub fn check(model: &Model, findings: &mut Findings) {
 }
 
 fn check_schema(model: &Model, findings: &mut Findings) {
-    if model.schema != MODEL_SCHEMA {
+    if !SUPPORTED_SCHEMAS.contains(&model.schema.as_str()) {
         findings.error(
             "L2R-S001",
             "schema",
             format!(
-                "unsupported schema `{}`; this generator accepts `{MODEL_SCHEMA}`",
-                model.schema
+                "unsupported schema `{}`; this generator accepts {}",
+                model.schema,
+                SUPPORTED_SCHEMAS.join(", ")
             ),
         );
+    }
+    // A `v0` document means what it always meant: it cannot silently acquire
+    // ports, capacities or the v1 profile.
+    if model.schema == MODEL_SCHEMA {
+        let uses_v1 = !model.ports.is_empty()
+            || model
+                .components
+                .iter()
+                .any(|c| c.mailbox_capacity.is_some() || c.profile == profiles::COMPOSITE_V1);
+        if uses_v1 {
+            findings.error(
+                "L2R-S015",
+                "schema",
+                "ports, mailbox capacities and `composite/v1` need `schema = \"l2r.architecture/v1\"`",
+            );
+        }
     }
 }
 
@@ -180,9 +197,83 @@ fn check_profile_shape(model: &Model, component: &Component, findings: &mut Find
                 );
             }
         }
+        profiles::COMPOSITE_V1 => {
+            if component.behavior.is_some() {
+                findings.error(
+                    "L2R-S008",
+                    &subject,
+                    "a composite owns no behavioral state; remove [component.behavior]",
+                );
+            }
+            if component.parent.is_some() {
+                findings.error(
+                    "L2R-S016",
+                    &subject,
+                    "composite/v1 must be the root component: other composites cannot drive its scheduler",
+                );
+            }
+            let children: Vec<&Component> = model.children(&component.id);
+            if children.is_empty() {
+                findings.error(
+                    "L2R-S008",
+                    &subject,
+                    "a composite must contain at least one component",
+                );
+            }
+            for child in children {
+                if child.profile != profiles::TRANSITION_CORE_V0 {
+                    findings.error(
+                        "L2R-S016",
+                        &subject,
+                        format!(
+                            "child `{}` must be a transition-core/v0 machine; composite/v1 does not nest composites",
+                            child.id
+                        ),
+                    );
+                }
+            }
+        }
+        _ => {}
+    }
+    check_capacity(model, component, findings);
+}
+
+/// Mailbox capacities belong to the machine children of `composite/v1`, and
+/// each of those must state one: an unstated capacity would be a hidden choice.
+fn check_capacity(model: &Model, component: &Component, findings: &mut Findings) {
+    let in_v1 = component
+        .parent
+        .as_deref()
+        .and_then(|p| model.component(p))
+        .is_some_and(|p| p.profile == profiles::COMPOSITE_V1);
+    let subject = subject(component);
+    match (in_v1, component.mailbox_capacity) {
+        (true, None) => findings.error(
+            "L2R-S017",
+            &subject,
+            "a child of a composite/v1 must state `mailbox_capacity`",
+        ),
+        (true, Some(0)) => findings.error(
+            "L2R-S017",
+            &subject,
+            "`mailbox_capacity` must be at least 1",
+        ),
+        (true, Some(n)) if n > MAX_MAILBOX_CAPACITY => findings.error(
+            "L2R-S017",
+            &subject,
+            format!("`mailbox_capacity` {n} exceeds the supported maximum {MAX_MAILBOX_CAPACITY}"),
+        ),
+        (false, Some(_)) => findings.error(
+            "L2R-S018",
+            &subject,
+            "`mailbox_capacity` applies only to the children of a composite/v1",
+        ),
         _ => {}
     }
 }
+
+/// Largest mailbox the generator emits as a fixed-size array.
+pub const MAX_MAILBOX_CAPACITY: u32 = 64;
 
 fn check_parents(model: &Model, findings: &mut Findings) {
     for component in &model.components {

@@ -271,3 +271,27 @@ fn a_responsibility_edit_shows_and_records_the_replacement_it_needs() {
     );
     assert_eq!(l2r(&["generate", &model]).code, 0);
 }
+
+#[test]
+fn render_shows_a_v1_composite_with_its_capacities_and_ports() {
+    let dir = scratch_dir("render-v1");
+    fs::write(dir.join("architecture.toml"), l2r_testing::EXAMPLE_V1_MODEL).unwrap();
+    fs::write(
+        dir.join("lean-inventory.json"),
+        l2r_testing::EXAMPLE_V1_INVENTORY,
+    )
+    .unwrap();
+    let run = l2r(&[
+        "render",
+        &dir.join("architecture.toml").display().to_string(),
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(run.stdout.contains("subgraph crossing"), "{}", run.stdout);
+    assert!(run.stdout.contains("mailbox 2"), "{}", run.stdout);
+    assert!(
+        run.stdout
+            .contains("env_button([\"port button: CrossingV1.Ports.ButtonEvent\"]) -- \"button\" --> request_latch"),
+        "{}",
+        run.stdout
+    );
+}

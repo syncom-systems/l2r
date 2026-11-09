@@ -11,7 +11,7 @@ owns structure. Rust is the implementation. Verification tools produce evidence
 | **1. Specification proofs** | Does the Lean specification have the properties we want? | Lean theorems in the spec project (e.g. `Crossing.Signal.no_conflicting_release`) | Proved for the example spec; referenced from the model as `invariants` |
 | **2. Implementation correspondence** | Does the Rust implementation compute what the Lean specification says? | Charon + Aeneas translate Rust to Lean; a refinement theorem relates the translation to the spec under explicit abstraction functions | Proved in CI for both machines (`request_latch`, `signal`) and both message routes (`verification/aeneas`). **Not** for the composite scheduler |
 | **3. Rust-local properties** | Is the implementation free of panics and overflow, and are its data-structure invariants maintained, independently of behavior? | Aeneas (panic freedom follows from the `Result` being `ok`), or Verus/Kani for properties that do not restate behavior | Panic freedom proved for both machines and the routes as part of (2); nothing else yet |
-| **4. Composition** | Do the machines, composed asynchronously, satisfy system properties under *all* permitted interleavings, and does the scheduler choose only permitted ones? | The generic semantics `lean/L2R/Async.lean` (`l2r.async/v0`), a network derived from the model by `l2r lean-composition`, and system proofs (`verification/composition`) | Proved for the crossing example: a cross-component safety invariant over every interleaving in a stated environment, its transfer to a Lean model of the `composite/v0` scheduler, and a **liveness counterexample**. The Lean scheduler model ↔ generated Rust link is bounded conformance testing, not proof |
+| **4. Composition** | Do the machines, composed asynchronously, satisfy system properties under *all* permitted interleavings, and does the scheduler choose only permitted ones? | The generic semantics `lean/L2R/Async.lean` (`l2r.async/v0`), a network derived from the model by `l2r lean-composition`, and system proofs (`verification/composition`) | Proved for the crossing example: a cross-component safety invariant over every interleaving in a stated environment, its transfer to a Lean model of the `composite/v0` scheduler, and a **liveness counterexample**. `composite/v1` (`lean/L2R/Async1.lean`, `l2r.async/v1`, [`composite-v1.md`](composite-v1.md)) adds capacity, backpressure and typed ports to the semantics and proves safety, capacity, deadlock-freedom and non-stranding of the repaired example for every environment. The Lean scheduler model ↔ generated Rust link is bounded conformance testing (v1 compares mailbox contents too), not proof |
 | **5. Runtime and platform evidence** | Does the deployed system behave on real hardware, with real I/O and timing? | Integration tests, hardware-in-the-loop, monitoring | Out of scope for the generator; the example has unit tests only |
 
 A result of one kind never stands in for another. Passing Rust tests is kind 5
@@ -81,7 +81,13 @@ give little coverage that the lanes lack:
 - The `composite/v0` scheduler's local properties are simple. `VecDeque`
   indexing cannot fail, and the `next` cursor is always `< n`.
 
-Verus becomes worthwhile with a bounded-mailbox scheduler: ring-buffer index
+**Update (`composite/v1`).** The bounded-mailbox scheduler now exists, as
+fixed-size arrays with straight-line code, and extracts with Charon/Aeneas (see
+[`composite-v1.md`](composite-v1.md)). Its index and capacity facts are the side
+conditions an Aeneas refinement proof discharges, so Verus is still not added;
+this paragraph is the reasoning that led to adding no second toolchain.
+
+Verus would become worthwhile with a bounded-mailbox scheduler: ring-buffer index
 arithmetic, capacity accounting, the absence of overflow on `push`, and frame
 conditions per child. These are exactly the Rust-local obligations that the
 Lean semantics deliberately leaves to the implementation. Its specifications
@@ -92,6 +98,25 @@ an obligation needs behavioral meaning, it must be stated in Lean and connected
 through correspondence (kind 2). If that rule turns out to be too restrictive
 for some property, the right fix is a generated, digest-pinned translation from
 Lean, not a hand-written restatement.
+
+## Fairness and liveness are separate, and stated with their assumptions
+
+Three different claims are easy to conflate:
+
+- **Non-stranding**: from every reachable configuration, *some* permitted
+  continuation reaches the goal. Proved for the repaired example
+  (`no_stranding`); it needs a cooperative environment and says nothing about
+  what the scheduler actually does.
+- **Liveness under fairness**: *every* run satisfying explicit fairness
+  hypotheses reaches the goal. `L2R.Async1.fair_termination` is the proof
+  principle (a ranking with helpful actions over a `Trace`, with weak fairness of
+  deliveries and a recurring environment event as hypotheses). The example's
+  liveness is **not proved**; it is tested by an exhaustive finite-state search
+  (`FairCycles.lean`). Weak fairness is not sufficient with bounded mailboxes: a
+  delivery can be enabled only intermittently, so the argument also uses that
+  the timer keeps being sent and that bounds force deliveries.
+- **Unconditional progress**: false whenever the environment can withhold a
+  required event forever (here, the timer). L2R does not claim it.
 
 ## Traceability: when a proof counts
 

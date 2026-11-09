@@ -1,0 +1,96 @@
+# Pedestrian crossing, repaired and bounded: a generic example for composite/v1.
+#
+# Differs from examples/crossing (which is left unchanged, with its stranded-
+# request defect) in three ways:
+#   - the Signal remembers a request that arrives during walk or clearance;
+#   - every mailbox has an explicit capacity, part of the behavioral semantics;
+#   - the environment reaches the controller only through two typed ports.
+#
+# Behavior lives in the Lean project under spec/. This file owns only structure.
+
+schema = "l2r.architecture/v1"
+
+[system]
+id = "crossing_v1"
+name = "Pedestrian crossing (bounded)"
+rust_crate = "crossing_v1_scaffold"
+lean_inventory = "lean-inventory.json"
+output_dir = "scaffold"
+
+[[component]]
+id = "crossing"
+name = "Crossing controller"
+profile = "composite/v1"
+responsibility = "Composes the request latch and the signal through bounded mailboxes; a delivery happens only when its receivers have room. Owns no behavioral state of its own."
+rust_module = "crossing"
+
+[[component]]
+id = "request_latch"
+name = "Request latch"
+parent = "crossing"
+profile = "transition-core/v0"
+responsibility = "Remembers that a pedestrian has asked to cross until the signal acknowledges the request."
+rust_module = "request_latch"
+notes = "Keep the transition function pure: no clocks, I/O or shared state."
+implementation_budget_lines = 60
+mailbox_capacity = 2
+
+[component.behavior]
+owned_state = "CrossingV1.Latch.State"
+input = "CrossingV1.Latch.Input"
+output = "CrossingV1.Latch.Output"
+init = "CrossingV1.Latch.init"
+step = "CrossingV1.Latch.step"
+invariants = [
+  "CrossingV1.Latch.pending_press_is_silent",
+  "CrossingV1.Latch.request_implies_pending",
+]
+
+[[component]]
+id = "signal"
+name = "Crossing signal"
+parent = "crossing"
+profile = "transition-core/v0"
+responsibility = "Cycles vehicle and pedestrian phases and remembers a request that arrives while pedestrians are crossing; pedestrians may walk only after the vehicle phase has passed through amber."
+rust_module = "signal"
+notes = "Timer expiry arrives as an input; the signal never reads a clock itself."
+implementation_budget_lines = 80
+mailbox_capacity = 2
+
+[component.behavior]
+owned_state = "CrossingV1.Signal.State"
+input = "CrossingV1.Signal.Input"
+output = "CrossingV1.Signal.Output"
+init = "CrossingV1.Signal.init"
+step = "CrossingV1.Signal.step"
+invariants = [
+  "CrossingV1.Signal.no_conflicting_release",
+  "CrossingV1.Signal.walk_entered_from_amber",
+]
+
+[[message]]
+id = "latch_to_signal"
+from = "request_latch"
+to = "signal"
+translation = "CrossingV1.Routes.latchToSignal"
+
+[[message]]
+id = "signal_to_latch"
+from = "signal"
+to = "request_latch"
+translation = "CrossingV1.Routes.signalToLatch"
+
+# The only way the environment reaches the controller.
+[[port]]
+id = "button"
+composite = "crossing"
+to = "request_latch"
+message = "CrossingV1.Ports.ButtonEvent"
+translation = "CrossingV1.Ports.buttonToLatch"
+
+[[port]]
+id = "timer"
+composite = "crossing"
+to = "signal"
+message = "CrossingV1.Ports.TimerEvent"
+translation = "CrossingV1.Ports.timerToSignal"

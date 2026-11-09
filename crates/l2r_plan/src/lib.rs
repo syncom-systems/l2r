@@ -13,8 +13,8 @@ mod profiles;
 mod text;
 
 pub use lean_composition::{
-    LEAN_COMPOSITION_FORMAT, SEMANTICS_VERSION, lean_composition, lean_composition_path,
-    semantics_digest,
+    LEAN_COMPOSITION_FORMAT, LEAN_COMPOSITION_FORMAT_V1, SEMANTICS_VERSION, SEMANTICS_VERSION_V1,
+    lean_composition, lean_composition_path, semantics_digest, semantics_digest_v1,
 };
 pub use text::declares_generated;
 
@@ -72,6 +72,9 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
             profile_ids::COMPOSITE_V0 => {
                 artifacts.extend(profiles::composite::artifacts(model, component, dir)?)
             }
+            profile_ids::COMPOSITE_V1 => artifacts.extend(profiles::composite_v1::artifacts(
+                validated, component, dir,
+            )?),
             other => {
                 return Err(PlanError(format!(
                     "profile `{other}` has no implementation"
