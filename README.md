@@ -1,6 +1,6 @@
 # L2R (Lean to Rust)
 
-**Status:** early, working vertical slice. ADR-0001 and the follow-up ADRs are still *Proposed*.
+**Status:** early, working vertical slice. The maintainer ratified the [PRD](https://github.com/syncom-systems/l2r/discussions/1) and [ADR-0001 through ADR-0004](https://github.com/syncom-systems/l2r/discussions/categories/adrs) on 2026-11-09; the GitHub Discussion bodies have not yet been synchronized with this decision.
 
 L2R is a human-directed architecture modeling and scaffolding tool. A **human
 architect** describes the components, their nesting, state ownership and
