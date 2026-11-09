@@ -182,9 +182,12 @@ strength:
    prints the network your model approves, as Lean, wired to the generic
    semantics (`lean/L2R/Async1.lean`). State invariants about it with
    `L2R.Async1.reachable_invariant`; they then hold for the generated scheduler
-   by `L2R.Async1.Ports.run_invariant`. `examples/crossing_v1/composition` is a
-   complete worked case (safety, deadlock-freedom, liveness under stated
-   fairness).
+   by `L2R.Async1.Ports.run_invariant`.
+   `examples/tank_station/composition/TankStationProperties.lean` is the
+   pattern for a system with data: sixty lines that lift one machine's theorem
+   to every reachable configuration of the composed system, with no state
+   enumeration. `examples/crossing_v1/composition` is a larger worked case for
+   finite machines (safety, deadlock-freedom, liveness under stated fairness).
 3. **The generated scheduler and your implementation behave like the Lean
    model, on what was tried.** `verification/README.md` in your project has the
    five commands: `l2r conformance` derives a recorder that drives the generated

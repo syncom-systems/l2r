@@ -3,6 +3,7 @@ import L2R.Async1Ports
 import L2RDerived.tank_station
 import L2RDerived.relay
 import L2RDerived.starter
+import TankStationProperties
 
 /-!
 # Audit of the `composite/v2` scheduler model and the derived flat networks
@@ -53,7 +54,15 @@ def expectedTheorems : List Name := [
   `Relay.Source.emits_only_news,
   `Relay.Sink.urgent_is_sticky,
   `Starter.Monitor.alert_only_above_limit,
-  `Starter.Monitor.reset_clears
+  `Starter.Monitor.reset_clears,
+  -- the tank station as a composed system, over every interleaving
+  `TankStationProperties.interlock_initial,
+  `TankStationProperties.controller_untouched,
+  `TankStationProperties.controller_stepped,
+  `TankStationProperties.interlock_step,
+  `TankStationProperties.interlock,
+  `TankStationProperties.scheduler_interlock,
+  `TankStationProperties.buffers_bounded
 ]
 
 /-- Definitions whose meaning the statements, and every system proof about a
@@ -82,7 +91,9 @@ def pinned : List Name := [
   `L2RDerived.starter.starter.cap,
   `L2RDerived.starter.starter.route,
   `L2RDerived.starter.starter.target,
-  `L2RDerived.starter.starter.inject
+  `L2RDerived.starter.starter.inject,
+  `TankStationProperties.controller,
+  `TankStationProperties.Interlock
 ]
 
 def pp (e : Expr) : CommandElabM String :=

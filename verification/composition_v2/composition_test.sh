@@ -8,8 +8,9 @@
 #                generator of its approval record, and the exact semantics and
 #                scheduler-model sources it imports; seeded mismatches are rejected;
 #   1. prove     the semantics (lean/L2R/Async1.lean), the scheduler model with
-#                output ports (lean/L2R/Async1Ports.lean), the Lean specs and the
-#                derived networks compile with the pinned Lean;
+#                output ports (lean/L2R/Async1Ports.lean), the Lean specs, the
+#                derived networks and the tank station's system proofs compile
+#                with the pinned Lean;
 #   2. audit     every expected theorem exists and uses only standard axioms; its
 #                statement and every pinned definition (scheduler model, derived
 #                routes, capacities, ports) equal the reviewed expected-statements.txt;
@@ -94,7 +95,8 @@ examples/starter/spec Starter/Wiring.lean
 examples/starter/spec Starter.lean
 examples/tank_station/composition L2RDerived/tank_station.lean
 examples/relay/composition L2RDerived/relay.lean
-examples/starter/composition L2RDerived/starter.lean"
+examples/starter/composition L2RDerived/starter.lean
+examples/tank_station/composition TankStationProperties.lean"
 
 # build <workspace> <out>: compiles every module; stops at the first failure.
 build() {
@@ -186,7 +188,7 @@ cmp -s "$evidence/statements.txt" "$LANE/expected-statements.txt" || {
 }
 
 step "3. kernel replay (leanchecker --fresh)"
-for module in L2RDerived.tank_station L2RDerived.relay L2RDerived.starter; do
+for module in TankStationProperties L2RDerived.relay L2RDerived.starter; do
   PATH="$TOOLS/lean/bin:/usr/bin:/bin" LEAN_PATH="$out" "$TOOLS/lean/bin/leanchecker" --fresh "$module" > "$evidence/leanchecker-$module.log" 2>&1 \
     || { cat "$evidence/leanchecker-$module.log" >&2; fail "leanchecker rejected the environment of $module"; }
   echo "leanchecker --fresh $module: accepted (all imports replayed, Lean core included)" | tee -a "$evidence/kernel.txt"

@@ -7,3 +7,5 @@ weakened_statement	lean/L2R/Async1Ports.lean	theorem run_bounded (E : Env N) {s 
 weakened_take	lean/L2R/Async1Ports.lean	  (deliver N s.cfg c).map fun k => (⟨k, s.next⟩ : Sched N)	  (deliver N s.cfg c).map fun _ => s	proof
 route_edited_after_derivation	examples/tank_station/composition/L2RDerived/tank_station.lean	    (_root_.Tank.Routes.controllerToAlarm o).toList.map (fun i => ⟨⟨0, by decide⟩, i⟩) ++	    ([] : List _root_.Tank.Alarm.Input).map (fun i => ⟨⟨0, by decide⟩, i⟩) ++	audit
 sorry_in_specification	examples/tank_station/spec/Tank/Controller.lean	  | level l => intro h; simp only [step, settle] at h ⊢; subst h; rfl\n  | command c => cases c <;> (intro h; simp only [step, settle] at h ⊢; rw [h]; rfl)	  | level l => sorry\n  | command c => sorry	audit
+sorry_system_proof	examples/tank_station/composition/TankStationProperties.lean	      rw [hi]\n      exact Tank.Controller.high_level_closes_valve _ _	      sorry	audit
+weakened_system_property	examples/tank_station/composition/TankStationProperties.lean	  (controller k).level = .high → (controller k).valve = .closed	  (controller k).level = .high → (controller k).level = .high	proof

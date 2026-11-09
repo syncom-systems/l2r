@@ -172,9 +172,10 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
   recursive types). Message edges connect siblings only (ADR-0003 D7); in `v2`
   a boundary is crossed through declared ports.
 - For `composite/v2` the generated Rust is tied to Lean by bounded conformance
-  testing (a derived harness, `l2r conformance`), not by a refinement proof, and
-  no system theorem about the tank station is stated. `docs/composite-v2.md`
-  lists exactly what is proved, checked, tested and not established.
+  testing (a derived harness, `l2r conformance`), not by a refinement proof. One
+  system safety property of the tank station is proved over every interleaving
+  (the valve interlock); no liveness property is. `docs/composite-v2.md` lists
+  exactly what is proved, checked, tested and not established.
 - The composite scheduler realizes one deterministic interleaving. It is not a
   model of every interleaving; its runs are proved to be among them only for
   its Lean model.
