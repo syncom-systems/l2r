@@ -3,11 +3,13 @@
 
 mod commands;
 mod diff;
-mod project;
+mod init;
+mod inventory;
+mod packet;
 mod report;
 mod session;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use commands::Outcome;
@@ -58,164 +60,187 @@ fn only_flags(rest: &[String], allowed: &[&str]) -> Result<(), Outcome> {
 }
 
 fn run(args: &[String]) -> Outcome {
+    dispatch(args).unwrap_or_else(|usage_error| usage_error)
+}
+
+/// Runs the command that `args` name. The error is a usage error.
+fn dispatch(args: &[String]) -> Result<Outcome, Outcome> {
     let Some((command, rest)) = args.split_first() else {
-        return Outcome {
-            stdout: USAGE.into(),
-            stderr: String::new(),
-            code: 0,
-        };
+        return Ok(Outcome::ok(USAGE.into()));
     };
     match command.as_str() {
-        "--help" | "-h" | "help" => {
-            return Outcome {
-                stdout: USAGE.into(),
-                stderr: String::new(),
-                code: 0,
-            };
-        }
-        "--version" | "-V" => {
-            return Outcome {
-                stdout: format!("l2r {}\n", l2r_plan::GENERATOR_VERSION),
-                stderr: String::new(),
-                code: 0,
-            };
-        }
-        _ => {}
+        "--help" | "-h" | "help" => Ok(Outcome::ok(USAGE.into())),
+        "--version" | "-V" => Ok(Outcome::ok(format!(
+            "l2r {}\n",
+            l2r_plan::GENERATOR_VERSION
+        ))),
+        "init" => init(rest),
+        "inventory" => inventory(rest),
+        command => model_command(command, rest),
     }
-    match command.as_str() {
-        "init" => return init(rest),
-        "inventory" => return inventory(rest),
-        _ => {}
-    }
+}
+
+/// The commands on a model file, which is their first argument.
+fn model_command(command: &str, rest: &[String]) -> Result<Outcome, Outcome> {
     let Some((model, rest)) = rest.split_first() else {
-        return usage_error(&format!("`{command}` needs a model file"));
+        return Err(usage_error(&format!("`{command}` needs a model file")));
     };
-    let model = PathBuf::from(model);
-    let result = match command.as_str() {
-        "validate" => only_flags(rest, &[]).map(|_| commands::validate(&model)),
+    let model = Path::new(model);
+    match command {
         "plan" => only_flags(rest, &["--json"])
-            .map(|_| commands::plan(&model, rest.iter().any(|a| a == "--json"))),
+            .map(|()| commands::plan(model, rest.iter().any(|a| a == "--json"))),
         "preview" => only_flags(rest, &["--summary"])
-            .map(|_| commands::preview(&model, !rest.iter().any(|a| a == "--summary"))),
-        "approve" => match (flag_value(rest, "--digest"), flag_value(rest, "--by")) {
-            (Some(digest), Some(by)) if rest.len() == 4 => {
-                Ok(commands::approve_plan(&model, digest, by))
-            }
-            _ => Err(usage_error(
-                "`approve` needs --digest <digest> and --by <name>",
-            )),
-        },
-        "generate" => only_flags(rest, &[]).map(|_| commands::generate(&model)),
-        "recover" => only_flags(rest, &[]).map(|_| commands::recover_generation(&model)),
-        "check" => only_flags(rest, &[]).map(|_| commands::check_output(&model)),
-        "render" => only_flags(rest, &[]).map(|_| commands::render(&model)),
-        "conformance" => match rest {
-            [side] if side == "--rust" => Ok(commands::conformance(
-                &model,
-                l2r_plan::ConformanceSide::Rust,
-            )),
-            [side] if side == "--lean" => Ok(commands::conformance(
-                &model,
-                l2r_plan::ConformanceSide::Lean,
-            )),
-            _ => Err(usage_error("`conformance` needs --rust or --lean")),
-        },
-        "packet" => match rest {
-            [component] => Ok(project::packet(&model, component)),
-            _ => Err(usage_error(
-                "`packet` needs a model file and one component id",
-            )),
-        },
-        "lean-composition" => only_flags(rest, &[]).map(|_| commands::lean_composition(&model)),
-        other => Err(usage_error(&format!("unknown command `{other}`"))),
-    };
-    result.unwrap_or_else(|outcome| outcome)
-}
-
-/// Flag values (`(flag, value)`, the value empty for a switch) and positional arguments.
-type Parsed<'a> = (Vec<(&'a str, &'a str)>, Vec<&'a str>);
-
-/// Splits `rest` into flag values and positional arguments. Every flag in
-/// `flags` takes one value; `switches` take none.
-fn parse_flags<'a>(
-    rest: &'a [String],
-    flags: &[&str],
-    switches: &[&str],
-) -> Result<Parsed<'a>, Outcome> {
-    let mut values = Vec::new();
-    let mut positional = Vec::new();
-    let mut iter = rest.iter();
-    while let Some(arg) = iter.next() {
-        if flags.contains(&arg.as_str()) {
-            let Some(value) = iter.next() else {
-                return Err(usage_error(&format!("`{arg}` needs a value")));
-            };
-            values.push((arg.as_str(), value.as_str()));
-        } else if switches.contains(&arg.as_str()) {
-            values.push((arg.as_str(), ""));
-        } else if arg.starts_with("--") {
-            return Err(usage_error(&format!("unexpected argument `{arg}`")));
-        } else {
-            positional.push(arg.as_str());
-        }
+            .map(|()| commands::preview(model, !rest.iter().any(|a| a == "--summary"))),
+        "approve" => approve(model, rest),
+        "conformance" => conformance(model, rest),
+        "packet" => packet(model, rest),
+        command => model_only_command(command, model, rest),
     }
-    Ok((values, positional))
 }
 
-fn init(rest: &[String]) -> Outcome {
+/// The commands whose only argument is the model file.
+fn model_only_command(command: &str, model: &Path, rest: &[String]) -> Result<Outcome, Outcome> {
+    let run: fn(&Path) -> Outcome = match command {
+        "validate" => commands::validate,
+        "generate" => commands::generate,
+        "recover" => commands::recover_generation,
+        "check" => commands::check_output,
+        "render" => commands::render,
+        "lean-composition" => commands::lean_composition,
+        other => return Err(usage_error(&format!("unknown command `{other}`"))),
+    };
+    only_flags(rest, &[])?;
+    Ok(run(model))
+}
+
+fn approve(model: &Path, rest: &[String]) -> Result<Outcome, Outcome> {
+    match (flag_value(rest, "--digest"), flag_value(rest, "--by")) {
+        (Some(digest), Some(by)) if rest.len() == 4 => {
+            Ok(commands::approve_plan(model, digest, by))
+        }
+        _ => Err(usage_error(
+            "`approve` needs --digest <digest> and --by <name>",
+        )),
+    }
+}
+
+fn conformance(model: &Path, rest: &[String]) -> Result<Outcome, Outcome> {
+    let side = match rest {
+        [side] if side == "--rust" => l2r_plan::ConformanceSide::Rust,
+        [side] if side == "--lean" => l2r_plan::ConformanceSide::Lean,
+        _ => return Err(usage_error("`conformance` needs --rust or --lean")),
+    };
+    Ok(commands::conformance(model, side))
+}
+
+fn packet(model: &Path, rest: &[String]) -> Result<Outcome, Outcome> {
+    match rest {
+        [component] => Ok(packet::packet(model, component)),
+        _ => Err(usage_error(
+            "`packet` needs a model file and one component id",
+        )),
+    }
+}
+
+/// The arguments of a command that takes flags with values.
+struct Arguments<'a> {
+    /// `(flag, value)` in the order given; the value is empty for a switch.
+    flags: Vec<(&'a str, &'a str)>,
+    positional: Vec<&'a str>,
+}
+
+impl<'a> Arguments<'a> {
+    /// Splits `rest` into flag values and positional arguments. Every flag in
+    /// `flags` takes one value; `switches` take none.
+    fn parse(rest: &'a [String], flags: &[&str], switches: &[&str]) -> Result<Self, Outcome> {
+        let mut arguments = Arguments {
+            flags: Vec::new(),
+            positional: Vec::new(),
+        };
+        let mut iter = rest.iter().map(String::as_str);
+        while let Some(arg) = iter.next() {
+            if flags.contains(&arg) {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| usage_error(&format!("`{arg}` needs a value")))?;
+                arguments.flags.push((arg, value));
+            } else if switches.contains(&arg) {
+                arguments.flags.push((arg, ""));
+            } else if arg.starts_with("--") {
+                return Err(usage_error(&format!("unexpected argument `{arg}`")));
+            } else {
+                arguments.positional.push(arg);
+            }
+        }
+        Ok(arguments)
+    }
+
+    /// The value of `flag` where it is first given.
+    fn value(&self, flag: &str) -> Option<&'a str> {
+        self.flags.iter().find(|(f, _)| *f == flag).map(|(_, v)| *v)
+    }
+
+    /// True when the switch is given.
+    fn has(&self, switch: &str) -> bool {
+        self.flags.iter().any(|(f, _)| *f == switch)
+    }
+}
+
+/// How the workspace that `init` is asked to write refers to L2R, if it is
+/// asked to write one.
+fn workspace_source(arguments: &Arguments) -> Result<Option<init::L2rSource>, Outcome> {
+    let commit = arguments.value("--workspace-commit");
+    let path = arguments.value("--workspace-path");
+    match (commit, path) {
+        (Some(_), Some(_)) => Err(usage_error(
+            "use one of --workspace-commit and --workspace-path",
+        )),
+        (Some(commit), None) => Ok(Some(init::L2rSource::Commit(commit.to_string()))),
+        (None, Some(path)) => Ok(Some(init::L2rSource::Path(path.to_string()))),
+        (None, None) => Ok(None),
+    }
+}
+
+fn init(rest: &[String]) -> Result<Outcome, Outcome> {
     let flags = [
         "--id",
         "--lean-root",
         "--workspace-commit",
         "--workspace-path",
     ];
-    let (values, positional) = match parse_flags(rest, &flags, &[]) {
-        Ok(parsed) => parsed,
-        Err(outcome) => return outcome,
+    let arguments = Arguments::parse(rest, &flags, &[])?;
+    let ([dir], Some(id)) = (arguments.positional.as_slice(), arguments.value("--id")) else {
+        return Err(usage_error("`init` needs a directory and --id <system id>"));
     };
-    let value = |flag: &str| values.iter().find(|(f, _)| *f == flag).map(|(_, v)| *v);
-    let ([dir], Some(id)) = (positional.as_slice(), value("--id")) else {
-        return usage_error("`init` needs a directory and --id <system id>");
-    };
-    let lean_root = match value("--lean-root") {
+    let lean_root = match arguments.value("--lean-root") {
         Some(root) => root.to_string(),
-        None => project::default_lean_root(id).unwrap_or_default(),
+        None => init::default_lean_root(id).unwrap_or_default(),
     };
-    let workspace = match (value("--workspace-commit"), value("--workspace-path")) {
-        (Some(_), Some(_)) => {
-            return usage_error("use one of --workspace-commit and --workspace-path");
-        }
-        (Some(commit), None) => Some(project::L2rSource::Commit(commit.to_string())),
-        (None, Some(path)) => Some(project::L2rSource::Path(path.to_string())),
-        (None, None) => None,
-    };
-    project::init(&project::InitOptions {
+    let workspace = workspace_source(&arguments)?;
+    Ok(init::init(&init::NewProject {
         dir: PathBuf::from(dir),
         id: id.to_string(),
         lean_root,
         workspace,
-    })
+    }))
 }
 
-fn inventory(rest: &[String]) -> Outcome {
-    let (values, positional) = match parse_flags(rest, &["--out"], &["--v0"]) {
-        Ok(parsed) => parsed,
-        Err(outcome) => return outcome,
-    };
-    let out = values.iter().find(|(f, _)| *f == "--out").map(|(_, v)| *v);
-    let (Some((project, roots)), Some(out)) = (positional.split_first(), out) else {
-        return usage_error(
+fn inventory(rest: &[String]) -> Result<Outcome, Outcome> {
+    let arguments = Arguments::parse(rest, &["--out"], &["--v0"])?;
+    let (Some((project, roots)), Some(out)) =
+        (arguments.positional.split_first(), arguments.value("--out"))
+    else {
+        return Err(usage_error(
             "`inventory` needs a Lake project directory, --out <file> and root modules",
-        );
+        ));
     };
     let roots: Vec<String> = roots.iter().map(|r| r.to_string()).collect();
-    let v0 = values.iter().any(|(f, _)| *f == "--v0");
-    project::inventory(
-        std::path::Path::new(project),
-        std::path::Path::new(out),
-        v0,
+    Ok(inventory::inventory(
+        Path::new(project),
+        Path::new(out),
+        arguments.has("--v0"),
         &roots,
-    )
+    ))
 }
 
 fn main() -> ExitCode {
