@@ -45,10 +45,12 @@ fn edge<'a>(model: &'a mut Model, id: &str) -> &'a mut MessageEdge {
         .expect("edge exists")
 }
 
-/// The tank station as it would be had the Lean project called the type
-/// `from` by the name `to`: in the ports that carry it, and in every
+/// The tank station as it would be had the Lean project called its sample
+/// type `Tank.Ports.<name>`: in the ports that carry it, and in every
 /// declaration, type and constructor name of the inventory.
-fn tank_with_lean_type_renamed(from: &str, to: &str) -> (Model, Inventory) {
+fn tank_with_sample_type_named(name: &str) -> (Model, Inventory) {
+    let from = "Tank.Ports.Sample";
+    let to = &format!("Tank.Ports.{name}");
     let mut model = tank_model();
     for port in model.ports.iter_mut().filter(|p| p.message == from) {
         port.message = to.to_string();
@@ -350,8 +352,7 @@ fn generated_names_must_be_distinct() {
 #[test]
 fn a_lean_type_may_not_take_the_name_of_a_rust_prelude_type() {
     for name in ["Vec", "Option", "Box", "String", "Result"] {
-        let (model, inventory) =
-            tank_with_lean_type_renamed("Tank.Ports.Sample", &format!("Tank.Ports.{name}"));
+        let (model, inventory) = tank_with_sample_type_named(name);
         let found = codes(&model, &inventory);
         assert!(found.contains(&"L2R-L007"), "{name}: {found:?}");
     }
