@@ -8,19 +8,28 @@
 #                generator of its approval record, and the exact semantics and
 #                scheduler-model sources it imports; seeded mismatches are rejected;
 #   1. prove     the semantics (lean/L2R/Async1.lean), the scheduler model with
-#                output ports (lean/L2R/Async1Ports.lean), the Lean specs and the
-#                derived networks compile with the pinned Lean;
+#                output ports (lean/L2R/Async1Ports.lean), the Lean specs, the
+#                derived networks and the tank station's system proofs compile
+#                with the pinned Lean;
 #   2. audit     every expected theorem exists and uses only standard axioms; its
 #                statement and every pinned definition (scheduler model, derived
 #                routes, capacities, ports) equal the reviewed expected-statements.txt;
 #   3. kernel    `leanchecker --fresh` replays everything, Lean's core library
 #                included; a fixture whose proof skipped the kernel must be rejected;
 #   4. inventory the committed `l2r.lean-inventory/v1` files equal a fresh export
-#                from the compiled specifications;
+#                from the compiled specifications; and what `l2r init` writes
+#                for a project under other names (it renames the starter's
+#                specification and inventory) is again a fresh export;
 #   5. mutants   each seeded deviation of the scheduler model in mutants.tsv is
 #                rejected inside its named theorems;
 #   6. bypasses  each attempt in bypasses.tsv to pass without a real proof is
-#                rejected by its named gate.
+#                rejected by its named gate;
+#   7. conform   bounded testing, not proof: for every example the generated Rust
+#                scheduler and the Lean scheduler model agree on every operation
+#                sequence of length $EXHAUSTIVE and on $RANDOM_COUNT pseudo-random
+#                sequences of length $RANDOM_LENGTH (the derived harness of
+#                `l2r conformance`). A scheduler model with a different but
+#                still permitted order must disagree with the Rust here.
 #
 # The derived networks' freshness (each equals `l2r lean-composition` of the
 # committed model and inventory) is checked by //crates/l2r_plan:l2r_plan_v2_test
@@ -28,6 +37,13 @@
 set -euo pipefail
 
 manifest="$1"
+l2r="$(realpath "$2")"
+traces_tank_station="$(realpath "$3")"
+traces_relay="$(realpath "$4")"
+traces_starter="$(realpath "$5")"
+EXHAUSTIVE=4
+RANDOM_COUNT=3000
+RANDOM_LENGTH=80
 if ! grep -q '^status=available' "$manifest"; then
   echo "FAIL: verification toolchain unavailable: $(sed -n 's/^reason=//p' "$manifest")" >&2
   echo "run: bazel test --config=verify //verification/composition_v2:composition_v2_test" >&2
@@ -44,13 +60,16 @@ step() { echo "== $*"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 LANE=verification/composition_v2
-EXAMPLES="tank_station relay"
+EXAMPLES="tank_station relay starter"
 ws="$TEST_TMPDIR/ws"
 mkdir -p "$ws"
-for f in $(find lean examples/tank_station/spec examples/relay/spec examples/tank_station/composition \
-             examples/relay/composition "$LANE" tools/lean_inventory \( -type f -o -type l \) -name '*.lean') \
+for f in $(find lean examples/tank_station/spec examples/relay/spec examples/starter/spec examples/tank_station/composition \
+             examples/relay/composition examples/starter/composition \
+             examples/tank_station/conformance examples/relay/conformance examples/starter/conformance \
+             "$LANE" tools/lean_inventory \( -type f -o -type l \) -name '*.lean') \
          "$LANE/expected-statements.txt" "$LANE/mutants.tsv" "$LANE/bypasses.tsv" \
          examples/tank_station/architecture.approval.json examples/relay/architecture.approval.json \
+         examples/starter/architecture.approval.json examples/starter/lean-inventory.json \
          examples/tank_station/lean-inventory.json examples/relay/lean-inventory.json; do
   mkdir -p "$ws/$(dirname "$f")"
   cp -L "$f" "$ws/$f"
@@ -71,8 +90,13 @@ examples/tank_station/spec Tank.lean
 examples/relay/spec Relay/Machines.lean
 examples/relay/spec Relay/Wiring.lean
 examples/relay/spec Relay.lean
+examples/starter/spec Starter/Monitor.lean
+examples/starter/spec Starter/Wiring.lean
+examples/starter/spec Starter.lean
 examples/tank_station/composition L2RDerived/tank_station.lean
-examples/relay/composition L2RDerived/relay.lean"
+examples/relay/composition L2RDerived/relay.lean
+examples/starter/composition L2RDerived/starter.lean
+examples/tank_station/composition TankStationProperties.lean"
 
 # build <workspace> <out>: compiles every module; stops at the first failure.
 build() {
@@ -164,7 +188,7 @@ cmp -s "$evidence/statements.txt" "$LANE/expected-statements.txt" || {
 }
 
 step "3. kernel replay (leanchecker --fresh)"
-for module in L2RDerived.tank_station L2RDerived.relay; do
+for module in TankStationProperties L2RDerived.relay L2RDerived.starter; do
   PATH="$TOOLS/lean/bin:/usr/bin:/bin" LEAN_PATH="$out" "$TOOLS/lean/bin/leanchecker" --fresh "$module" > "$evidence/leanchecker-$module.log" 2>&1 \
     || { cat "$evidence/leanchecker-$module.log" >&2; fail "leanchecker rejected the environment of $module"; }
   echo "leanchecker --fresh $module: accepted (all imports replayed, Lean core included)" | tee -a "$evidence/kernel.txt"
@@ -180,7 +204,7 @@ grep -q "declaration type mismatch" "$evidence/forgery.log" || fail "leanchecker
 echo "kernel forgery (standard axioms only, passes the audit's axiom check): rejected by leanchecker" | tee -a "$evidence/kernel.txt"
 
 step "4. inventory freshness (l2r.lean-inventory/v1)"
-for pair in "tank_station Tank" "relay Relay"; do
+for pair in "tank_station Tank" "relay Relay" "starter Starter"; do
   read -r example module <<< "$pair"
   PATH="$TOOLS/lean/bin:$PATH" LEAN_PATH="$out" "$LEAN" --run tools/lean_inventory/Main.lean --v1 "$module" > "$evidence/inventory-$example.json" \
     || fail "exporting the inventory of $example failed"
@@ -190,6 +214,23 @@ for pair in "tank_station Tank" "relay Relay"; do
   }
   echo "inventory of $example: equals a fresh export" | tee -a "$evidence/inventory.txt"
 done
+
+# `l2r init` renames the starter. Its output must again be a specification that
+# compiles and an inventory that is exactly what that specification exports.
+init="$TEST_TMPDIR/init"
+rm -rf "$init"
+"$l2r" init "$init" --id pump_station > "$evidence/init.log" 2>&1 || { cat "$evidence/init.log" >&2; fail "l2r init failed"; }
+"$l2r" validate "$init/architecture.toml" >> "$evidence/init.log" 2>&1 || { cat "$evidence/init.log" >&2; fail "the project written by l2r init is not valid"; }
+initout="$TEST_TMPDIR/init-olean"
+for m in PumpStation/Monitor PumpStation/Wiring PumpStation; do
+  mkdir -p "$(dirname "$initout/$m.olean")"
+  LEAN_PATH="$initout" "$LEAN" -R "$init/spec" "$init/spec/$m.lean" -o "$initout/$m.olean" >> "$evidence/init.log" 2>&1 \
+    || { cat "$evidence/init.log" >&2; fail "the specification written by l2r init does not compile"; }
+done
+PATH="$TOOLS/lean/bin:$PATH" LEAN_PATH="$initout" "$LEAN" --run tools/lean_inventory/Main.lean --v1 PumpStation > "$evidence/inventory-init.json" \
+  || fail "exporting the inventory of the project written by l2r init failed"
+cmp -s "$evidence/inventory-init.json" "$init/lean-inventory.json" || fail "the inventory written by l2r init is not what its specification exports"
+echo "inventory written by \`l2r init --id pump_station\`: equals a fresh export of the renamed specification" | tee -a "$evidence/inventory.txt"
 
 step "5. seeded deviations"
 count=0
@@ -241,4 +282,31 @@ while IFS=$'\t' read -r name file from to gate; do
 done < "$LANE/bypasses.tsv"
 [ "$count" -gt 0 ] || fail "no bypasses defined"
 
-echo "PASS: scheduler model and derived networks checked, audited, kernel-replayed; inventories fresh; all deviations and bypasses rejected" | tee "$evidence/summary.txt"
+step "7. bounded conformance of the generated Rust schedulers with the Lean model"
+# conform <example> <olean dir> <workspace> <log>
+conform() {
+  LEAN_PATH="$2" "$LEAN" --run "$3/examples/$1/conformance/Conformance.lean" "$TEST_TMPDIR/traces-$1.txt" > "$4" 2>&1
+}
+for example in $EXAMPLES; do
+  recorder="traces_$example"
+  "${!recorder}" "$EXHAUSTIVE" "$RANDOM_COUNT" "$RANDOM_LENGTH" > "$TEST_TMPDIR/traces-$example.txt" \
+    || fail "recording the Rust scheduler's traces of $example failed"
+  conform "$example" "$out" "$ws" "$evidence/conformance-$example.log" \
+    || { head -20 "$evidence/conformance-$example.log" >&2; fail "the generated Rust scheduler of $example and the Lean scheduler model disagree"; }
+  echo "$example: $(grep -m1 -oE 'CONFORMANCE .*' "$evidence/conformance-$example.log") (every sequence of $EXHAUSTIVE operations; $RANDOM_COUNT pseudo-random sequences of $RANDOM_LENGTH)" | tee -a "$evidence/conformance.txt"
+done
+# The gate must be able to fail. A scheduler that keeps serving the machine it
+# just served is still sound (every theorem about it holds), but it is not the
+# order the generated Rust uses: conformance must tell them apart.
+cws="$TEST_TMPDIR/conformance-mutant"
+rm -rf "$cws"; cp -R "$ws" "$cws"
+apply_edit '(⟨k, (c.val + 1) % machines⟩ : Sched N)' '(⟨k, c.val⟩ : Sched N)' "$cws/lean/L2R/Async1Ports.lean" \
+  || fail "conformance mutant: pattern not found"
+build "$cws" "$cws/olean" > "$evidence/conformance-mutant.log" 2>&1 \
+  || { cat "$evidence/conformance-mutant.log" >&2; fail "the sticky-cursor scheduler was expected to satisfy every theorem"; }
+if conform relay "$cws/olean" "$cws" "$evidence/conformance-mutant-relay.log"; then
+  fail "conformance did not tell a scheduler with a different order from the generated Rust"
+fi
+echo "sticky-cursor scheduler (every theorem still holds): rejected by conformance on relay ($(grep -m1 -oE 'CONFORMANCE .*' "$evidence/conformance-mutant-relay.log"))" | tee -a "$evidence/conformance.txt"
+
+echo "PASS: scheduler model and derived networks checked, audited, kernel-replayed; inventories fresh; all deviations and bypasses rejected; generated schedulers conform on the sequences tried" | tee "$evidence/summary.txt"

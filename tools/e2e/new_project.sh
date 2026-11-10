@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# End to end: a new project in a new Bazel workspace, outside this repository.
+#
+#   tools/e2e/new_project.sh            (KEEP=1 keeps the workspace for inspection)
+#
+# Follows docs/getting-started.md step by step, using L2R only as an external
+# Bazel dependency (`@l2r`), and checks every refusal on the way:
+#
+#   init -> (inventory) -> check fails: nothing approved -> preview -> approve ->
+#   generate -> tests fail: nothing implemented -> implement -> tests pass ->
+#   change the model -> check fails: stale approval, generate refuses ->
+#   re-approve, regenerate: implementation untouched -> edit a generated file ->
+#   check fails: drift -> work packet -> derived network and conformance run.
+#
+# Lean is the pinned release L2R provides through Bazel (@l2r//tools/lean), so
+# the inventory export and the conformance replay always run, and always with
+# the same Lean, whatever is installed on the machine.
+#
+# The implementation step copies the committed implementation of
+# examples/starter (the same system under its template names).
+set -euo pipefail
+
+repo="$(cd "$(dirname "$0")/../.." && pwd)"
+work="$(mktemp -d)"
+if [ "${KEEP:-}" = 1 ]; then echo "workspace: $work"; else trap 'rm -rf "$work"' EXIT; fi
+proj="$work/pump_station"
+log="$work/log.txt"
+
+step() { echo "== $*"; }
+fail() { echo "FAIL: $*" >&2; [ -f "$log" ] && tail -40 "$log" >&2; exit 1; }
+# refused <pattern> <command...>: the command must fail and say <pattern>.
+refused() {
+  local pattern="$1"; shift
+  if "$@" > "$log" 2>&1; then fail "expected a refusal ($pattern) from: $*"; fi
+  grep -q -- "$pattern" "$log" || fail "refused, but not with \`$pattern\`: $*"
+}
+
+step "1. l2r init: a new workspace"
+(cd "$repo" && bazel run //crates/l2r_cli:l2r -- init "$proj" --id pump_station --workspace-path "$repo") > "$log" 2>&1 \
+  || fail "init failed"
+refused "already exists" bash -c "cd '$repo' && bazel run //crates/l2r_cli:l2r -- init '$proj' --id pump_station"
+
+cd "$proj"
+bazel build @l2r//crates/l2r_cli:l2r > "$log" 2>&1 || fail "L2R does not build as an external dependency"
+L2R="$(bazel cquery --output=files @l2r//crates/l2r_cli:l2r 2>/dev/null)"
+L2R="$(bazel info execution_root 2>/dev/null)/$L2R"
+[ -x "$L2R" ] || fail "cannot locate the l2r binary"
+M="$proj/architecture.toml"
+
+"$L2R" validate "$M" > "$log" 2>&1 || fail "the new project's model is not valid"
+
+# The pinned Lean, first on PATH: `l2r inventory` and `lake` below use it.
+lean_bin="$(bazel run @l2r//tools/lean:bin_path 2> "$log")" || fail "the pinned Lean toolchain is not available"
+export PATH="$lean_bin:$PATH"
+pinned="leanprover/lean4:v$(lean --version | sed -n 's/^Lean (version \([0-9.]*\).*/\1/p')"
+for toolchain in spec/lean-toolchain verification/lean-toolchain; do
+  [ "$(cat "$proj/$toolchain")" = "$pinned" ] || fail "$toolchain says $(cat "$proj/$toolchain"), the pinned Lean is $pinned"
+done
+
+step "2. the inventory init wrote is what its Lean specification exports ($pinned)"
+"$L2R" inventory "$proj/spec" --out "$work/fresh.json" PumpStation > "$log" 2>&1 || fail "l2r inventory failed"
+cmp -s "$work/fresh.json" "$proj/lean-inventory.json" || fail "the inventory written by init differs from a fresh export"
+rm -rf "$proj/spec/.lake"
+echo "fresh export equals the committed inventory"
+
+step "3. nothing approved yet: the drift check fails and says what to do"
+refused "no approval record yet" bazel test //...
+refused "no approval recorded" "$L2R" generate "$M"
+
+step "4. preview, approve exactly that plan, generate"
+"$L2R" preview "$M" --summary > "$work/preview.txt" || fail "preview failed"
+digest="$(sed -n 's/^Plan digest: //p' "$work/preview.txt")"
+refused "approval refused" "$L2R" approve "$M" --digest sha256:0000 --by "E2E"
+"$L2R" approve "$M" --digest "$digest" --by "E2E Architect" > "$log" 2>&1 || fail "approve failed"
+"$L2R" generate "$M" > "$log" 2>&1 || fail "generate failed"
+
+step "5. nothing implemented yet: the contract tests fail"
+refused "not yet implemented" bazel test --test_output=errors //...
+
+step "6. implement inside the generated contracts"
+src="$repo/examples/starter/scaffold/src/starter"
+dst="$proj/scaffold/src/pump_station"
+for f in monitor/imp.rs routes.rs; do
+  sed -e 's/Starter/PumpStation/g' -e 's/starter/pump_station/g' "$src/$f" > "$dst/$f"
+done
+bazel test //... > "$log" 2>&1 || fail "the implemented project does not pass its tests"
+cp "$dst/monitor/imp.rs" "$work/imp.saved"
+
+step "7. change the architecture: the approval is stale until the new plan is reviewed"
+sed -i.bak 's/^responsibility = "Watches readings/responsibility = "Observes readings/' "$M" && rm "$M.bak"
+refused "architecture model changed" bazel test --test_output=errors //:scaffold_matches_approved_plan_test
+refused "generation refused" "$L2R" generate "$M"
+digest="$("$L2R" preview "$M" --summary | sed -n 's/^Plan digest: //p')"
+"$L2R" approve "$M" --digest "$digest" --by "E2E Architect" > "$log" 2>&1 || fail "re-approve failed"
+"$L2R" generate "$M" > "$log" 2>&1 || fail "regenerate failed"
+cmp -s "$dst/monitor/imp.rs" "$work/imp.saved" || fail "regeneration changed an implementation file"
+grep -q "Responsibility: Observes readings" "$dst/monitor/mod.rs" || fail "the regenerated contract does not reflect the model"
+bazel test //... > "$log" 2>&1 || fail "tests fail after regeneration"
+
+step "8. an edited generated file is drift"
+cp "$dst/mod.rs" "$work/mod.saved"
+echo "// a helpful tweak" >> "$dst/mod.rs"
+refused "edited after generation" bazel test --test_output=errors //:scaffold_matches_approved_plan_test
+cp "$work/mod.saved" "$dst/mod.rs"
+bazel test //... > "$log" 2>&1 || fail "tests fail after restoring the generated file"
+
+step "9. the work packet"
+"$L2R" packet "$M" monitor > "$work/packet.md" || fail "packet failed"
+grep -q "scaffold/src/pump_station/monitor/imp.rs" "$work/packet.md" || fail "the packet does not name the implementation file"
+grep -q "PumpStation.Monitor.alert_only_above_limit" "$work/packet.md" || fail "the packet does not list the theorems"
+
+step "10. evidence about the composed system: derived network, conformance run"
+mkdir -p "$proj/verification/L2RDerived"
+"$L2R" lean-composition "$M" > "$proj/verification/L2RDerived/pump_station.lean" || fail "lean-composition failed"
+"$L2R" conformance "$M" --rust > "$proj/verification/traces.rs" || fail "conformance --rust failed"
+"$L2R" conformance "$M" --lean > "$proj/verification/Conformance.lean" || fail "conformance --lean failed"
+bazel run //:conformance_traces -- 3 300 40 > "$work/traces.txt" 2> "$log" || fail "the conformance recorder does not build or run"
+[ "$(wc -l < "$work/traces.txt")" -gt 300 ] || fail "the conformance recorder wrote no traces"
+(cd "$proj/verification" && lake build && lake env lean --run Conformance.lean "$work/traces.txt") > "$log" 2>&1 \
+  || fail "the generated Rust scheduler and the Lean scheduler model disagree, or the derived Lean does not build"
+grep -E "^CONFORMANCE [0-9]+/[0-9]+ sequences agree" "$log" || fail "no conformance result"
+agreed="$(sed -n 's/^CONFORMANCE \([0-9]*\)\/\([0-9]*\) sequences agree.*/\1 \2/p' "$log")"
+[ "${agreed% *}" = "${agreed#* }" ] && [ "${agreed% *}" -gt 300 ] || fail "not every recorded sequence agrees: $agreed"
+
+echo "E2E PASS: a new project, built with L2R as an external dependency, went through the whole workflow"

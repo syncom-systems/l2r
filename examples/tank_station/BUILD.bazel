@@ -1,4 +1,4 @@
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//bazel:l2r.bzl", "l2r_check_test", "l2r_conformance_traces")
 
 # The tank filling station: the hierarchical example for composite/v2. A nested
 # composite, machines whose types carry data, forwarded input ports and output
@@ -39,14 +39,20 @@ filegroup(
 # The committed scaffold must equal the approved plan of the committed model and
 # inventory: no drift in generated files, a current approval and lock, and every
 # implementation file within its budget.
-sh_test(
-    name = "scaffold_matches_approved_plan_test",
-    srcs = ["check_scaffold.sh"],
-    args = ["$(rootpath //crates/l2r_cli:l2r)"],
-    data = [
-        "architecture.approval.json",
-        ":inputs",
-        "//crates/l2r_cli:l2r",
-        "//examples/tank_station/scaffold:l2r_files",
-    ],
+l2r_check_test(name = "scaffold_matches_approved_plan_test")
+
+# The derived conformance harness (`l2r conformance`): the recorder drives the
+# generated scheduler; conformance/Conformance.lean replays what it records on
+# the Lean scheduler model (verification/composition_v2, gate 7).
+l2r_conformance_traces(
+    name = "conformance_traces",
+    src = "conformance/traces.rs",
+    crate = "tank_station_scaffold",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "conformance_sources",
+    srcs = glob(["conformance/*"]),
+    visibility = ["//visibility:public"],
 )

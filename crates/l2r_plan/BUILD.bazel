@@ -67,6 +67,10 @@ l2r_rust_test(
     srcs = ["tests/v2.rs"],
     compile_data = [
         "//examples/relay:composition_derived",
+        "//examples/relay:conformance_sources",
+        "//examples/starter:composition_derived",
+        "//examples/starter:conformance_sources",
+        "//examples/tank_station:conformance_sources",
         "//examples/tank_station:architecture.approval.json",
         "//examples/tank_station:composition_derived",
         "//lean:sources",

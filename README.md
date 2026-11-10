@@ -1,6 +1,6 @@
 # L2R (Lean to Rust)
 
-**Status:** early, working vertical slice. The maintainer ratified the [PRD](https://github.com/syncom-systems/l2r/discussions/1) and [ADR-0001 through ADR-0004](https://github.com/syncom-systems/l2r/discussions/categories/adrs) on 2026-11-09 (recorded in each Discussion).
+**Status:** experimental (0.1.0). The workflow is complete and reproducible; schemas, the generated API and the command line may still change. What is proved, what is only tested and what is assumed is listed in [`docs/release-notes.md`](docs/release-notes.md). The maintainer ratified the [PRD](https://github.com/syncom-systems/l2r/discussions/1) and [ADR-0001 through ADR-0005](https://github.com/syncom-systems/l2r/discussions/categories/adrs) (recorded in each Discussion).
 
 L2R is a human-directed architecture modeling and scaffolding tool. A **human
 architect** describes the components, their nesting, state ownership and
@@ -74,6 +74,16 @@ Rust tests is never presented as proof of correspondence with Lean.
   bounded conformance testing, not proof. See
   [`verification/composition`](verification/composition/README.md).
 
+## Start a project of your own
+
+[`docs/getting-started.md`](docs/getting-started.md) is the whole workflow for a
+new system in a new repository: `l2r init`, the Lean specification, `l2r
+inventory`, the model, preview/approve/generate, the work packet for the
+implementer, the drift test, and the kinds of evidence. CI runs it end to end in
+a fresh workspace that uses L2R only as an external Bazel dependency
+(`tools/e2e/new_project.sh`), with the pinned Lean, including the inventory
+export and the conformance replay.
+
 ## Try it
 
 Bazel is the only build and test interface (see ADR-0002). There is no Cargo build.
@@ -96,6 +106,11 @@ $L2R generate $M                       # refuses unless the approval matches the
 $L2R recover  $M                       # only after an interrupted generate
 $L2R check    $M                       # drift, staleness, budgets
 $L2R lean-composition $M               # derived Lean network for the composition proofs
+$L2R packet   $M signal                # work packet for implementing one component
+$L2R conformance $M --rust | --lean    # derived conformance harness (schema v2 models)
+
+$L2R init <dir> --id <system_id>       # a new project: model, Lean spec, inventory
+$L2R inventory <lake-dir> --out <file> <Root>...   # export the inventory (runs `lake`)
 ```
 
 Edit a responsibility in the model and run `generate` again. It refuses, because
@@ -119,14 +134,22 @@ the architecture model changed, until the new plan has been previewed and approv
 | `verification/composition` | The composition lane: audit, kernel replay, deviations, conformance |
 | `verification/composition_v1` | The same lane for `composite/v1`, with mailbox-content conformance and a fair-cycle search |
 | `lean/L2R/Async1.lean` | Semantics `l2r.async/v1`: bounded mailboxes, backpressure, typed ports, fair-termination principle |
+| `examples/starter` | The project `l2r init` creates, generated and implemented; its model, Lean spec and inventory are the templates |
+| `bazel/l2r.bzl` | `l2r_check_test`: the drift test, for projects that use L2R |
+| `tools/e2e/new_project.sh` | A new project in a new workspace, end to end |
+| `tools/lean` | The pinned Lean release for projects that use L2R: `bazel run @l2r//tools/lean:bin_path` prints the directory of its `lean` and `lake` |
+| `docs/getting-started.md` | The workflow for a project of your own |
 | `examples/tank_station` | Hierarchical example for schema `v2`: a nested subsystem, forwarded ports, two outboxes, data in every message |
 | `examples/relay` | Generator fixture for schema `v2`: deep nesting, port chains, two routes to one receiver, wrapping arithmetic |
+| `lean/lakefile.lean` | L2R's Lean library as a Lake package, for a project's own verification package |
 | `lean/L2R/Async1Ports.lean` | Output ports as children of an `l2r.async/v1` network, and the Lean model of the `composite/v2` scheduler |
 | `verification/composition_v2` | The lane for `composite/v2`: scheduler model, derived flat networks, inventory freshness |
 | `docs/composite-v2.md` | Hierarchical composition, output ports, data types: decisions, generated code, what is and is not established |
 | `docs/model-reference.md` | Model schema, profiles, validation rules, write semantics |
 | `docs/generation-boundary.md` | Exact write guarantees, threat model, limits, and the tests behind them |
 | `docs/verification.md` | Kinds of evidence, the verification route, and what is and is not proved |
+| `docs/release-notes.md` | What each release contains; proved, tested and assumed, side by side |
+| `.claude/skills` | Instructions for coding agents working on L2R itself (not part of the tool) |
 
 ## Documentation and decisions
 
@@ -137,6 +160,7 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
 - [ADR-0002: Bazel is the only build and test interface](https://github.com/syncom-systems/l2r/discussions/4) — Accepted 2026-11-09
 - [ADR-0003: Architecture model v0, Lean inventory references, and approval semantics](https://github.com/syncom-systems/l2r/discussions/5) — Accepted 2026-11-09
 - [ADR-0004: Asynchronous composition semantics and the scheduler relation](https://github.com/syncom-systems/l2r/discussions/9) — Accepted 2026-11-09
+- [ADR-0005: Hierarchical composition, output ports and data-carrying types](https://github.com/syncom-systems/l2r/discussions/16) — Accepted 2026-11-10
 
 ## Known limits
 
@@ -151,10 +175,11 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
   Schema `v2` supports a closed data subset (no `Nat`, strings, collections or
   recursive types). Message edges connect siblings only (ADR-0003 D7); in `v2`
   a boundary is crossed through declared ports.
-- For `composite/v2` the link between the generated Rust and Lean is weaker than
-  for the crossing examples: there is no conformance run and no refinement proof
-  yet, and no system theorem about the tank station. `docs/composite-v2.md`
-  lists exactly what is proved, checked, tested and not established.
+- For `composite/v2` the generated Rust is tied to Lean by bounded conformance
+  testing (a derived harness, `l2r conformance`), not by a refinement proof. One
+  system safety property of the tank station is proved over every interleaving
+  (the valve interlock); no liveness property is. `docs/composite-v2.md` lists
+  exactly what is proved, checked, tested and not established.
 - The composite scheduler realizes one deterministic interleaving. It is not a
   model of every interleaving; its runs are proved to be among them only for
   its Lean model.

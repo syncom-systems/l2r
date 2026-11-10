@@ -295,3 +295,171 @@ fn render_shows_a_v1_composite_with_its_capacities_and_ports() {
         run.stdout
     );
 }
+
+#[test]
+fn init_creates_a_valid_project_and_never_overwrites() {
+    let dir = scratch_dir("init").join("pump");
+    let target = dir.display().to_string();
+    let created = l2r(&["init", &target, "--id", "pump_station"]);
+    assert_eq!(created.code, 0, "{}", created.stderr);
+    for file in [
+        "architecture.toml",
+        "lean-inventory.json",
+        "BUILD.bazel",
+        "README.md",
+        "spec/lakefile.lean",
+        "spec/lean-toolchain",
+        "spec/PumpStation.lean",
+        "spec/PumpStation/Monitor.lean",
+        "spec/PumpStation/Wiring.lean",
+        "verification/lakefile.lean",
+        "verification/lean-toolchain",
+        "verification/README.md",
+    ] {
+        assert!(dir.join(file).is_file(), "{file} missing");
+    }
+    // The verification package depends on the project's own specification.
+    let lakefile = fs::read_to_string(dir.join("verification/lakefile.lean")).unwrap();
+    assert!(lakefile.contains("require «pump_station_spec» from \"..\" / \"spec\""));
+    // Without a workspace flag, no workspace files are written.
+    assert!(!dir.join("MODULE.bazel").exists());
+    // The names are the project's own, everywhere.
+    let spec = fs::read_to_string(dir.join("spec/PumpStation/Monitor.lean")).unwrap();
+    assert!(spec.contains("namespace PumpStation.Monitor"));
+    assert!(!spec.contains("Starter"));
+    let model = dir.join("architecture.toml").display().to_string();
+    let validated = l2r(&["validate", &model]);
+    assert_eq!(validated.code, 0, "{}", validated.stderr);
+    assert!(validated.stdout.contains("model `pump_station` is valid"));
+
+    // The project can be taken through the whole workflow as it stands.
+    let digest = digest_from(&l2r(&["plan", &model]).stdout);
+    assert_eq!(approve(&model, &digest).code, 0);
+    assert_eq!(l2r(&["generate", &model]).code, 0);
+    assert_eq!(l2r(&["check", &model]).code, 0);
+
+    // A second init into the same directory writes nothing.
+    let before = fs::read_to_string(dir.join("architecture.toml")).unwrap();
+    let again = l2r(&["init", &target, "--id", "other"]);
+    assert_eq!(again.code, 1);
+    assert!(again.stderr.contains("already exists"), "{}", again.stderr);
+    assert_eq!(
+        fs::read_to_string(dir.join("architecture.toml")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn init_with_a_workspace_pins_l2r() {
+    let dir = scratch_dir("init-ws").join("pump");
+    let target = dir.display().to_string();
+    let created = l2r(&[
+        "init",
+        &target,
+        "--id",
+        "pump_station",
+        "--lean-root",
+        "Pump",
+        "--workspace-commit",
+        "0123abc",
+    ]);
+    assert_eq!(created.code, 0, "{}", created.stderr);
+    let module = fs::read_to_string(dir.join("MODULE.bazel")).unwrap();
+    assert!(module.contains("module(name = \"pump_station\""));
+    assert!(module.contains("commit = \"0123abc\""));
+    assert!(dir.join(".bazelversion").is_file());
+    assert!(dir.join("spec/Pump/Monitor.lean").is_file());
+    // The Lean library is pinned to the same commit as the Bazel module.
+    let lakefile = fs::read_to_string(dir.join("verification/lakefile.lean")).unwrap();
+    assert!(lakefile.contains("@ \"0123abc\" / \"lean\""), "{lakefile}");
+}
+
+#[test]
+fn init_rejects_unusable_names() {
+    let dir = scratch_dir("init-bad").join("p");
+    let target = dir.display().to_string();
+    for args in [
+        vec!["init", target.as_str(), "--id", "Pump"],
+        vec![
+            "init",
+            target.as_str(),
+            "--id",
+            "pump",
+            "--lean-root",
+            "pump",
+        ],
+        vec!["init", target.as_str()],
+    ] {
+        let run = l2r(&args);
+        assert_ne!(run.code, 0, "{args:?}");
+        assert!(!dir.exists(), "{args:?} wrote something");
+    }
+}
+
+#[test]
+fn the_work_packet_names_what_may_be_edited_and_what_must_hold() {
+    let (_dir, model) = project("packet");
+    let packet = l2r(&["packet", &model, "signal"]);
+    assert_eq!(packet.code, 0, "{}", packet.stderr);
+    let text = packet.stdout;
+    assert!(text.contains("# Work packet: Crossing signal (`signal`)"));
+    // Only the implementation file is editable; the contract is read-only.
+    let editable = text
+        .split("## Files you may edit")
+        .nth(1)
+        .and_then(|rest| rest.split("## Contract").next())
+        .unwrap();
+    assert!(editable.contains("scaffold/src/crossing/signal/imp.rs"));
+    assert!(!editable.contains("mod.rs"));
+    assert!(text.contains("`Crossing.Signal.step`"));
+    assert!(text.contains("`Crossing.Signal.no_conflicting_release`"));
+    assert!(text.contains("edge `latch_to_signal`"));
+
+    // A composite's packet lists the translations its routes file implements.
+    let composite = l2r(&["packet", &model, "crossing"]).stdout;
+    assert!(composite.contains("| `latch_to_signal` | `Crossing.Routes.latchToSignal` |"));
+
+    let unknown = l2r(&["packet", &model, "nobody"]);
+    assert_eq!(unknown.code, 1);
+    assert!(unknown.stderr.contains("no component `nobody`"));
+}
+
+#[test]
+fn inventory_needs_a_lake_project_and_root_modules() {
+    let dir = scratch_dir("inventory");
+    let project = dir.display().to_string();
+    let out = dir.join("out.json").display().to_string();
+    let no_project = l2r(&["inventory", &project, "--out", &out, "Root"]);
+    assert_eq!(no_project.code, 1);
+    assert!(no_project.stderr.contains("not a Lake project"));
+    assert!(!dir.join("out.json").exists());
+    assert_ne!(l2r(&["inventory", &project, "--out", &out]).code, 0);
+}
+
+#[test]
+fn conformance_prints_both_sides_for_a_hierarchical_model_only() {
+    let dir = scratch_dir("conformance").join("p");
+    let target = dir.display().to_string();
+    assert_eq!(l2r(&["init", &target, "--id", "pump_station"]).code, 0);
+    let model = dir.join("architecture.toml").display().to_string();
+    let rust = l2r(&["conformance", &model, "--rust"]);
+    assert_eq!(rust.code, 0, "{}", rust.stderr);
+    assert!(
+        rust.stdout
+            .contains("use pump_station_scaffold::pump_station::{Progress, System};")
+    );
+    let lean = l2r(&["conformance", &model, "--lean"]);
+    assert_eq!(lean.code, 0, "{}", lean.stderr);
+    assert!(lean.stdout.contains("import L2RDerived.pump_station"));
+    assert_eq!(l2r(&["conformance", &model]).code, 2);
+
+    // The older profiles have their own, hand-written conformance lanes.
+    let (_dir, v0) = project("conformance-v0");
+    let refused = l2r(&["conformance", &v0, "--rust"]);
+    assert_eq!(refused.code, 1);
+    assert!(
+        refused.stderr.contains("v2 models only"),
+        "{}",
+        refused.stderr
+    );
+}

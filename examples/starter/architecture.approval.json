@@ -1,0 +1,32 @@
+{
+  "format": "l2r.approval/v1",
+  "plan_digest": "sha256:4abba8632e9a2b97b0d478a2752c7bed8b77979469cbd7ef4cd5d873d638715e",
+  "model_digest": "sha256:aa3a4c63a82d9e9853e08b3910e79fd6f65b1fd681f35a21de1282e1fcc9a809",
+  "inventory_digest": "sha256:7e4e95d6218dc641f9022b720f643f747260f4d64c08b33107323bb92794a3b0",
+  "generator": "l2r 0.1.0",
+  "profiles": [
+    "composite/v2",
+    "crate-root/v1",
+    "transition-core/v1"
+  ],
+  "artifact_count": 8,
+  "authorized_changes": [
+    {
+      "path": "src/starter/mod.rs",
+      "change": "replace",
+      "before": "sha256:2f19e7480bb266e6786fd00b74598cbd8422e15e14d71897a0159bbcf2c82189"
+    },
+    {
+      "path": "src/starter/monitor/contract_tests.rs",
+      "change": "replace",
+      "before": "sha256:017a6c0dfbe5a6ee22e792b901dfb9ee1f3e4fc87fe2d46f8beb7fe387d2097e"
+    },
+    {
+      "path": "src/types.rs",
+      "change": "replace",
+      "before": "sha256:f36e499c559faf7a666cf16ab58939f4d0928f7db33102f4032034e4dd5ed10d"
+    }
+  ],
+  "recorded_by": "Mats Sundvall (example fixture)",
+  "statement": "The recorder states that the generation plan with this digest, including the content of every planned file, and the listed replacements and deletions of existing generated files, were reviewed and may be applied. This record is not proof of identity or authorization."
+}

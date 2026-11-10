@@ -20,7 +20,8 @@ use_repo(rust, "rust_toolchains")
 register_toolchains("@rust_toolchains//:all")
 
 # Third-party crates. There is no Cargo.toml: each dependency is declared here and its
-# resolution is pinned in //bazel:crates.lock. To change one, edit its spec, then run
+# resolution is pinned in //bazel:crates.lock and //bazel:crates.bazel.lock.json. To
+# change one, edit its spec, then run
 #     CARGO_BAZEL_REPIN=1 bazel mod show_extension @rules_rust//crate_universe:extension.bzl%crate
 crate = use_extension("@rules_rust//crate_universe:extension.bzl", "crate")
 crate.spec(
@@ -54,6 +55,9 @@ crate.spec(
 crate.from_specs(
     name = "crates",
     cargo_lockfile = "//bazel:crates.lock",
+    # Needed for L2R to be usable as a dependency of another Bazel module:
+    # crate_universe does not repin across module boundaries.
+    lockfile = "//bazel:crates.bazel.lock.json",
     supported_platform_triples = [
         "aarch64-apple-darwin",
         "aarch64-unknown-linux-gnu",
@@ -68,3 +72,10 @@ use_repo(crate, "crates")
 verification_tools = use_repo_rule("//bazel/verification:repo.bzl", "verification_tools")
 
 verification_tools(name = "verification_tools")
+
+# The pinned Lean alone (the same archive and sha256 as the proof lane's), for
+# `l2r inventory` and conformance replay in a project that uses L2R. Fetched
+# only when //tools/lean is built.
+lean_toolchain = use_repo_rule("//bazel/lean:repo.bzl", "lean_toolchain")
+
+lean_toolchain(name = "l2r_lean")

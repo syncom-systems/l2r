@@ -18,7 +18,7 @@ pub struct Outcome {
 }
 
 impl Outcome {
-    fn ok(stdout: String) -> Self {
+    pub(crate) fn ok(stdout: String) -> Self {
         Self {
             stdout,
             stderr: String::new(),
@@ -26,7 +26,7 @@ impl Outcome {
         }
     }
 
-    fn refused(stderr: String) -> Self {
+    pub(crate) fn refused(stderr: String) -> Self {
         Self {
             stdout: String::new(),
             stderr,
@@ -230,6 +230,18 @@ pub fn render(model: &Path) -> Outcome {
 pub fn lean_composition(model: &Path) -> Outcome {
     match session::validated(model) {
         Ok(v) => match l2r_plan::lean_composition(&v) {
+            Ok(text) => Outcome::ok(text),
+            Err(e) => Outcome::refused(format!("{e}\n")),
+        },
+        Err(error) => session_error(error),
+    }
+}
+
+/// `l2r conformance <model> --rust|--lean`: one side of the derived
+/// conformance harness, on stdout.
+pub fn conformance(model: &Path, side: l2r_plan::ConformanceSide) -> Outcome {
+    match session::validated(model) {
+        Ok(v) => match l2r_plan::conformance(&v, side) {
             Ok(text) => Outcome::ok(text),
             Err(e) => Outcome::refused(format!("{e}\n")),
         },
