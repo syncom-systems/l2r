@@ -1,6 +1,6 @@
 # L2R (Lean to Rust)
 
-**Status:** early, working vertical slice. The maintainer ratified the [PRD](https://github.com/syncom-systems/l2r/discussions/1) and [ADR-0001 through ADR-0004](https://github.com/syncom-systems/l2r/discussions/categories/adrs) on 2026-11-09 (recorded in each Discussion).
+**Status:** experimental (0.1.0). The workflow is complete and reproducible; schemas, the generated API and the command line may still change. What is proved, what is only tested and what is assumed is listed in [`docs/release-notes.md`](docs/release-notes.md). The maintainer ratified the [PRD](https://github.com/syncom-systems/l2r/discussions/1) and [ADR-0001 through ADR-0005](https://github.com/syncom-systems/l2r/discussions/categories/adrs) (recorded in each Discussion).
 
 L2R is a human-directed architecture modeling and scaffolding tool. A **human
 architect** describes the components, their nesting, state ownership and
@@ -81,7 +81,8 @@ new system in a new repository: `l2r init`, the Lean specification, `l2r
 inventory`, the model, preview/approve/generate, the work packet for the
 implementer, the drift test, and the kinds of evidence. CI runs it end to end in
 a fresh workspace that uses L2R only as an external Bazel dependency
-(`tools/e2e/new_project.sh`).
+(`tools/e2e/new_project.sh`), with the pinned Lean, including the inventory
+export and the conformance replay.
 
 ## Try it
 
@@ -136,6 +137,7 @@ the architecture model changed, until the new plan has been previewed and approv
 | `examples/starter` | The project `l2r init` creates, generated and implemented; its model, Lean spec and inventory are the templates |
 | `bazel/l2r.bzl` | `l2r_check_test`: the drift test, for projects that use L2R |
 | `tools/e2e/new_project.sh` | A new project in a new workspace, end to end |
+| `tools/lean` | The pinned Lean release for projects that use L2R: `bazel run @l2r//tools/lean:bin_path` prints the directory of its `lean` and `lake` |
 | `docs/getting-started.md` | The workflow for a project of your own |
 | `examples/tank_station` | Hierarchical example for schema `v2`: a nested subsystem, forwarded ports, two outboxes, data in every message |
 | `examples/relay` | Generator fixture for schema `v2`: deep nesting, port chains, two routes to one receiver, wrapping arithmetic |
@@ -146,6 +148,8 @@ the architecture model changed, until the new plan has been previewed and approv
 | `docs/model-reference.md` | Model schema, profiles, validation rules, write semantics |
 | `docs/generation-boundary.md` | Exact write guarantees, threat model, limits, and the tests behind them |
 | `docs/verification.md` | Kinds of evidence, the verification route, and what is and is not proved |
+| `docs/release-notes.md` | What each release contains; proved, tested and assumed, side by side |
+| `.claude/skills` | Instructions for coding agents working on L2R itself (not part of the tool) |
 
 ## Documentation and decisions
 
@@ -156,7 +160,7 @@ PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r
 - [ADR-0002: Bazel is the only build and test interface](https://github.com/syncom-systems/l2r/discussions/4) — Accepted 2026-11-09
 - [ADR-0003: Architecture model v0, Lean inventory references, and approval semantics](https://github.com/syncom-systems/l2r/discussions/5) — Accepted 2026-11-09
 - [ADR-0004: Asynchronous composition semantics and the scheduler relation](https://github.com/syncom-systems/l2r/discussions/9) — Accepted 2026-11-09
-- [ADR-0005: Hierarchical composition, output ports and data-carrying types](https://github.com/syncom-systems/l2r/discussions/16) — Proposed
+- [ADR-0005: Hierarchical composition, output ports and data-carrying types](https://github.com/syncom-systems/l2r/discussions/16) — Accepted 2026-11-10
 
 ## Known limits
 
