@@ -11,9 +11,9 @@
 //! `#[rustfmt::skip]`: their layout depends on the lengths of the user's Lean
 //! names, and a generated file must not fail a formatting check.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use l2r_validate::data::{DataType, FieldType, Shape};
+use l2r_validate::data::{DataField, DataType, DataVariant, FieldType, Shape};
 
 use crate::plan::{Artifact, Ownership};
 use crate::text;
@@ -24,22 +24,8 @@ use crate::{PlanError, planned_path};
 /// never map to it: a mapped module name does not end in an underscore.
 const SAMPLES_MODULE: &str = "samples_";
 
-#[derive(Default)]
-struct Node<'a> {
-    types: Vec<&'a DataType>,
-    children: BTreeMap<&'a str, Node<'a>>,
-}
-
 pub fn artifact(generator: &Gen<'_>) -> Result<Artifact, PlanError> {
     let types = generator.validated.types();
-    let mut root = Node::default();
-    for data in types.values() {
-        let mut node = &mut root;
-        for module in &data.modules {
-            node = node.children.entry(module.as_str()).or_default();
-        }
-        node.types.push(data);
-    }
     let mut out = text::generated_marker(PROFILE);
     out.push('\n');
     out.push_str(&text::inner_doc(
@@ -48,7 +34,7 @@ pub fn artifact(generator: &Gen<'_>) -> Result<Artifact, PlanError> {
          in the implementation files.",
     ));
     out.push('\n');
-    emit(&root, types, 0, &mut out)?;
+    out.push_str(&Namespace::of(types).definitions(types, 0)?);
     out.push_str(SAMPLES);
     Ok(Artifact {
         path: planned_path("src/types.rs".into())?,
@@ -56,23 +42,79 @@ pub fn artifact(generator: &Gen<'_>) -> Result<Artifact, PlanError> {
         profile: PROFILE.into(),
         purpose: "Rust mirrors of the Lean data types".into(),
         components: vec![generator.root.id.clone()],
-        lean: types
-            .values()
-            .flat_map(|t| {
-                let mut names = vec![t.lean_name.clone()];
-                match &t.shape {
-                    Shape::Enum(variants) => {
-                        names.extend(variants.iter().map(|v| v.lean_name.clone()))
-                    }
-                    Shape::Struct { constructor, .. } => names.push(constructor.clone()),
-                }
-                names
-            })
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect(),
+        lean: lean_names(types),
         content: out,
     })
+}
+
+/// Every Lean declaration the mirrors are generated from, once, in order.
+fn lean_names(types: &BTreeMap<String, DataType>) -> Vec<String> {
+    let names: BTreeSet<String> = types.values().flat_map(declared_names).collect();
+    names.into_iter().collect()
+}
+
+/// The Lean declarations one mirror is generated from: the type and its
+/// constructors.
+fn declared_names(data: &DataType) -> Vec<String> {
+    let mut names = vec![data.lean_name.clone()];
+    match &data.shape {
+        Shape::Enum(variants) => names.extend(variants.iter().map(|v| v.lean_name.clone())),
+        Shape::Struct { constructor, .. } => names.push(constructor.clone()),
+    }
+    names
+}
+
+/// A Lean namespace as a Rust module: the types declared in it and the
+/// namespaces below it.
+#[derive(Default)]
+struct Namespace<'a> {
+    types: Vec<&'a DataType>,
+    children: BTreeMap<&'a str, Namespace<'a>>,
+}
+
+impl<'a> Namespace<'a> {
+    /// The root namespace holding every type at the path its modules give.
+    fn of(types: &'a BTreeMap<String, DataType>) -> Self {
+        let mut root = Namespace::default();
+        for data in types.values() {
+            root.below(&data.modules).types.push(data);
+        }
+        root
+    }
+
+    /// The namespace at `modules` below this one, created if it is not there.
+    fn below(&mut self, modules: &'a [String]) -> &mut Namespace<'a> {
+        let mut namespace = self;
+        for module in modules {
+            namespace = namespace.children.entry(module.as_str()).or_default();
+        }
+        namespace
+    }
+
+    /// The namespace's types by Rust name, then one `pub mod` per namespace
+    /// below it.
+    fn definitions(
+        &self,
+        types: &BTreeMap<String, DataType>,
+        depth: usize,
+    ) -> Result<String, PlanError> {
+        let pad = "    ".repeat(depth);
+        let mut sorted = self.types.clone();
+        sorted.sort_by(|a, b| a.rust_name.cmp(&b.rust_name));
+        let mut out = String::new();
+        for data in sorted {
+            out.push_str(&type_def(data, types, &pad)?);
+            out.push('\n');
+        }
+        for (module, child) in &self.children {
+            let body = child.definitions(types, depth + 1)?;
+            out.push_str(&format!(
+                "{pad}pub mod {module} {{\n{}\n{pad}}}\n\n",
+                body.trim_end()
+            ));
+        }
+        Ok(out)
+    }
 }
 
 const SAMPLES: &str = "/// Boundary values for the generated contract tests.\n\
@@ -121,30 +163,6 @@ pub mod samples_ {\n\
 \x20   }\n\
 }\n";
 
-fn emit(
-    node: &Node<'_>,
-    types: &BTreeMap<String, DataType>,
-    depth: usize,
-    out: &mut String,
-) -> Result<(), PlanError> {
-    let pad = "    ".repeat(depth);
-    let mut sorted = node.types.clone();
-    sorted.sort_by(|a, b| a.rust_name.cmp(&b.rust_name));
-    for data in sorted {
-        out.push_str(&type_def(data, types, &pad)?);
-        out.push('\n');
-    }
-    for (module, child) in &node.children {
-        out.push_str(&format!("{pad}pub mod {module} {{\n"));
-        let mut body = String::new();
-        emit(child, types, depth + 1, &mut body)?;
-        body.truncate(body.trim_end().len());
-        out.push_str(&body);
-        out.push_str(&format!("\n{pad}}}\n\n"));
-    }
-    Ok(())
-}
-
 fn rust_type(ty: &FieldType, types: &BTreeMap<String, DataType>) -> Result<String, PlanError> {
     Ok(match ty {
         FieldType::Bool => "bool".into(),
@@ -152,129 +170,197 @@ fn rust_type(ty: &FieldType, types: &BTreeMap<String, DataType>) -> Result<Strin
         FieldType::U16 => "u16".into(),
         FieldType::U32 => "u32".into(),
         FieldType::U64 => "u64".into(),
-        FieldType::Named(name) => types
-            .get(name)
-            .map(DataType::rust_path)
-            .ok_or_else(|| PlanError(format!("type `{name}` was not resolved")))?,
+        FieldType::Named(name) => mirror_path(name, types)?,
         FieldType::Option(inner) => format!("Option<{}>", rust_type(inner, types)?),
     })
 }
 
+/// The path of the mirror of a Lean data type.
+fn mirror_path(name: &str, types: &BTreeMap<String, DataType>) -> Result<String, PlanError> {
+    types
+        .get(name)
+        .map(DataType::rust_path)
+        .ok_or_else(|| PlanError(format!("type `{name}` was not resolved")))
+}
+
+/// A function of the helper module with the boundary values.
+fn helper(name: &str) -> String {
+    format!("crate::types::{SAMPLES_MODULE}::{name}")
+}
+
 /// The expression giving the sample values of a field type.
 fn samples_of(ty: &FieldType, types: &BTreeMap<String, DataType>) -> Result<String, PlanError> {
-    let helper = |name: &str| format!("crate::types::{SAMPLES_MODULE}::{name}");
     Ok(match ty {
         FieldType::Bool => format!("{}()", helper("bools")),
         FieldType::U8 => format!("{}()", helper("u8s")),
         FieldType::U16 => format!("{}()", helper("u16s")),
         FieldType::U32 => format!("{}()", helper("u32s")),
         FieldType::U64 => format!("{}()", helper("u64s")),
-        FieldType::Named(_) => format!("{}::samples()", rust_type(ty, types)?),
+        FieldType::Named(name) => format!("{}::samples()", mirror_path(name, types)?),
         FieldType::Option(inner) => {
             format!("{}({})", helper("options"), samples_of(inner, types)?)
         }
     })
 }
 
-/// A constructor expression prefix, its field types, and (for a structure) its
-/// field names.
-type Constructor<'a> = (String, Vec<&'a FieldType>, Option<Vec<&'a str>>);
+const DERIVE: &str = "#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]";
 
+/// The mirror of one Lean data type: its definition and its `samples()`.
 fn type_def(
     data: &DataType,
     types: &BTreeMap<String, DataType>,
     pad: &str,
 ) -> Result<String, PlanError> {
-    const DERIVE: &str = "#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]";
     let name = &data.rust_name;
-    let mut out = String::new();
-    let mut constructors: Vec<Constructor<'_>> = Vec::new();
-    match &data.shape {
-        Shape::Enum(variants) => {
-            out.push_str(&format!(
-                "{pad}/// Mirrors `{}`.\n{pad}{DERIVE}\n{pad}pub enum {name} {{\n",
-                data.lean_name
-            ));
-            for variant in variants {
-                out.push_str(&format!("{pad}    /// `{}`\n", variant.lean_name));
-                if variant.fields.is_empty() {
-                    out.push_str(&format!("{pad}    {},\n", variant.rust_name));
-                } else {
-                    let fields = variant
-                        .fields
-                        .iter()
-                        .map(|f| rust_type(f, types))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let line = format!("{pad}    {}({}),\n", variant.rust_name, fields.join(", "));
-                    if line.trim_end().len() <= 100 {
-                        out.push_str(&line);
-                    } else {
-                        out.push_str(&format!("{pad}    {}(\n", variant.rust_name));
-                        for field in fields {
-                            out.push_str(&format!("{pad}        {field},\n"));
-                        }
-                        out.push_str(&format!("{pad}    ),\n"));
-                    }
-                }
-                constructors.push((
-                    format!("{name}::{}", variant.rust_name),
-                    variant.fields.iter().collect(),
-                    None,
-                ));
-            }
-            out.push_str(&format!("{pad}}}\n"));
-        }
+    let lean = &data.lean_name;
+    let (mirrored, definition) = match &data.shape {
+        Shape::Enum(variants) => (format!("`{lean}`"), enum_def(name, variants, types, pad)?),
         Shape::Struct {
             constructor,
             fields,
-        } => {
-            out.push_str(&format!(
-                "{pad}/// Mirrors `{}` (constructor `{constructor}`).\n{pad}{DERIVE}\n",
-                data.lean_name
-            ));
-            if fields.is_empty() {
-                out.push_str(&format!("{pad}pub struct {name} {{}}\n"));
-            } else {
-                out.push_str(&format!("{pad}pub struct {name} {{\n"));
-                for field in fields {
-                    out.push_str(&format!(
-                        "{pad}    /// `{}`\n{pad}    pub {}: {},\n",
-                        field.lean_name,
-                        field.rust_name,
-                        rust_type(&field.ty, types)?
-                    ));
-                }
-                out.push_str(&format!("{pad}}}\n"));
-            }
-            constructors.push((
-                name.clone(),
-                fields.iter().map(|f| &f.ty).collect(),
-                Some(fields.iter().map(|f| f.rust_name.as_str()).collect()),
-            ));
-        }
+        } => (
+            format!("`{lean}` (constructor `{constructor}`)"),
+            struct_def(name, fields, types, pad)?,
+        ),
+    };
+    Ok(format!(
+        "{pad}/// Mirrors {mirrored}.\n{pad}{DERIVE}\n{definition}{}",
+        samples_impl(data, types, pad)?
+    ))
+}
+
+/// `pub enum`: one variant per Lean constructor.
+fn enum_def(
+    name: &str,
+    variants: &[DataVariant],
+    types: &BTreeMap<String, DataType>,
+    pad: &str,
+) -> Result<String, PlanError> {
+    let mut out = format!("{pad}pub enum {name} {{\n");
+    for variant in variants {
+        out.push_str(&format!("{pad}    /// `{}`\n", variant.lean_name));
+        out.push_str(&variant_def(variant, types, pad)?);
     }
-    // Representative values, for the generated contract tests. Each field
-    // takes every one of its sample values once while the others hold their
-    // first value, and one more value has every field at its last (for an
-    // integer, its largest) value. The number of values is the sum, not the
-    // product, of the fields' sample counts.
-    out.push_str(&format!(
+    out.push_str(&format!("{pad}}}\n"));
+    Ok(out)
+}
+
+/// One variant with its positional fields, laid out as rustfmt would: on one
+/// line if it fits in 100 columns, otherwise one field per line.
+fn variant_def(
+    variant: &DataVariant,
+    types: &BTreeMap<String, DataType>,
+    pad: &str,
+) -> Result<String, PlanError> {
+    let name = &variant.rust_name;
+    if variant.fields.is_empty() {
+        return Ok(format!("{pad}    {name},\n"));
+    }
+    let fields = variant
+        .fields
+        .iter()
+        .map(|f| rust_type(f, types))
+        .collect::<Result<Vec<_>, _>>()?;
+    let line = format!("{pad}    {name}({}),\n", fields.join(", "));
+    if line.trim_end().len() <= 100 {
+        return Ok(line);
+    }
+    let fields: String = fields
+        .iter()
+        .map(|field| format!("{pad}        {field},\n"))
+        .collect();
+    Ok(format!("{pad}    {name}(\n{fields}{pad}    ),\n"))
+}
+
+/// `pub struct`: one public field per Lean field.
+fn struct_def(
+    name: &str,
+    fields: &[DataField],
+    types: &BTreeMap<String, DataType>,
+    pad: &str,
+) -> Result<String, PlanError> {
+    if fields.is_empty() {
+        return Ok(format!("{pad}pub struct {name} {{}}\n"));
+    }
+    let mut out = format!("{pad}pub struct {name} {{\n");
+    for field in fields {
+        out.push_str(&format!(
+            "{pad}    /// `{}`\n{pad}    pub {}: {},\n",
+            field.lean_name,
+            field.rust_name,
+            rust_type(&field.ty, types)?
+        ));
+    }
+    out.push_str(&format!("{pad}}}\n"));
+    Ok(out)
+}
+
+/// `samples()`: representative values, for the generated contract tests. Each
+/// field takes every one of its sample values once while the others hold their
+/// first value, and one more value has every field at its last (for an
+/// integer, its largest) value. The number of values is the sum, not the
+/// product, of the fields' sample counts.
+fn samples_impl(
+    data: &DataType,
+    types: &BTreeMap<String, DataType>,
+    pad: &str,
+) -> Result<String, PlanError> {
+    let mut out = format!(
         "\n{pad}#[cfg(test)]\n{pad}#[rustfmt::skip]\n{pad}impl {name} {{\n\
          {pad}    /// Representative values: every constructor; every sample value of every\n\
          {pad}    /// field (for an integer 0, 1 and the largest) while the other fields hold\n\
          {pad}    /// their first value; and every field at its last value. Not exhaustive.\n\
          {pad}    #[allow(clippy::vec_init_then_push)]\n\
          {pad}    pub fn samples() -> Vec<Self> {{\n\
-         {pad}        let mut out = Vec::new();\n"
-    ));
-    let helper = format!("crate::types::{SAMPLES_MODULE}");
-    for (constructor, fields, field_names) in &constructors {
-        let value = |args: &[String]| match field_names {
-            None if args.is_empty() => constructor.clone(),
-            None => format!("{constructor}({})", args.join(", ")),
-            Some(_) if args.is_empty() => format!("{constructor} {{}}"),
+         {pad}        let mut out = Vec::new();\n",
+        name = data.rust_name
+    );
+    for constructor in constructors(data) {
+        out.push_str(&constructor.samples(types, pad)?);
+    }
+    out.push_str(&format!("{pad}        out\n{pad}    }}\n{pad}}}\n"));
+    Ok(out)
+}
+
+/// One way to build a value of a data type: a variant of an enum, or the
+/// structure itself.
+struct Constructor<'a> {
+    /// What the expression starts with, e.g. `Level::Sample` or `Reading`.
+    path: String,
+    fields: Vec<&'a FieldType>,
+    /// The field names of a structure; a variant's fields are positional.
+    names: Option<Vec<&'a str>>,
+}
+
+fn constructors(data: &DataType) -> Vec<Constructor<'_>> {
+    let name = &data.rust_name;
+    match &data.shape {
+        Shape::Enum(variants) => variants
+            .iter()
+            .map(|variant| Constructor {
+                path: format!("{name}::{}", variant.rust_name),
+                fields: variant.fields.iter().collect(),
+                names: None,
+            })
+            .collect(),
+        Shape::Struct { fields, .. } => vec![Constructor {
+            path: name.clone(),
+            fields: fields.iter().map(|f| &f.ty).collect(),
+            names: Some(fields.iter().map(|f| f.rust_name.as_str()).collect()),
+        }],
+    }
+}
+
+impl Constructor<'_> {
+    /// The expression building a value from one argument per field.
+    fn value(&self, args: &[String]) -> String {
+        let path = &self.path;
+        match &self.names {
+            None if args.is_empty() => path.clone(),
+            None => format!("{path}({})", args.join(", ")),
+            Some(_) if args.is_empty() => format!("{path} {{}}"),
             Some(names) => format!(
-                "{constructor} {{ {} }}",
+                "{path} {{ {} }}",
                 names
                     .iter()
                     .zip(args)
@@ -282,41 +368,52 @@ fn type_def(
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-        };
-        if fields.is_empty() {
-            out.push_str(&format!("{pad}        out.push({});\n", value(&[])));
-            continue;
         }
-        out.push_str(&format!("{pad}        {{\n"));
-        for (i, field) in fields.iter().enumerate() {
+    }
+
+    /// The statements of `samples()` that push this constructor's values.
+    fn samples(&self, types: &BTreeMap<String, DataType>, pad: &str) -> Result<String, PlanError> {
+        if self.fields.is_empty() {
+            return Ok(format!("{pad}        out.push({});\n", self.value(&[])));
+        }
+        let mut out = format!("{pad}        {{\n");
+        for (i, field) in self.fields.iter().enumerate() {
             out.push_str(&format!(
                 "{pad}            let s{i} = {};\n",
                 samples_of(field, types)?
             ));
         }
-        for i in 0..fields.len() {
-            let args: Vec<String> = (0..fields.len())
-                .map(|j| {
-                    if i == j {
-                        "v".to_string()
-                    } else {
-                        format!("{helper}::first(&s{j})")
-                    }
-                })
-                .collect();
+        for i in 0..self.fields.len() {
             out.push_str(&format!(
                 "{pad}            for &v in &s{i} {{\n{pad}                out.push({});\n{pad}            }}\n",
-                value(&args)
+                self.value(&self.varying(i))
             ));
         }
-        let last: Vec<String> = (0..fields.len())
-            .map(|j| format!("{helper}::last(&s{j})"))
-            .collect();
         out.push_str(&format!(
             "{pad}            out.push({});\n{pad}        }}\n",
-            value(&last)
+            self.value(&self.every_field_last())
         ));
+        Ok(out)
     }
-    out.push_str(&format!("{pad}        out\n{pad}    }}\n{pad}}}\n"));
-    Ok(out)
+
+    /// The arguments with field `varied` at the loop's value `v` and every
+    /// other field at its first sample value.
+    fn varying(&self, varied: usize) -> Vec<String> {
+        (0..self.fields.len())
+            .map(|j| {
+                if j == varied {
+                    "v".to_string()
+                } else {
+                    format!("{}(&s{j})", helper("first"))
+                }
+            })
+            .collect()
+    }
+
+    /// The arguments with every field at its last sample value.
+    fn every_field_last(&self) -> Vec<String> {
+        (0..self.fields.len())
+            .map(|j| format!("{}(&s{j})", helper("last")))
+            .collect()
+    }
 }
