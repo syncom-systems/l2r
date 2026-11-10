@@ -42,7 +42,7 @@ pub fn artifacts(
     lean.extend(
         ports
             .iter()
-            .flat_map(|p| [p.translation.clone(), p.message.clone()]),
+            .flat_map(|p| [p.translation_name().to_string(), p.message.clone()]),
     );
     lean.sort();
     lean.dedup();
@@ -173,7 +173,10 @@ impl Ctx<'_> {
         for port in self.ports {
             doc.push_str(&format!(
                 "- `{}` → `{}`: `{}` through `{}`\n",
-                port.id, port.to, port.message, port.translation
+                port.id,
+                port.target(),
+                port.message,
+                port.translation_name()
             ));
         }
         doc.push_str("\nApproved message edges:\n\n");
@@ -318,11 +321,11 @@ impl Ctx<'_> {
         }
         // ports
         for port in self.ports {
-            let target = self.module_of(&port.to);
+            let target = self.module_of(port.target());
             out.push_str(&format!(
                 "    /// Port `{id}`: offers `message` to `{to}`. Accepted only if its mailbox has room;\n    /// otherwise `Err(Rejected)`, and the caller keeps the message.\n    pub fn send_{id}(&mut self, message: {ty}) -> Result<(), Rejected> {{\n        let input = routes::port_{id}(message);\n        if self.{target}_inbox.push(input) {{\n            Ok(())\n        }} else {{\n            Err(Rejected)\n        }}\n    }}\n\n",
                 id = port.id,
-                to = port.to,
+                to = port.target(),
                 ty = self.message_type(port),
             ));
         }
@@ -428,7 +431,11 @@ impl Ctx<'_> {
                     self.module_of(&e.to).to_string(),
                 ]
             })
-            .chain(self.ports.iter().map(|p| self.module_of(&p.to).to_string()))
+            .chain(
+                self.ports
+                    .iter()
+                    .map(|p| self.module_of(p.target()).to_string()),
+            )
             .collect();
         modules.sort();
         modules.dedup();
@@ -453,13 +460,13 @@ impl Ctx<'_> {
             ));
         }
         for port in self.ports {
-            let to = self.module_of(&port.to);
+            let to = self.module_of(port.target());
             out.push_str(&format!(
                 "\n/// Implements `{t}` (port `{id}`).\n\
                  pub(super) fn port_{id}(message: {ty}) -> {to}::Input {{\n    \
                      let _ = message;\n    \
                      todo!(\"implement {t}\")\n}}\n",
-                t = port.translation,
+                t = port.translation_name(),
                 id = port.id,
                 ty = self.message_type(port),
             ));

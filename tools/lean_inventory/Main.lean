@@ -9,6 +9,12 @@ Imports each root module, then prints a JSON inventory of every user-facing
 declaration whose name lies under one of the root modules' namespaces. The
 output is sorted, contains no timestamps or paths, and is therefore stable for
 identical compiled input.
+
+With `--v1` as the first argument the inventory has schema
+`l2r.lean-inventory/v1`: every inductive type additionally records whether it
+is a structure, its numbers of parameters and indices, and the name and type
+of every constructor field. Without it the output is `l2r.lean-inventory/v0`,
+byte for byte what it always was.
 -/
 import Lean
 
@@ -43,13 +49,41 @@ def constructorsOf (env : Environment) : ConstantInfo → List Json
       | _ => none
   | _ => []
 
-def declarationJson (env : Environment) (name : Name) (info : ConstantInfo) : MetaM Json := do
-  let base := [("name", toJson name.toString), ("kind", toJson (kindOf info)), ("type", toJson (← ppType info.type))]
-  match constructorsOf env info with
-  | [] => return Json.mkObj base
-  | ctors => return Json.mkObj (base ++ [("constructors", Json.arr ctors.toArray)])
+/-- The fields of a constructor (its binders after the type parameters), with
+their names and pretty-printed types. -/
+def fieldsOf (c : ConstructorVal) : MetaM (Array Json) :=
+  forallTelescope c.type fun xs _ => do
+    let fields := xs.extract c.numParams xs.size
+    fields.mapM fun x => do
+      let decl ← x.fvarId!.getDecl
+      return Json.mkObj [("name", toJson decl.userName.toString), ("type", toJson (← ppType decl.type))]
 
-def inventory (roots : List Name) : MetaM Json := do
+def constructorsV1 (env : Environment) : ConstantInfo → MetaM (List Json)
+  | .inductInfo v => v.ctors.filterMapM fun ctor => do
+      match env.find? ctor with
+      | some (.ctorInfo c) =>
+        return some (Json.mkObj [("name", toJson ctor.toString), ("arity", toJson c.numFields),
+          ("fields", Json.arr (← fieldsOf c))])
+      | _ => return none
+  | _ => return []
+
+def declarationJson (v1 : Bool) (env : Environment) (name : Name) (info : ConstantInfo) : MetaM Json := do
+  let base := [("name", toJson name.toString), ("kind", toJson (kindOf info)), ("type", toJson (← ppType info.type))]
+  if v1 then
+    match info with
+    | .inductInfo v =>
+      return Json.mkObj (base ++ [
+        ("constructors", Json.arr (← constructorsV1 env info).toArray),
+        ("structure", toJson (isStructure env name)),
+        ("params", toJson v.numParams),
+        ("indices", toJson v.numIndices)])
+    | _ => return Json.mkObj base
+  else
+    match constructorsOf env info with
+    | [] => return Json.mkObj base
+    | ctors => return Json.mkObj (base ++ [("constructors", Json.arr ctors.toArray)])
+
+def inventory (v1 : Bool) (roots : List Name) : MetaM Json := do
   let env ← getEnv
   let candidates := env.constants.toList.filter fun (name, info) =>
     roots.any (·.isPrefixOf name) && isUserFacing env name info
@@ -57,22 +91,25 @@ def inventory (roots : List Name) : MetaM Json := do
   -- range; only declarations written in a source file are exported.
   let selected ← candidates.filterM fun (name, _) => return (← findDeclarationRangesCore? name).isSome
   let sorted := selected.toArray.qsort (fun a b => a.1.toString < b.1.toString)
-  let decls ← sorted.mapM fun (name, info) => declarationJson env name info
+  let decls ← sorted.mapM fun (name, info) => declarationJson v1 env name info
   return Json.mkObj [
-    ("schema", toJson "l2r.lean-inventory/v0"),
+    ("schema", toJson (if v1 then "l2r.lean-inventory/v1" else "l2r.lean-inventory/v0")),
     ("lean_version", toJson Lean.versionString),
     ("root_modules", toJson (roots.map (·.toString))),
     ("declarations", Json.arr decls)
   ]
 
 def main (args : List String) : IO UInt32 := do
+  let (v1, args) := match args with
+    | "--v1" :: rest => (true, rest)
+    | _ => (false, args)
   if args.isEmpty then
-    IO.eprintln "usage: lean --run Main.lean <RootModule>..."
+    IO.eprintln "usage: lean --run Main.lean [--v1] <RootModule>..."
     return 2
   let roots := args.map String.toName
   initSearchPath (← findSysroot)
   let env ← importModules (roots.toArray.map fun m => { module := m }) {}
   let ctx : Core.Context := { fileName := "<l2r-inventory>", fileMap := default }
-  let (json, _) ← ((inventory roots).run' {} {}).toIO ctx { env }
+  let (json, _) ← ((inventory v1 roots).run' {} {}).toIO ctx { env }
   IO.println json.pretty
   return 0

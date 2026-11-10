@@ -17,5 +17,23 @@ pub const COMPOSITE_V0: &str = "composite/v0";
 /// unchanged and remains available.
 pub const COMPOSITE_V1: &str = "composite/v1";
 
+/// A pure state machine whose Lean state, input and output types may carry
+/// data (structures, constructors with fields, fixed-width integers). Its Rust
+/// types are generated once per Lean type in the crate's `types` module. Model
+/// schema `v2`.
+pub const TRANSITION_CORE_V1: &str = "transition-core/v1";
+
+/// A composite that may be nested and has typed input and output ports. Its
+/// behaviour is that of the flat network of the machines below it
+/// (`l2r.async/v1`); the root composite generates the scheduler. Model schema
+/// `v2`.
+pub const COMPOSITE_V2: &str = "composite/v2";
+
 /// Every profile this generator version implements.
-pub const SUPPORTED: &[&str] = &[COMPOSITE_V0, COMPOSITE_V1, TRANSITION_CORE_V0];
+pub const SUPPORTED: &[&str] = &[
+    COMPOSITE_V0,
+    COMPOSITE_V1,
+    COMPOSITE_V2,
+    TRANSITION_CORE_V0,
+    TRANSITION_CORE_V1,
+];

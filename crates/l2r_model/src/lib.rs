@@ -9,10 +9,12 @@ pub mod path;
 pub mod profiles;
 
 pub use architecture::{
-    Behavior, Component, MODEL_SCHEMA, MODEL_SCHEMA_V1, MessageEdge, Model, Port,
+    Behavior, Component, MODEL_SCHEMA, MODEL_SCHEMA_V1, MODEL_SCHEMA_V2, MessageEdge, Model, Port,
     SUPPORTED_SCHEMAS, System,
 };
-pub use lean::{Constructor, DeclKind, Declaration, INVENTORY_SCHEMA, Inventory};
+pub use lean::{
+    Constructor, DeclKind, Declaration, Field, INVENTORY_SCHEMA, INVENTORY_SCHEMA_V1, Inventory,
+};
 pub use path::{PathError, RelPath};
 
 #[cfg(test)]

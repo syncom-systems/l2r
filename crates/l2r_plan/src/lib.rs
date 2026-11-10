@@ -8,13 +8,18 @@
 
 mod layout;
 mod lean_composition;
+mod lean_composition_v2;
 mod plan;
 mod profiles;
 mod text;
+mod v2;
 
 pub use lean_composition::{
     LEAN_COMPOSITION_FORMAT, LEAN_COMPOSITION_FORMAT_V1, SEMANTICS_VERSION, SEMANTICS_VERSION_V1,
     lean_composition, lean_composition_path, semantics_digest, semantics_digest_v1,
+};
+pub use lean_composition_v2::{
+    LEAN_COMPOSITION_FORMAT_V2, PORTS_SCHEDULER_VERSION, ports_scheduler_digest,
 };
 pub use text::declares_generated;
 
@@ -54,6 +59,20 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
         .iter()
         .find(|c| c.parent.is_none())
         .ok_or_else(|| PlanError("no root component".into()))?;
+
+    if validated.flat().is_some() {
+        let (mut artifacts, used_profiles) = v2::artifacts(validated)?;
+        artifacts.sort_by(|a, b| a.path.cmp(&b.path));
+        check_paths(&artifacts)?;
+        return Ok(Plan {
+            generator: generator.clone(),
+            model_digest: digest::digest_of(model),
+            inventory_digest: digest::digest_of(validated.inventory()),
+            profiles: used_profiles.into_iter().collect(),
+            output_dir: model.system.output_dir.clone(),
+            artifacts,
+        });
+    }
 
     let mut artifacts = profiles::crate_root::artifacts(model, &root.rust_module, &root.id)?;
     let mut used_profiles = BTreeSet::new();

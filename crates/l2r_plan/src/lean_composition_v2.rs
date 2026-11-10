@@ -1,0 +1,391 @@
+//! The derived Lean composition of a `v2` model (`l2r.lean-composition/v2`).
+//!
+//! A hierarchical model derives **one** `L2R.Async1.Network`: the flat network
+//! of its machines, followed by one outbox child per output port of the root
+//! (see `lean/L2R/Async1Ports.lean`). Each route is the composition, in Lean, of
+//! the translations of the edges and ports it passes, in exactly the order the
+//! generated `System` applies them. As for the other formats, the text contains
+//! no behaviour of its own: every behavioural fact is a reference to a
+//! declaration of the Lean specification.
+
+use l2r_model::{Behavior, Component, digest};
+use l2r_validate::Validated;
+use l2r_validate::flat::{Flat, FlatInput, Hop, HopKind, Leaf, Sink, Target};
+
+use crate::PlanError;
+use crate::lean_composition::{SEMANTICS_VERSION_V1, semantics_digest_v1};
+use crate::plan::GeneratorIdentity;
+
+/// Format identifier of the derived file for `v2` (hierarchical) models.
+pub const LEAN_COMPOSITION_FORMAT_V2: &str = "l2r.lean-composition/v2";
+
+/// Identity of the Lean model of the `composite/v2` scheduler
+/// (`lean/L2R/Async1Ports.lean`).
+pub const PORTS_SCHEDULER_VERSION: &str = "l2r.async1-ports/v1";
+
+const PORTS_SCHEDULER_SOURCE: &str = include_str!("../../../lean/L2R/Async1Ports.lean");
+
+/// Digest of the scheduler model source this build derives against.
+pub fn ports_scheduler_digest() -> String {
+    digest::sha256(PORTS_SCHEDULER_SOURCE.as_bytes())
+}
+
+/// A Lean function over the network's children: one arm per child.
+fn by_index(header: &str, arms: &[String]) -> String {
+    let n = arms.len();
+    let mut text = format!("{header}\n");
+    for (i, arm) in arms.iter().enumerate() {
+        text.push_str(&format!("  | ⟨{i}, _⟩ => {arm}\n"));
+    }
+    text.push_str(&format!("  | ⟨_ + {n}, h⟩ => absurd h (by omega)\n\n"));
+    text
+}
+
+/// A declaration of the specification, named from the root namespace: the
+/// derived file defines `State`, `Input`, `Msg`, `route`, ... in its own
+/// namespace, and a specification declaration of the same name must not be
+/// captured by them.
+fn spec(name: &str) -> String {
+    format!("_root_.{name}")
+}
+
+/// The Lean expression carrying `value` through the hops of a route.
+fn route_expr(hops: &[Hop], value: &str) -> String {
+    let mut expr = String::new();
+    for (i, hop) in hops.iter().enumerate() {
+        let translation = spec(&hop.translation);
+        expr = match (i, hop.kind) {
+            (0, _) => format!("({translation} {value})"),
+            (_, HopKind::Edge) => format!("({expr}.bind {translation})"),
+            (_, HopKind::Port) => format!("({expr}.map {translation})"),
+        };
+    }
+    expr
+}
+
+/// Derives the flat network of a `v2` model.
+pub fn lean_composition_v2(validated: &Validated, flat: &Flat) -> Result<String, PlanError> {
+    let network = Network::of(validated, flat)?;
+    Ok([
+        network.header(),
+        network.overview(),
+        network.namespace_opening(),
+        network.children(),
+        network.routes()?,
+        network.capacities(),
+        network.input_ports()?,
+        network.definition(),
+    ]
+    .concat())
+}
+
+/// The network being derived: the flat network of a validated model, with the
+/// Lean behaviour of each of its machines.
+struct Network<'a> {
+    validated: &'a Validated,
+    flat: &'a Flat,
+    root: &'a Component,
+    /// The behaviour of every machine, in scheduler order.
+    behaviors: Vec<&'a Behavior>,
+}
+
+impl<'a> Network<'a> {
+    fn of(validated: &'a Validated, flat: &'a Flat) -> Result<Self, PlanError> {
+        let model = validated.model();
+        let root = model
+            .components
+            .iter()
+            .find(|c| c.parent.is_none())
+            .ok_or_else(|| PlanError("no root component".into()))?;
+        let behavior = |id: &str| {
+            model
+                .component(id)
+                .and_then(|c| c.behavior.as_ref())
+                .ok_or_else(|| PlanError(format!("machine `{id}` has no behavior")))
+        };
+        let behaviors = flat
+            .leaves
+            .iter()
+            .map(|l| behavior(&l.id))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            validated,
+            flat,
+            root,
+            behaviors,
+        })
+    }
+
+    /// Number of machines: the children `0 … machines-1` of the network.
+    fn machines(&self) -> usize {
+        self.flat.leaves.len()
+    }
+
+    /// Number of children of the network: the machines, then the outboxes.
+    fn size(&self) -> usize {
+        self.machines() + self.flat.sinks.len()
+    }
+
+    /// The Lean namespace of the derived declarations.
+    fn namespace(&self) -> String {
+        format!(
+            "L2RDerived.«{}».«{}»",
+            self.validated.model().system.id,
+            self.root.id
+        )
+    }
+
+    /// What the file was derived from, and its imports.
+    fn header(&self) -> String {
+        let generator = GeneratorIdentity::current();
+        let inventory = self.validated.inventory();
+        let mut out = format!(
+            "-- @generated by L2R ({LEAN_COMPOSITION_FORMAT_V2}). Do not edit: change the architecture model or the\n\
+             -- Lean specification, then run `l2r lean-composition` again.\n\
+             -- generator: {} {}\n\
+             -- semantics: {SEMANTICS_VERSION_V1} {}\n\
+             -- scheduler: {PORTS_SCHEDULER_VERSION} {}\n\
+             -- model: {}\n\
+             -- inventory: {}\n\
+             import L2R.Async1Ports\n",
+            generator.name,
+            generator.version,
+            semantics_digest_v1(),
+            ports_scheduler_digest(),
+            digest::digest_of(self.validated.model()),
+            digest::digest_of(inventory),
+        );
+        for module in &inventory.root_modules {
+            out.push_str(&format!("import {module}\n"));
+        }
+        out
+    }
+
+    /// The module documentation: the machines, the outboxes and the routes.
+    fn overview(&self) -> String {
+        let flat = self.flat;
+        let machines: String = flat
+            .leaves
+            .iter()
+            .enumerate()
+            .map(|(i, leaf)| format!("- {i}: `{}`\n", leaf.id))
+            .collect();
+        let outboxes: Vec<String> = flat
+            .sinks
+            .iter()
+            .enumerate()
+            .map(|(i, sink)| format!("- {}: `{}`\n", self.machines() + i, sink.port))
+            .collect();
+        let routes: String = flat.leaves.iter().map(routes_overview).collect();
+        format!(
+            "\n/-!\n# System `{}`: the flat network of composite `{}` ({})\n\n\
+             The structure the architecture model approves, as an `L2R.Async1.Network`.\n\
+             Hierarchy is structure: the network's children are the machines of every\n\
+             nested composite, in identifier order, followed by one outbox child per\n\
+             output port of the root.\n\n\
+             Machines, by scheduler index:\n\n\
+             {machines}\
+             \nOutboxes (output ports of the root), by network index:\n\n\
+             {outboxes}\
+             \nRoutes, in routing order (the edges and ports each passes):\n\n\
+             {routes}\
+             -/\n",
+            self.validated.model().system.id,
+            self.root.id,
+            self.root.name,
+            outboxes = if outboxes.is_empty() {
+                "- none\n".to_string()
+            } else {
+                outboxes.concat()
+            },
+        )
+    }
+
+    fn namespace_opening(&self) -> String {
+        format!("namespace {}\n\n", self.namespace())
+    }
+
+    /// A Lean function over the network's children: what `machine` gives for
+    /// each machine, then what `outbox` gives for each outbox.
+    fn by_child(
+        &self,
+        header: &str,
+        machine: impl Fn(&Leaf, &Behavior) -> String,
+        outbox: impl Fn(&Sink) -> String,
+    ) -> String {
+        let machines = self.flat.leaves.iter().zip(&self.behaviors);
+        let arms: Vec<String> = machines
+            .map(|(leaf, behavior)| machine(leaf, behavior))
+            .chain(self.flat.sinks.iter().map(outbox))
+            .collect();
+        by_index(header, &arms)
+    }
+
+    /// `State`, `Input`, `Output`, `init` and `step`: each machine's are those
+    /// of its Lean behaviour; an outbox has no state and only stores its input.
+    fn children(&self) -> String {
+        let n = self.size();
+        [
+            self.by_child(
+                &format!("def State : Fin {n} → Type"),
+                |_, behavior| spec(&behavior.owned_state),
+                |_| "Unit".into(),
+            ),
+            self.by_child(
+                &format!("def Input : Fin {n} → Type"),
+                |_, behavior| spec(&behavior.input),
+                |sink| spec(&sink.message),
+            ),
+            self.by_child(
+                &format!("def Output : Fin {n} → Type"),
+                |_, behavior| spec(&behavior.output),
+                |_| "Empty".into(),
+            ),
+            self.by_child(
+                &format!("def init : (c : Fin {n}) → State c"),
+                |_, behavior| spec(&behavior.init),
+                |_| "()".into(),
+            ),
+            self.by_child(
+                &format!(
+                    "def step : (c : Fin {n}) → State c → Input c → State c × Option (Output c)"
+                ),
+                |_, behavior| spec(&behavior.step),
+                |sink| format!("L2R.Async1.outboxStep {}", spec(&sink.message)),
+            ),
+        ]
+        .concat()
+    }
+
+    /// `route`: where each child's output goes. An outbox emits nothing.
+    fn routes(&self) -> Result<String, PlanError> {
+        let n = self.size();
+        let mut routes = self
+            .flat
+            .leaves
+            .iter()
+            .map(|leaf| self.routes_of(leaf))
+            .collect::<Result<Vec<_>, _>>()?;
+        routes.extend(self.flat.sinks.iter().map(|_| "fun _ => []".to_string()));
+        Ok(by_index(
+            &format!("def route : (c : Fin {n}) → Output c → List ((d : Fin {n}) × Input d)"),
+            &routes,
+        ))
+    }
+
+    /// The messages one machine's output becomes: one list per route, appended.
+    fn routes_of(&self, leaf: &Leaf) -> Result<String, PlanError> {
+        let mut parts = Vec::new();
+        for route in &leaf.routes {
+            let to = self
+                .flat
+                .target_index(&route.target)
+                .ok_or_else(|| PlanError(format!("a route of `{}` has no receiver", leaf.id)))?;
+            parts.push(format!(
+                "{}.toList.map (fun i => ⟨⟨{to}, by decide⟩, i⟩)",
+                route_expr(&route.hops, "o")
+            ));
+        }
+        if parts.is_empty() {
+            return Ok("fun _ => []".to_string());
+        }
+        Ok(format!("fun o =>\n    {}", parts.join(" ++\n    ")))
+    }
+
+    /// `cap`: the capacity of each mailbox and outbox.
+    fn capacities(&self) -> String {
+        let cap = self.by_child(
+            &format!("def cap : Fin {} → Nat", self.size()),
+            |leaf, _| leaf.capacity.to_string(),
+            |sink| sink.capacity.to_string(),
+        );
+        format!("/-- Capacity of each mailbox and outbox, from the model. -/\n{cap}")
+    }
+
+    /// `Msg`, `target` and `inject`: the input ports of the root.
+    fn input_ports(&self) -> Result<String, PlanError> {
+        let inputs = &self.flat.inputs;
+        let p = inputs.len();
+        let n = self.size();
+        let listed: Vec<String> = inputs
+            .iter()
+            .enumerate()
+            .map(|(i, input)| format!("{i} = `{}`", input.port))
+            .collect();
+        let messages: Vec<String> = inputs.iter().map(|input| spec(&input.message)).collect();
+        let targets = inputs
+            .iter()
+            .map(|input| self.target_of(input))
+            .collect::<Result<Vec<_>, _>>()?;
+        let injections: Vec<String> = inputs.iter().map(injection).collect();
+        Ok([
+            format!(
+                "/-- The input ports of the root, in identifier order: {}. -/\n",
+                listed.join(", ")
+            ),
+            by_index(&format!("def Msg : Fin {p} → Type"), &messages),
+            by_index(&format!("def target : Fin {p} → Fin {n}"), &targets),
+            by_index(
+                &format!("def inject : (p : Fin {p}) → Msg p → Input (target p)"),
+                &injections,
+            ),
+        ]
+        .concat())
+    }
+
+    /// The network index of the machine an input port reaches.
+    fn target_of(&self, input: &FlatInput) -> Result<String, PlanError> {
+        let index = self
+            .flat
+            .leaf_index(&input.target)
+            .ok_or_else(|| PlanError(format!("port `{}` reaches no machine", input.port)))?;
+        Ok(format!("⟨{index}, by decide⟩"))
+    }
+
+    /// `machines` and `network`, and the end of the namespace.
+    fn definition(&self) -> String {
+        format!(
+            "/-- The machines are the children `0 … machines-1`; the outboxes follow. -/\n\
+             def machines : Nat := {machines}\n\n\
+             abbrev network : L2R.Async1.Network :=\n  ⟨{n}, State, Input, Output, init, step, route, cap, {p}, Msg, target, inject⟩\n\n\
+             end {namespace}\n",
+            machines = self.machines(),
+            n = self.size(),
+            p = self.flat.inputs.len(),
+            namespace = self.namespace(),
+        )
+    }
+}
+
+/// The routes of one machine, as the overview lists them.
+fn routes_overview(leaf: &Leaf) -> String {
+    leaf.routes
+        .iter()
+        .map(|route| {
+            let via: Vec<String> = route.hops.iter().map(|h| format!("`{}`", h.id)).collect();
+            let target = match &route.target {
+                Target::Leaf(id) => format!("`{id}`"),
+                Target::Sink(port) => format!("outbox `{port}`"),
+            };
+            format!("- `{}` → {target} through {}\n", leaf.id, via.join(", "))
+        })
+        .collect()
+}
+
+/// How an input port's message becomes the input of the machine it reaches:
+/// through the translation of every port on its way down.
+fn injection(input: &FlatInput) -> String {
+    let mut expr = String::from("m");
+    for hop in &input.hops {
+        expr = format!("{} {}", spec(&hop.translation), parenthesized(&expr));
+    }
+    format!("fun m => {expr}")
+}
+
+fn parenthesized(expr: &str) -> String {
+    if expr.contains(' ') {
+        format!("({expr})")
+    } else {
+        expr.to_string()
+    }
+}

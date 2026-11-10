@@ -1,4 +1,4 @@
-# Architecture model reference (`l2r.architecture/v0` and `v1`)
+# Architecture model reference (`l2r.architecture/v0`, `v1` and `v2`)
 
 The model is the authoritative source for **software structure**. Behavior
 (states, inputs, transitions, invariants, and what messages mean) is owned by
@@ -79,6 +79,15 @@ Capacity is part of the behavioral semantics (`l2r.async/v1`), not an
 implementation detail: a full mailbox blocks the sender and rejects a port send;
 nothing is dropped. See [`composite-v1.md`](composite-v1.md).
 
+### Schema `l2r.architecture/v2`
+
+`v2` is for hierarchical systems: composites nest, ports have a direction
+(`in` or `out`), the root's `out` ports are bounded outboxes, and Lean types may
+carry data. It uses its own two component profiles (`transition-core/v1`,
+`composite/v2`) and needs an inventory with constructor fields
+(`l2r.lean-inventory/v1`). The schema, the meaning of hierarchy and the
+generated code are described in [`composite-v2.md`](composite-v2.md).
+
 Unknown fields are rejected, so a misspelled field is an error rather than being
 silently ignored. The order of components, messages and invariants does not
 matter: the model is canonicalized before it is digested.
@@ -90,11 +99,16 @@ matter: the model is canonicalized before it is digested.
 | `crate-root/v0` | whole crate | `BUILD.bazel`, `src/lib.rs` | – |
 | `transition-core/v0` | pure state machine | `mod.rs`: enums mirroring the Lean types, `init`/`step` contract; `contract_tests.rs`: totality over all states and inputs | `imp.rs` |
 | `composite/v0` | container, owns no state | `mod.rs`: children, `Envelope`, `System` with one FIFO mailbox per machine child and a deterministic round-robin scheduler | `routes.rs`: one translation function per message edge |
+| `crate-root/v1` | whole crate (schema `v2`) | `BUILD.bazel`, `src/lib.rs`, `src/types.rs`: one Rust type per Lean data type | – |
+| `transition-core/v1` | pure state machine whose types may carry data (schema `v2`) | `mod.rs`: `State`/`Input`/`Output` as aliases into `types`, `init`/`step` contract; `contract_tests.rs`: definedness on representative values, including the boundary values of every field | `imp.rs` |
+| `composite/v2` | container, root or nested, with typed `in` and `out` ports (schema `v2`) | `mod.rs`: children and boundary; for the root also bounded mailboxes and outboxes and the `System` scheduling the flat network of every machine (`send_<port>`, `take_<port>`, `step_once`) | `routes.rs`: one translation per edge living in the composite and per `in` port |
 | `composite/v1` | root container, owns no state, machine children only | `mod.rs`: capacities, typed port message enums, array-backed bounded mailboxes, `System` with `send_<port>` (explicit `Rejected`), a guarded round-robin `step_once` reporting `Delivered`/`Settled`/`Blocked` | `routes.rs`: one translation per edge and per port |
 
-Hierarchical composition comes from nesting composites. In v0, state types must be
-Lean inductives whose constructors have no fields. Statecharts with nested states
-inside one machine, and parameterized states, need a future profile.
+In schemas `v0` and `v1`, state types must be Lean inductives whose constructors
+have no fields, and only `composite/v0` nests. Schema `v2` lifts both limits:
+composites nest with typed boundaries, and types carry data. Statecharts with
+nested states inside one machine remain the specification's business: a machine
+is whatever its Lean `step` says.
 
 ## Validation rules
 
@@ -117,29 +131,40 @@ and never repairs the model.
 | L2R-S012 | Control characters in text |
 | L2R-S013 | Unsafe path (absolute, `..`, hidden segments) |
 | L2R-S014 | Zero implementation budget |
-| L2R-S015 | Ports, capacities or `composite/v1` used by a `v0` document |
+| L2R-S015 | Ports, capacities or `composite/v1` used by a `v0` document; a port `direction` or `capacity` in a `v0`/`v1` document |
 | L2R-S016 | `composite/v1` shape: must be the root, children must be machines |
 | L2R-S017 | A child of a `composite/v1` lacks `mailbox_capacity`, or it is 0 or above 64 |
 | L2R-S018 | `mailbox_capacity` outside the children of a `composite/v1` |
+| L2R-S019 | A `v2` profile in a `v0`/`v1` model, or an older profile in a `v2` model |
+| L2R-S020 | Two identifiers that generate the same Rust name (`a_1` and `a1`; edge `port_x` and port `x`; port `q_state` and machine `send_q`) |
 | L2R-O001 | A Lean state type owned by more than one component |
-| L2R-L001 | Unsupported inventory schema |
+| L2R-L001 | Unsupported inventory schema; a `v2` model with an inventory that lacks constructor fields |
 | L2R-L002 | Malformed Lean name |
 | L2R-L003 | Lean name not in the inventory |
 | L2R-L004 | Wrong declaration kind (e.g. a definition where a theorem is required) |
-| L2R-L005 | State, input or output type is not a field-less inductive |
+| L2R-L005 | State, input or output type is not a field-less inductive; in schema `v2`, a type outside the supported data subset |
 | L2R-L006 | Exact type mismatch for `init`, `step` or a translation |
-| L2R-L007 | Constructor names that cannot become unique Rust variants |
+| L2R-L007 | Constructor, field or type names that cannot become unique Rust names (collisions, keywords, a type called `Option`, `Vec`, `Box`, `String` or `Result`) |
+| L2R-L008 | A recursive data type (schema `v2`) |
 | L2R-M001 | Duplicate message id |
 | L2R-M002 | Message endpoint does not exist |
 | L2R-M003 | Message endpoint is not a machine |
 | L2R-M004 | Self-message |
-| L2R-M005 | Endpoints are not siblings (strictest hierarchy rule; see the pending decision in ADR-0003) |
+| L2R-M005 | Endpoints are not siblings (ADR-0003 D7). In schema `v2`: the endpoints are not both visible in one composite; boundaries are crossed through ports |
 | L2R-M006 | Two edges between the same ordered pair |
 | L2R-M007 | A machine in a `composite/v1` has no outgoing edge, so its outputs would be silently discarded |
+| L2R-M008 | An output that can return to its own machine's mailbox through edges and ports (schema `v2`) |
+| L2R-M009 | One output reaching more than 32 receivers (schema `v2`) |
+| L2R-M010 | An edge that can never carry a message because nothing feeds its source (schema `v2`) |
 | L2R-P001 | Duplicate port id |
 | L2R-P002 | A port's composite does not exist or is not a `composite/v1` |
 | L2R-P003 | A port's target is not a machine inside its composite |
-| L2R-P004 | A `composite/v1` has no port |
+| L2R-P004 | A `composite/v1` has no port; a `v2` root has no `in` port |
+| L2R-P006 | A port and a component share an identifier (schema `v2`) |
+| L2R-P007 | A `v2` port without `direction = "in"` or `"out"` |
+| L2R-P008 | `capacity` missing on a root `out` port, out of range, or used on any other port |
+| L2R-P009 | An `out` port with `to` or `translation` |
+| L2R-P010 | A nested `in` port that nothing feeds (schema `v2`) |
 
 ## Recurring failure modes, turned into rules
 

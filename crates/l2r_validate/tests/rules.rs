@@ -47,7 +47,7 @@ fn the_example_model_is_valid() {
 #[test]
 fn unsupported_schema_is_rejected() {
     let mut model = example_model();
-    model.schema = "l2r.architecture/v2".into();
+    model.schema = "l2r.architecture/v99".into();
     rejects(&model, "L2R-S001");
 }
 
@@ -421,7 +421,7 @@ fn port_structure_is_checked() {
     v1_rejects(&model, "L2R-P002");
 
     let mut model = example_v1_model();
-    model.ports[0].to = "crossing".into();
+    model.ports[0].to = Some("crossing".into());
     v1_rejects(&model, "L2R-P003");
 
     let mut model = example_v1_model();
@@ -435,7 +435,7 @@ fn a_port_must_translate_its_message_into_its_targets_input() {
     // is the typed-interface guarantee in action.
     let mut model = example_v1_model();
     let timer = model.ports.iter_mut().find(|p| p.id == "timer").unwrap();
-    timer.translation = "CrossingV1.Ports.buttonToLatch".into();
+    timer.translation = Some("CrossingV1.Ports.buttonToLatch".into());
     v1_rejects(&model, "L2R-L006");
     let mut model = example_v1_model();
     model.ports[0].message = "CrossingV1.Latch.Input".into();

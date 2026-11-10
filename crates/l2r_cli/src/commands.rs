@@ -62,10 +62,14 @@ fn with_session(model: &Path, run: impl FnOnce(Session) -> Outcome) -> Outcome {
 pub fn validate(model: &Path) -> Outcome {
     match session::validated(model) {
         Ok(v) => Outcome::ok(format!(
-            "model `{}` is valid: {} components, {} message edges\n",
+            "model `{}` is valid: {} components, {} message edges{}\n",
             v.model().system.id,
             v.model().components.len(),
-            v.model().messages.len()
+            v.model().messages.len(),
+            match v.model().ports.len() {
+                0 => String::new(),
+                n => format!(", {n} ports"),
+            }
         )),
         Err(error) => session_error(error),
     }

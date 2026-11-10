@@ -7,14 +7,34 @@ use l2r_model::{Component, MODEL_SCHEMA, Model, SUPPORTED_SCHEMAS, profiles};
 use crate::diagnostic::Findings;
 use crate::names;
 
-/// Applies every structural rule.
+/// Applies every structural rule of model schemas `v0` and `v1`.
 pub fn check(model: &Model, findings: &mut Findings) {
+    check_common(model, findings);
+    for component in &model.components {
+        check_profile_shape(model, component, findings);
+        // The v2 profiles belong to model schema v2, which has its own rules.
+        if component.profile == profiles::TRANSITION_CORE_V1
+            || component.profile == profiles::COMPOSITE_V2
+        {
+            findings.error(
+                "L2R-S019",
+                subject(component),
+                format!(
+                    "profile `{}` needs `schema = \"l2r.architecture/v2\"`",
+                    component.profile
+                ),
+            );
+        }
+    }
+}
+
+/// The rules every model schema shares: identities, containment and Rust mappings.
+pub(crate) fn check_common(model: &Model, findings: &mut Findings) {
     check_schema(model, findings);
     check_system(model, findings);
     check_component_ids(model, findings);
     for component in &model.components {
         check_component_fields(component, findings);
-        check_profile_shape(model, component, findings);
     }
     check_parents(model, findings);
     check_single_root(model, findings);

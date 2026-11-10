@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@codescene/codehealth-mcp"]
+    }
+  }
+}

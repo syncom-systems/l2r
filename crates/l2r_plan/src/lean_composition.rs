@@ -65,6 +65,9 @@ pub fn lean_composition_path(model: &Model) -> String {
 /// `L2R.Async1.Network` with capacities and ports (`l2r.lean-composition/v1`).
 /// A model uses one or the other: a `composite/v1` is always the root.
 pub fn lean_composition(validated: &Validated) -> Result<String, PlanError> {
+    if let Some(flat) = validated.flat() {
+        return crate::lean_composition_v2::lean_composition_v2(validated, flat);
+    }
     let model = validated.model();
     let v1 = model
         .components
@@ -285,14 +288,14 @@ fn v1_tail(model: &Model, composite: &Component, children: &[&Component], n: usi
         &|port| {
             let idx = children
                 .iter()
-                .position(|c| c.id == port.to)
+                .position(|c| c.id == port.target())
                 .unwrap_or_default();
             format!("⟨{idx}, by decide⟩")
         },
     ));
     out.push_str(&by_port(
         &format!("def inject : (p : Fin {p}) → Msg p → Input (target p)"),
-        &|port| port.translation.clone(),
+        &|port| port.translation_name().to_string(),
     ));
     out.push_str(&format!(
         "abbrev network : L2R.Async1.Network :=\n  ⟨{n}, State, Input, Output, init, step, route, cap, {p}, Msg, target, inject⟩\n\n\

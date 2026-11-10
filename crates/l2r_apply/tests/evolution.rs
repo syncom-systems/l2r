@@ -172,6 +172,7 @@ fn a_new_lean_constructor_changes_the_contract_but_not_the_implementation() {
     state.constructors.push(Constructor {
         name: "Crossing.Signal.State.maintenance".into(),
         arity: 0,
+        fields: vec![],
     });
     let next = plan_with(&example_model(), &inventory);
     let first = plan_for(&example_model());

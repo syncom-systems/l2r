@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 
 use l2r_model::{Inventory, Model};
 
+use crate::data::DataType;
+use crate::flat::Flat;
+
 /// A canonical model and inventory that passed validation, with every Lean
 /// reference resolved.
 #[derive(Debug, Clone)]
@@ -15,6 +18,8 @@ pub struct Validated {
     inventory: Inventory,
     machines: BTreeMap<String, ResolvedMachine>,
     port_messages: BTreeMap<String, ResolvedEnum>,
+    types: BTreeMap<String, DataType>,
+    flat: Option<Flat>,
 }
 
 /// A state machine component with its Lean types resolved to enumerations.
@@ -58,7 +63,41 @@ impl Validated {
             inventory,
             machines,
             port_messages,
+            types: BTreeMap::new(),
+            flat: None,
         }
+    }
+
+    pub(crate) fn new_v2(
+        model: Model,
+        inventory: Inventory,
+        types: BTreeMap<String, DataType>,
+        flat: Flat,
+    ) -> Self {
+        Self {
+            model,
+            inventory,
+            machines: BTreeMap::new(),
+            port_messages: BTreeMap::new(),
+            types,
+            flat: Some(flat),
+        }
+    }
+
+    /// The flat network of a `v2` model: its machines, the routes their
+    /// outputs take, and the root's ports. `None` for `v0` and `v1` models.
+    pub fn flat(&self) -> Option<&Flat> {
+        self.flat.as_ref()
+    }
+
+    /// Every Lean data type a `v2` model uses, by qualified name.
+    pub fn types(&self) -> &BTreeMap<String, DataType> {
+        &self.types
+    }
+
+    /// The data type of a qualified Lean name (`v2` models).
+    pub fn data_type(&self, lean_name: &str) -> Option<&DataType> {
+        self.types.get(lean_name)
     }
 
     /// The canonical model.

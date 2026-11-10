@@ -3,19 +3,22 @@
 //! Validation never repairs or guesses: an inconsistent model is rejected with
 //! every finding listed, and only a fully valid model yields a [`Validated`].
 
+pub mod data;
 mod diagnostic;
+pub mod flat;
 mod lean_refs;
 mod messages;
 pub mod names;
 mod ports;
 mod resolved;
 mod structure;
+mod v2;
 
 pub use diagnostic::Diagnostic;
 pub use lean_refs::{port_translation_type, step_type, translation_type};
 pub use resolved::{ResolvedEnum, ResolvedMachine, Validated, Variant};
 
-use l2r_model::{Inventory, Model};
+use l2r_model::{Inventory, MODEL_SCHEMA_V2, Model};
 
 /// Validates `model` against `inventory`.
 ///
@@ -24,6 +27,9 @@ use l2r_model::{Inventory, Model};
 pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<Diagnostic>> {
     let model = model.canonical();
     let inventory = inventory.canonical();
+    if model.schema == MODEL_SCHEMA_V2 {
+        return v2::validate(model, inventory);
+    }
     let mut findings = diagnostic::Findings::default();
 
     structure::check(&model, &mut findings);
