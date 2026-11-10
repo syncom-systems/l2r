@@ -10,7 +10,11 @@
 #   generate -> tests fail: nothing implemented -> implement -> tests pass ->
 #   change the model -> check fails: stale approval, generate refuses ->
 #   re-approve, regenerate: implementation untouched -> edit a generated file ->
-#   check fails: drift -> work packet -> (derived network and conformance run).
+#   check fails: drift -> work packet -> derived network and conformance run.
+#
+# Lean is the pinned release L2R provides through Bazel (@l2r//tools/lean), so
+# the inventory export and the conformance replay always run, and always with
+# the same Lean, whatever is installed on the machine.
 #
 # The implementation step copies the committed implementation of
 # examples/starter (the same system under its template names).
@@ -45,15 +49,19 @@ M="$proj/architecture.toml"
 
 "$L2R" validate "$M" > "$log" 2>&1 || fail "the new project's model is not valid"
 
-step "2. the inventory init wrote is what its Lean specification exports"
-if command -v lake > /dev/null; then
-  "$L2R" inventory "$proj/spec" --out "$work/fresh.json" PumpStation > "$log" 2>&1 || fail "l2r inventory failed"
-  cmp -s "$work/fresh.json" "$proj/lean-inventory.json" || fail "the inventory written by init differs from a fresh export"
-  rm -rf "$proj/spec/.lake"
-  echo "fresh export equals the committed inventory"
-else
-  echo "skipped: \`lake\` is not installed (the proof lane checks this with the pinned Lean)"
-fi
+# The pinned Lean, first on PATH: `l2r inventory` and `lake` below use it.
+lean_bin="$(bazel run @l2r//tools/lean:bin_path 2> "$log")" || fail "the pinned Lean toolchain is not available"
+export PATH="$lean_bin:$PATH"
+pinned="leanprover/lean4:v$(lean --version | sed -n 's/^Lean (version \([0-9.]*\).*/\1/p')"
+for toolchain in spec/lean-toolchain verification/lean-toolchain; do
+  [ "$(cat "$proj/$toolchain")" = "$pinned" ] || fail "$toolchain says $(cat "$proj/$toolchain"), the pinned Lean is $pinned"
+done
+
+step "2. the inventory init wrote is what its Lean specification exports ($pinned)"
+"$L2R" inventory "$proj/spec" --out "$work/fresh.json" PumpStation > "$log" 2>&1 || fail "l2r inventory failed"
+cmp -s "$work/fresh.json" "$proj/lean-inventory.json" || fail "the inventory written by init differs from a fresh export"
+rm -rf "$proj/spec/.lake"
+echo "fresh export equals the committed inventory"
 
 step "3. nothing approved yet: the drift check fails and says what to do"
 refused "no approval record yet" bazel test //...
@@ -108,12 +116,10 @@ mkdir -p "$proj/verification/L2RDerived"
 "$L2R" conformance "$M" --lean > "$proj/verification/Conformance.lean" || fail "conformance --lean failed"
 bazel run //:conformance_traces -- 3 300 40 > "$work/traces.txt" 2> "$log" || fail "the conformance recorder does not build or run"
 [ "$(wc -l < "$work/traces.txt")" -gt 300 ] || fail "the conformance recorder wrote no traces"
-if command -v lake > /dev/null; then
-  (cd "$proj/verification" && lake build && lake env lean --run Conformance.lean "$work/traces.txt") > "$log" 2>&1 \
-    || fail "the generated Rust scheduler and the Lean scheduler model disagree, or the derived Lean does not build"
-  grep -E "^CONFORMANCE [0-9]+/[0-9]+ sequences agree" "$log" || fail "no conformance result"
-else
-  echo "replay skipped: \`lake\` is not installed (the proof lane replays the examples with the pinned Lean)"
-fi
+(cd "$proj/verification" && lake build && lake env lean --run Conformance.lean "$work/traces.txt") > "$log" 2>&1 \
+  || fail "the generated Rust scheduler and the Lean scheduler model disagree, or the derived Lean does not build"
+grep -E "^CONFORMANCE [0-9]+/[0-9]+ sequences agree" "$log" || fail "no conformance result"
+agreed="$(sed -n 's/^CONFORMANCE \([0-9]*\)\/\([0-9]*\) sequences agree.*/\1 \2/p' "$log")"
+[ "${agreed% *}" = "${agreed#* }" ] && [ "${agreed% *}" -gt 300 ] || fail "not every recorded sequence agrees: $agreed"
 
 echo "E2E PASS: a new project, built with L2R as an external dependency, went through the whole workflow"

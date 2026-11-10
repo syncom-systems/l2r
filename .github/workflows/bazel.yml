@@ -46,7 +46,9 @@ jobs:
         run: bazel build --config=fmt //...
 
   # A new project in a new Bazel workspace, with L2R as an external dependency:
-  # docs/getting-started.md, step by step, with every refusal on the way.
+  # docs/getting-started.md, step by step, with every refusal on the way. Lean
+  # is the pinned release (@l2r//tools/lean), so the inventory export and the
+  # conformance replay run here too.
   new-project:
     runs-on: ubuntu-24.04
     steps:

@@ -1,0 +1,24 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# The pinned Lean toolchain for projects that use L2R:
+#
+#     export PATH="$(bazel run @l2r//tools/lean:bin_path)":$PATH
+#
+# puts the `lean` and `lake` of the pinned release (sha256-verified, the version
+# L2R's own Lean library is checked with) first on PATH.
+#
+# `manual`: a plain `bazel build //...` does not fetch the Lean release.
+sh_binary(
+    name = "bin_path",
+    srcs = ["bin_path.sh"],
+    args = [
+        "$(rootpath @l2r_lean//:bin_path.txt)",
+        "$(rootpath @l2r_lean//:reason.txt)",
+    ],
+    data = [
+        "@l2r_lean//:bin_path.txt",
+        "@l2r_lean//:reason.txt",
+    ],
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)

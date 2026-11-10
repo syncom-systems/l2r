@@ -50,7 +50,7 @@ PINS = {
     },
 }
 
-def _platform(rctx):
+def platform_key(rctx):
     os = rctx.os.name.lower()
     arch = rctx.os.arch.lower()
     if os.startswith("mac") and arch in ("aarch64", "arm64"):
@@ -108,7 +108,7 @@ rm -rf home
 """])
 
 def _verification_tools_impl(rctx):
-    platform = _platform(rctx)
+    platform = platform_key(rctx)
     if platform == None:
         _stub(rctx, "no pinned verification toolchain for {} {}".format(rctx.os.name, rctx.os.arch))
         return

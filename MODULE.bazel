@@ -72,3 +72,10 @@ use_repo(crate, "crates")
 verification_tools = use_repo_rule("//bazel/verification:repo.bzl", "verification_tools")
 
 verification_tools(name = "verification_tools")
+
+# The pinned Lean alone (the same archive and sha256 as the proof lane's), for
+# `l2r inventory` and conformance replay in a project that uses L2R. Fetched
+# only when //tools/lean is built.
+lean_toolchain = use_repo_rule("//bazel/lean:repo.bzl", "lean_toolchain")
+
+lean_toolchain(name = "l2r_lean")

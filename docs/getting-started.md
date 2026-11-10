@@ -7,9 +7,19 @@ exactly these steps, with every refusal, in CI.
 ## What you need
 
 - [Bazel](https://bazel.build) through `bazelisk` (the project pins its version).
-- [Lean 4](https://lean-lang.org/install) (`elan`, which provides `lake`), to
-  write the specification and export its inventory. The generator itself never
-  runs Lean.
+- Lean 4, to write the specification, export its inventory and replay
+  conformance traces. The generator itself never runs Lean. Either install it
+  ([`elan`](https://lean-lang.org/install), which provides `lake` and follows
+  each project's `lean-toolchain` file), or use the release L2R pins, fetched
+  by Bazel and verified by its sha256:
+
+  ```sh
+  export PATH="$(bazel run @l2r//tools/lean:bin_path)":$PATH
+  ```
+
+  That is the Lean every Lean file in L2R is checked with, the one `l2r init`
+  writes into the new project's `lean-toolchain` files, and the one CI uses for
+  the steps below.
 
 ## Who owns what
 
