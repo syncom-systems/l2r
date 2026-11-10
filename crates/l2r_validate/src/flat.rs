@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use l2r_model::{Component, Model, Port, profiles};
+use l2r_model::{Component, MessageEdge, Model, Port, profiles};
 
 /// The flat network of a `v2` model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,11 +150,27 @@ struct Index<'a> {
     root: &'a str,
 }
 
+fn is_machine(component: &Component) -> bool {
+    component.profile == profiles::TRANSITION_CORE_V1
+}
+
 impl<'a> Index<'a> {
+    fn new(model: &'a Model) -> Index<'a> {
+        let root = model
+            .components
+            .iter()
+            .find(|c| c.parent.is_none())
+            .map(|c| c.id.as_str())
+            .unwrap_or_default();
+        Index {
+            model,
+            ports: model.ports.iter().map(|p| (p.id.as_str(), p)).collect(),
+            root,
+        }
+    }
+
     fn machine(&self, id: &str) -> Option<&'a Component> {
-        self.model
-            .component(id)
-            .filter(|c| c.profile == profiles::TRANSITION_CORE_V1)
+        self.model.component(id).filter(|c| is_machine(c))
     }
 
     fn input_of(&self, machine: &Component) -> String {
@@ -195,43 +211,53 @@ impl<'a> Index<'a> {
         if out.len() > MAX_ROUTES_PER_MACHINE {
             return;
         }
-        let owner = self.owner_of_source(source);
         for edge in self.model.messages.iter().filter(|e| e.from == source) {
-            let mut hops = prefix.to_vec();
-            let edge_hop = |result: String| Hop {
-                kind: HopKind::Edge,
-                id: edge.id.clone(),
-                owner: owner.clone(),
-                translation: edge.translation.clone(),
-                result,
-            };
-            if let Some(machine) = self.machine(&edge.to) {
-                hops.push(edge_hop(self.input_of(machine)));
-                out.push(FlatRoute {
-                    hops,
-                    target: Target::Leaf(machine.id.clone()),
-                });
-                continue;
-            }
-            let Some(port) = self.ports.get(edge.to.as_str()) else {
-                continue;
-            };
-            hops.push(edge_hop(port.message.clone()));
-            if !port.is_out() {
-                if let Some(leaf) = self.descend(port, &mut hops) {
-                    out.push(FlatRoute {
-                        hops,
-                        target: Target::Leaf(leaf),
-                    });
-                }
-            } else if port.composite == self.root {
-                out.push(FlatRoute {
-                    hops,
-                    target: Target::Sink(port.id.clone()),
-                });
-            } else {
-                self.expand(&port.id, &hops, out);
-            }
+            self.follow(edge, prefix, out);
+        }
+    }
+
+    /// Every route that passes `prefix` and then `edge`.
+    fn follow(&self, edge: &MessageEdge, prefix: &[Hop], out: &mut Vec<FlatRoute>) {
+        let mut hops = prefix.to_vec();
+        let edge_hop = |result: String| Hop {
+            kind: HopKind::Edge,
+            id: edge.id.clone(),
+            owner: self.owner_of_source(&edge.from),
+            translation: edge.translation.clone(),
+            result,
+        };
+        if let Some(machine) = self.machine(&edge.to) {
+            hops.push(edge_hop(self.input_of(machine)));
+            out.push(FlatRoute {
+                hops,
+                target: Target::Leaf(machine.id.clone()),
+            });
+            return;
+        }
+        let Some(port) = self.ports.get(edge.to.as_str()) else {
+            return;
+        };
+        hops.push(edge_hop(port.message.clone()));
+        self.continue_from(port, hops, out);
+    }
+
+    /// Every route whose `hops` have brought it to `port`: an input port leads
+    /// down to one machine, an `out` port of the root is an outbox, and any
+    /// other `out` port hands over to the edges of the composite above.
+    fn continue_from(&self, port: &'a Port, mut hops: Vec<Hop>, out: &mut Vec<FlatRoute>) {
+        if !port.is_out() {
+            let leaf = self.descend(port, &mut hops);
+            out.extend(leaf.map(|leaf| FlatRoute {
+                hops,
+                target: Target::Leaf(leaf),
+            }));
+        } else if port.composite == self.root {
+            out.push(FlatRoute {
+                hops,
+                target: Target::Sink(port.id.clone()),
+            });
+        } else {
+            self.expand(&port.id, &hops, out);
         }
     }
 
@@ -243,83 +269,87 @@ impl<'a> Index<'a> {
         };
         component.and_then(|c| c.parent.clone()).unwrap_or_default()
     }
+
+    /// A machine with every route its outputs take.
+    fn leaf(&self, machine: &Component) -> Leaf {
+        let mut routes = Vec::new();
+        self.expand(&machine.id, &[], &mut routes);
+        Leaf {
+            id: machine.id.clone(),
+            capacity: machine.mailbox_capacity.unwrap_or(1),
+            routes,
+        }
+    }
+
+    /// The outboxes: the root's `out` ports.
+    fn sinks(&self) -> Vec<Sink> {
+        let out_ports = self.root_ports().filter(|p| p.is_out());
+        out_ports
+            .map(|p| Sink {
+                port: p.id.clone(),
+                capacity: p.capacity.unwrap_or(1),
+                message: p.message.clone(),
+            })
+            .collect()
+    }
+
+    /// The root's input ports, each followed down to the machine it reaches.
+    fn inputs(&self) -> Vec<FlatInput> {
+        let in_ports = self.root_ports().filter(|p| !p.is_out());
+        in_ports
+            .filter_map(|p| {
+                let mut hops = Vec::new();
+                let target = self.descend(p, &mut hops)?;
+                Some(FlatInput {
+                    port: p.id.clone(),
+                    message: p.message.clone(),
+                    hops,
+                    target,
+                })
+            })
+            .collect()
+    }
+
+    fn root_ports(&self) -> impl Iterator<Item = &'a Port> {
+        let root = self.root;
+        self.model.ports.iter().filter(move |p| p.composite == root)
+    }
+}
+
+impl Leaf {
+    /// Why the machine's routes cannot be scheduled: there are too many, or
+    /// one leads back to the machine itself.
+    fn route_errors(&self) -> Vec<FlatError> {
+        let mut errors = Vec::new();
+        if self.routes.len() > MAX_ROUTES_PER_MACHINE {
+            errors.push(FlatError::TooManyRoutes {
+                machine: self.id.clone(),
+            });
+        }
+        let to_itself = Target::Leaf(self.id.clone());
+        if let Some(route) = self.routes.iter().find(|r| r.target == to_itself) {
+            errors.push(FlatError::SelfRoute {
+                machine: self.id.clone(),
+                via: route.hops.iter().map(|h| h.id.clone()).collect(),
+            });
+        }
+        errors
+    }
 }
 
 /// Computes the flat network of a structurally valid `v2` model (canonical
 /// form: components, edges and ports sorted by identifier).
 pub fn flatten(model: &Model) -> Result<Flat, Vec<FlatError>> {
-    let root = model
-        .components
-        .iter()
-        .find(|c| c.parent.is_none())
-        .map(|c| c.id.as_str())
-        .unwrap_or_default();
-    let index = Index {
-        model,
-        ports: model.ports.iter().map(|p| (p.id.as_str(), p)).collect(),
-        root,
-    };
-    let mut errors = Vec::new();
-    let mut leaves = Vec::new();
-    for machine in model
-        .components
-        .iter()
-        .filter(|c| c.profile == profiles::TRANSITION_CORE_V1)
-    {
-        let mut routes = Vec::new();
-        index.expand(&machine.id, &[], &mut routes);
-        if routes.len() > MAX_ROUTES_PER_MACHINE {
-            errors.push(FlatError::TooManyRoutes {
-                machine: machine.id.clone(),
-            });
-        }
-        if let Some(route) = routes
-            .iter()
-            .find(|r| r.target == Target::Leaf(machine.id.clone()))
-        {
-            errors.push(FlatError::SelfRoute {
-                machine: machine.id.clone(),
-                via: route.hops.iter().map(|h| h.id.clone()).collect(),
-            });
-        }
-        leaves.push(Leaf {
-            id: machine.id.clone(),
-            capacity: machine.mailbox_capacity.unwrap_or(1),
-            routes,
-        });
+    let index = Index::new(model);
+    let machines = model.components.iter().filter(|c| is_machine(c));
+    let leaves: Vec<Leaf> = machines.map(|machine| index.leaf(machine)).collect();
+    let errors: Vec<FlatError> = leaves.iter().flat_map(Leaf::route_errors).collect();
+    if !errors.is_empty() {
+        return Err(errors);
     }
-    let sinks = model
-        .ports
-        .iter()
-        .filter(|p| p.composite == root && p.is_out())
-        .map(|p| Sink {
-            port: p.id.clone(),
-            capacity: p.capacity.unwrap_or(1),
-            message: p.message.clone(),
-        })
-        .collect();
-    let inputs = model
-        .ports
-        .iter()
-        .filter(|p| p.composite == root && !p.is_out())
-        .filter_map(|p| {
-            let mut hops = Vec::new();
-            let target = index.descend(p, &mut hops)?;
-            Some(FlatInput {
-                port: p.id.clone(),
-                message: p.message.clone(),
-                hops,
-                target,
-            })
-        })
-        .collect();
-    if errors.is_empty() {
-        Ok(Flat {
-            leaves,
-            sinks,
-            inputs,
-        })
-    } else {
-        Err(errors)
-    }
+    Ok(Flat {
+        leaves,
+        sinks: index.sinks(),
+        inputs: index.inputs(),
+    })
 }
