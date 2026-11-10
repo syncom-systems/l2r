@@ -126,19 +126,21 @@ pub fn artifacts(validated: &Validated) -> Result<(Vec<Artifact>, BTreeSet<Strin
     let mut profiles = BTreeSet::from([crate_root::PROFILE.to_string()]);
     for component in &generator.model.components {
         profiles.insert(component.profile.clone());
-        match component.profile.as_str() {
-            profile_ids::TRANSITION_CORE_V1 => {
-                artifacts.extend(machine::artifacts(&generator, component)?)
-            }
-            profile_ids::COMPOSITE_V2 => {
-                artifacts.extend(composite::artifacts(&generator, component)?)
-            }
-            other => {
-                return Err(PlanError(format!(
-                    "profile `{other}` has no v2 implementation"
-                )));
-            }
-        }
+        artifacts.extend(component_artifacts(&generator, component)?);
     }
     Ok((artifacts, profiles))
+}
+
+/// The files of one component, planned by the profile it names.
+fn component_artifacts(
+    generator: &Gen<'_>,
+    component: &Component,
+) -> Result<Vec<Artifact>, PlanError> {
+    match component.profile.as_str() {
+        profile_ids::TRANSITION_CORE_V1 => machine::artifacts(generator, component),
+        profile_ids::COMPOSITE_V2 => composite::artifacts(generator, component),
+        other => Err(PlanError(format!(
+            "profile `{other}` has no v2 implementation"
+        ))),
+    }
 }

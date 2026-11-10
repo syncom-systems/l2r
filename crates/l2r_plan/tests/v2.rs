@@ -15,6 +15,38 @@ fn tank_plan() -> Plan {
     plan_of(&tank_model(), &tank_inventory())
 }
 
+/// The planned content of one file.
+fn content(plan: &Plan, path: &str) -> String {
+    plan.artifact(path)
+        .unwrap_or_else(|| panic!("`{path}` is not planned"))
+        .content
+        .clone()
+}
+
+/// The root module of the tank station: the one that holds the `System`.
+fn tank_root() -> String {
+    content(&tank_plan(), "src/station/mod.rs")
+}
+
+/// The root module of the relay: its routes cross several boundaries.
+fn relay_root() -> String {
+    content(
+        &plan_of(&relay_model(), &relay_inventory()),
+        "src/plant/mod.rs",
+    )
+}
+
+/// The fragments that `text` does not contain; empty when it contains them all.
+fn missing<'a>(text: &str, fragments: &[&'a str]) -> Vec<&'a str> {
+    fragments
+        .iter()
+        .copied()
+        .filter(|fragment| !text.contains(fragment))
+        .collect()
+}
+
+const NONE_MISSING: [&str; 0] = [];
+
 #[test]
 fn the_tank_station_plans_the_expected_files() {
     let plan = tank_plan();
@@ -65,8 +97,7 @@ fn planning_is_deterministic_and_order_independent() {
 }
 
 #[test]
-fn every_input_that_shapes_the_output_changes_the_digest() {
-    let base = tank_plan().digest();
+fn a_capacity_changes_the_digest() {
     // A capacity is part of the behaviour.
     let mut model = tank_model();
     model
@@ -75,66 +106,78 @@ fn every_input_that_shapes_the_output_changes_the_digest() {
         .find(|p| p.id == "valve_command")
         .unwrap()
         .capacity = Some(3);
-    assert_ne!(base, plan_of(&model, &tank_inventory()).digest());
-    // A field added to a Lean type changes the generated mirror.
+    assert_ne!(
+        tank_plan().digest(),
+        plan_of(&model, &tank_inventory()).digest()
+    );
+}
+
+/// The tank station's inventory with more fields, of the given names, on the
+/// constructor of `Tank.Ports.Sample`; each is a copy of its first field.
+fn tank_inventory_with_more_sample_fields(names: impl IntoIterator<Item = String>) -> Inventory {
     let mut inventory = tank_inventory();
     let sample = inventory
         .declarations
         .iter_mut()
         .find(|d| d.name == "Tank.Ports.Sample")
         .unwrap();
-    let mut extra = sample.constructors[0].fields[0].clone();
-    extra.name = "second".into();
-    sample.constructors[0].fields.push(extra);
-    sample.constructors[0].arity = 2;
+    let constructor = &mut sample.constructors[0];
+    let field = constructor.fields[0].clone();
+    for name in names {
+        let mut added = field.clone();
+        added.name = name;
+        constructor.fields.push(added);
+        constructor.arity += 1;
+    }
+    inventory
+}
+
+#[test]
+fn a_field_added_to_a_lean_type_changes_the_digest_and_the_mirror() {
+    let inventory = tank_inventory_with_more_sample_fields(["second".to_string()]);
     let changed = plan_of(&tank_model(), &inventory);
-    assert_ne!(base, changed.digest());
-    let types = changed.artifact("src/types.rs").unwrap();
-    assert!(
-        types.content.contains("pub second: u8,"),
-        "{}",
-        types.content
-    );
+    assert_ne!(tank_plan().digest(), changed.digest());
+    let types = content(&changed, "src/types.rs");
+    assert!(types.contains("pub second: u8,"), "{types}");
 }
 
 #[test]
 fn each_lean_type_has_exactly_one_rust_type() {
-    let plan = tank_plan();
-    let types = &plan.artifact("src/types.rs").unwrap().content;
     // `Tank.Level` is used by the filter, the controller, a port and two routes.
+    let types = content(&tank_plan(), "src/types.rs");
     assert_eq!(types.matches("pub enum Level {").count(), 1);
-    // Machines alias the mirrors; they do not define types of their own.
-    let filter = &plan
-        .artifact("src/station/sensing/filter/mod.rs")
-        .unwrap()
-        .content;
+}
+
+#[test]
+fn machines_alias_the_mirrors_and_define_no_types_of_their_own() {
+    let filter = content(&tank_plan(), "src/station/sensing/filter/mod.rs");
     assert!(filter.contains("pub type State = crate::types::tank::filter::State;"));
     assert!(!filter.contains("pub enum") && !filter.contains("pub struct"));
-    // Data survives: a constructor field, a structure field, an Option.
-    assert!(types.contains("        Sample(u8),"));
-    assert!(types.contains("            pub streak: u8,"));
-    assert!(types.contains("            pub count: Option<u8>,"));
+}
+
+#[test]
+fn data_survives_in_the_mirrors() {
+    // A constructor field, a structure field, an Option.
+    let types = content(&tank_plan(), "src/types.rs");
+    assert_eq!(
+        missing(
+            &types,
+            &[
+                "        Sample(u8),",
+                "            pub streak: u8,",
+                "            pub count: Option<u8>,",
+            ]
+        ),
+        NONE_MISSING
+    );
 }
 
 #[test]
 fn sample_values_grow_with_the_sum_of_the_fields_not_their_product() {
     // Twenty integer fields: one-at-a-time sampling needs 20 * 3 + 1 values,
     // where a product would need 3^20.
-    let mut inventory = tank_inventory();
-    let sample = inventory
-        .declarations
-        .iter_mut()
-        .find(|d| d.name == "Tank.Ports.Sample")
-        .unwrap();
-    let field = sample.constructors[0].fields[0].clone();
-    for i in 1..20 {
-        let mut extra = field.clone();
-        extra.name = format!("f{i}");
-        sample.constructors[0].fields.push(extra);
-    }
-    sample.constructors[0].arity = 20;
-    let plan = plan_of(&tank_model(), &inventory);
-    let types = &plan.artifact("src/types.rs").unwrap().content;
+    let inventory = tank_inventory_with_more_sample_fields((1..20).map(|i| format!("f{i}")));
+    let types = content(&plan_of(&tank_model(), &inventory), "src/types.rs");
     let block = types
         .split("impl Sample {")
         .nth(1)
@@ -148,23 +191,42 @@ fn sample_values_grow_with_the_sum_of_the_fields_not_their_product() {
 
 #[test]
 fn only_the_root_composite_schedules() {
-    let plan = tank_plan();
-    let root = &plan.artifact("src/station/mod.rs").unwrap().content;
-    let nested = &plan.artifact("src/station/sensing/mod.rs").unwrap().content;
-    assert!(root.contains("pub struct System {"));
+    let nested = content(&tank_plan(), "src/station/sensing/mod.rs");
+    assert!(tank_root().contains("pub struct System {"));
     assert!(!nested.contains("System"));
-    // The nested machine is scheduled by the root, in the flat network.
-    assert!(root.contains("fn attempt_filter(&mut self) -> Attempt {"));
-    assert!(root.contains("sensing::filter::step(self.filter_state, input)"));
-    // Output ports are bounded outboxes the environment empties.
-    assert!(root.contains("pub fn take_valve_command(&mut self) -> Option<ValveCommandMessage> {"));
-    assert!(root.contains("pub const VALVE_COMMAND_CAPACITY: usize = 2;"));
+}
+
+#[test]
+fn a_nested_machine_is_scheduled_by_the_root_in_the_flat_network() {
+    assert_eq!(
+        missing(
+            &tank_root(),
+            &[
+                "fn attempt_filter(&mut self) -> Attempt {",
+                "sensing::filter::step(self.filter_state, input)",
+            ]
+        ),
+        NONE_MISSING
+    );
+}
+
+#[test]
+fn output_ports_are_bounded_outboxes_the_environment_empties() {
+    assert_eq!(
+        missing(
+            &tank_root(),
+            &[
+                "pub fn take_valve_command(&mut self) -> Option<ValveCommandMessage> {",
+                "pub const VALVE_COMMAND_CAPACITY: usize = 2;",
+            ]
+        ),
+        NONE_MISSING
+    );
 }
 
 #[test]
 fn a_route_through_several_boundaries_composes_its_translations_in_order() {
-    let plan = plan_of(&relay_model(), &relay_inventory());
-    let root = &plan.artifact("src/plant/mod.rs").unwrap().content;
+    let root = relay_root();
     let expected = "\
 fn source_route_0(output: SourceOutput) -> Option<SinkInput> {
     match zone_a::cell::routes::source_to_cell(output) {
@@ -180,9 +242,20 @@ fn source_route_0(output: SourceOutput) -> Option<SinkInput> {
 }
 ";
     assert!(root.contains(expected), "{root}");
-    // Two routes to one receiver: room is needed for both, before anything changes.
-    assert!(root.contains("if self.sink_inbox.len() + to_sink > SINK_CAPACITY {"));
-    // A chain of forwarded input ports.
+}
+
+#[test]
+fn two_routes_to_one_receiver_need_room_for_both_before_anything_changes() {
+    let root = relay_root();
+    assert!(
+        root.contains("if self.sink_inbox.len() + to_sink > SINK_CAPACITY {"),
+        "{root}"
+    );
+}
+
+#[test]
+fn a_chain_of_forwarded_input_ports_is_applied_in_order() {
+    let root = relay_root();
     let send = "\
         let message = routes::port_poke(message);
         let message = zone_a::routes::port_zone_a_in(message);
@@ -237,24 +310,34 @@ fn header(text: &str, key: &str) -> String {
 fn the_derived_network_names_exactly_what_it_was_derived_from() {
     let record: serde_json::Value = serde_json::from_str(TANK_APPROVAL).expect("approval parses");
     let field = |key: &str| record[key].as_str().expect("string field").to_string();
-    assert_eq!(header(TANK_DERIVED, "model"), field("model_digest"));
-    assert_eq!(header(TANK_DERIVED, "inventory"), field("inventory_digest"));
-    assert_eq!(header(TANK_DERIVED, "generator"), field("generator"));
-    assert_eq!(
-        header(TANK_DERIVED, "semantics"),
-        format!(
-            "l2r.async/v1 {}",
-            l2r_model::digest::sha256(SEMANTICS.as_bytes())
-        )
-    );
-    assert_eq!(
-        header(TANK_DERIVED, "scheduler"),
-        format!(
-            "{} {}",
-            l2r_plan::PORTS_SCHEDULER_VERSION,
-            l2r_model::digest::sha256(SCHEDULER.as_bytes())
-        )
-    );
+    let expected = [
+        ("model", field("model_digest")),
+        ("inventory", field("inventory_digest")),
+        ("generator", field("generator")),
+        (
+            "semantics",
+            format!(
+                "l2r.async/v1 {}",
+                l2r_model::digest::sha256(SEMANTICS.as_bytes())
+            ),
+        ),
+        (
+            "scheduler",
+            format!(
+                "{} {}",
+                l2r_plan::PORTS_SCHEDULER_VERSION,
+                l2r_model::digest::sha256(SCHEDULER.as_bytes())
+            ),
+        ),
+    ];
+    let named = expected
+        .clone()
+        .map(|(key, _)| (key, header(TANK_DERIVED, key)));
+    assert_eq!(named, expected);
+}
+
+#[test]
+fn the_derived_network_names_its_format() {
     assert!(TANK_DERIVED.starts_with(&format!(
         "-- @generated by L2R ({}).",
         l2r_plan::LEAN_COMPOSITION_FORMAT_V2
@@ -262,16 +345,30 @@ fn the_derived_network_names_exactly_what_it_was_derived_from() {
 }
 
 #[test]
-fn the_derived_network_restates_no_behaviour() {
-    // Outboxes are children of the network; routes compose the Lean
-    // translations in the order the generated scheduler applies them.
-    assert!(
-        TANK_DERIVED.contains("  | ⟨3, _⟩ => L2R.Async1.outboxStep _root_.Tank.Ports.AlarmNotice")
+fn outboxes_are_children_of_the_derived_network() {
+    // An outbox restates no behaviour: it is the specification's `outboxStep`,
+    // after the three machines.
+    assert_eq!(
+        missing(
+            TANK_DERIVED,
+            &[
+                "  | ⟨3, _⟩ => L2R.Async1.outboxStep _root_.Tank.Ports.AlarmNotice",
+                "def machines : Nat := 3",
+            ]
+        ),
+        NONE_MISSING
     );
+}
+
+#[test]
+fn derived_routes_compose_the_lean_translations_in_the_order_the_scheduler_applies_them() {
     assert!(TANK_DERIVED.contains(
         "((_root_.Tank.Routes.filterToLevel o).bind _root_.Tank.Routes.levelToController).toList.map (fun i => ⟨⟨1, by decide⟩, i⟩)"
     ));
-    assert!(TANK_DERIVED.contains("def machines : Nat := 3"));
+}
+
+#[test]
+fn a_derived_injection_composes_the_lean_port_translations_from_the_root_down() {
     assert!(RELAY_DERIVED.contains(
         "fun m => _root_.Relay.Ports.cellToSource (_root_.Relay.Ports.zoneToCell (_root_.Relay.Ports.plantToZone m))"
     ));
