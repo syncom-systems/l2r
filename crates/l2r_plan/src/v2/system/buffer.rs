@@ -29,36 +29,68 @@ struct Buffer {
     peek: bool,
 }
 
-impl Buffer {
-    fn mailbox(leaf: &Leaf) -> Self {
-        let ty = text::type_name(&leaf.id);
-        let constant = format!("{}_CAPACITY", upper(&leaf.id));
-        Self {
-            ty: format!("{ty}Inbox"),
-            element: format!("{ty}Input"),
-            doc: format!(
-                "The bounded FIFO mailbox of `{}`: at most `{constant}` messages, oldest first.",
-                leaf.id
-            ),
-            constant,
-            capacity: leaf.capacity as usize,
-            peek: true,
+/// Whose messages a buffer holds.
+#[derive(Clone, Copy, PartialEq)]
+enum BufferKind {
+    /// The messages waiting for a machine.
+    Mailbox,
+    /// The messages waiting for the environment at a root output port.
+    Outbox,
+}
+
+impl BufferKind {
+    fn type_suffix(self) -> &'static str {
+        match self {
+            BufferKind::Mailbox => "Inbox",
+            BufferKind::Outbox => "Outbox",
         }
     }
 
+    fn element_suffix(self) -> &'static str {
+        match self {
+            BufferKind::Mailbox => "Input",
+            BufferKind::Outbox => "Message",
+        }
+    }
+
+    /// As the buffer's documentation names it, before the holder.
+    fn described(self) -> &'static str {
+        match self {
+            BufferKind::Mailbox => "mailbox of",
+            BufferKind::Outbox => "outbox of port",
+        }
+    }
+
+    /// Mailboxes are peeked by the scheduler; outboxes are only pushed and popped.
+    fn is_peeked(self) -> bool {
+        self == BufferKind::Mailbox
+    }
+}
+
+impl Buffer {
+    fn mailbox(leaf: &Leaf) -> Self {
+        Self::of(BufferKind::Mailbox, &leaf.id, leaf.capacity as usize)
+    }
+
     fn outbox(sink: &Sink) -> Self {
-        let ty = text::type_name(&sink.port);
-        let constant = format!("{}_CAPACITY", upper(&sink.port));
+        Self::of(BufferKind::Outbox, &sink.port, sink.capacity as usize)
+    }
+
+    /// The buffer of `holder`: a machine for a mailbox, a root output port
+    /// for an outbox.
+    fn of(kind: BufferKind, holder: &str, capacity: usize) -> Self {
+        let ty = text::type_name(holder);
+        let constant = format!("{}_CAPACITY", upper(holder));
         Self {
-            ty: format!("{ty}Outbox"),
-            element: format!("{ty}Message"),
+            ty: format!("{ty}{}", kind.type_suffix()),
+            element: format!("{ty}{}", kind.element_suffix()),
             doc: format!(
-                "The bounded FIFO outbox of port `{}`: at most `{constant}` messages, oldest first.",
-                sink.port
+                "The bounded FIFO {} `{holder}`: at most `{constant}` messages, oldest first.",
+                kind.described()
             ),
             constant,
-            capacity: sink.capacity as usize,
-            peek: false,
+            capacity,
+            peek: kind.is_peeked(),
         }
     }
 
