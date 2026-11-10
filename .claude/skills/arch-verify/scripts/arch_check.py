@@ -18,9 +18,9 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from collections import namedtuple
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
+from typing import Iterator, NamedTuple
 
 SOURCE_EXT = {".py", ".rs", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".java", ".kt", ".go", ".cs", ".c", ".cc", ".cpp", ".h", ".hpp", ".rb", ".swift", ".scala", ".php"}
 PACKAGE_MARKERS = ("Cargo.toml", "pyproject.toml", "package.json", "go.mod", "pom.xml", "build.gradle", "BUILD.bazel", "BUILD")
@@ -37,26 +37,14 @@ WIDENED_RS = re.compile(r"\bpub\((?:super|crate)\)")
 ABSTRACT_PY = re.compile(r"^\s*class\s+(\w+)\((?:[^)]*\b(?:ABC|abc\.ABC|Protocol)\b[^)]*)\)")
 TRAIT_RS = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?trait\s+(\w+)")
 MACRO_RS = re.compile(r"^\s*macro_rules!\s*(\w+)")
+TOP_LEVEL_DEF_PY = re.compile(r"^(?:async\s+)?def\s+(\w+)")
+PUBLIC_FN_RS = re.compile(r"pub\s+(?:async\s+)?fn\s+(\w+)\s*(<[^>]*>)?\s*\(([^)]*)\)([^{;]*)")
 DECISION = re.compile(r"\b(?:if|elif|for|while|except|catch|case|and|or)\b|&&|\|\||\?\s")
 COMMENT = re.compile(r"^\s*(?:#|//|\*|/\*)")
 TEST_PATH = re.compile(r"(^|/)(tests?/|test_[^/]*$|[^/]*_test\.\w+$|[^/]*\.test\.\w+$)")
 ASSERTION = re.compile(r"\bassert|expect\(|assert_eq!|assert!")
 LEVELS = ["Local", "Module", "Architectural"]
-
-Change = namedtuple("Change", "status path old_path")  # status: A, M, D or R
-
-
-Report = SimpleNamespace  # level, level_reasons, files, displacement, flags, codescene
-
-
-def new_report() -> Report:
-    return SimpleNamespace(level="Local", level_reasons=[], files=[], displacement=[], flags=[], codescene="ok")
-
-
-def raise_level(report: Report, level: str, reason: str) -> None:
-    if LEVELS.index(level) > LEVELS.index(report.level):
-        report.level = level
-    report.level_reasons.append(f"{level}: {reason}")
+FILE_VERBS = {"A": "added", "D": "deleted", "R": "renamed"}
 
 
 def git(repo: Path, *args: str, check: bool = True) -> str:
@@ -66,155 +54,299 @@ def git(repo: Path, *args: str, check: bool = True) -> str:
     return out.stdout
 
 
-def read_at(repo: Path, ref: str | None, path: str) -> str | None:
-    """File content at a ref, or in the working tree when ref is None."""
-    if ref is None:
-        p = repo / path
-        return p.read_text(errors="ignore") if p.is_file() else None
-    out = subprocess.run(["git", "-C", str(repo), "show", f"{ref}:{path}"], capture_output=True, text=True)
-    return out.stdout if out.returncode == 0 else None
+def is_source(path: str) -> bool:
+    return Path(path).suffix in SOURCE_EXT
 
 
-def collect_changes(repo: Path, base: str, head: str | None) -> list[Change]:
-    rng = [base] if head is None else [base, head]
-    changes = []
-    for line in git(repo, "diff", "--name-status", "-M", *rng).splitlines():
+# --- The comparison: a base ref against a head ref or the working tree ---------------------------
+
+
+class Change(NamedTuple):
+    """One changed file. status: A, M, D or R; old_path differs from path only for a rename."""
+
+    status: str
+    path: str
+    old_path: str
+
+    @classmethod
+    def from_name_status(cls, line: str) -> Change:
         parts = line.split("\t")
-        changes.append(Change("R", parts[2], parts[1]) if parts[0].startswith("R") else Change(parts[0][0], parts[1], parts[1]))
-    if head is None:
-        changes += [Change("A", p, p) for p in git(repo, "ls-files", "--others", "--exclude-standard").splitlines()]
-    return changes
+        if parts[0].startswith("R"):
+            return cls("R", parts[2], parts[1])
+        return cls(parts[0][0], parts[1], parts[1])
+
+    @property
+    def is_source(self) -> bool:
+        return is_source(self.path)
 
 
-def diff_lines(repo: Path, base: str, head: str | None, changes: list[Change]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    """Added and removed lines per path (untracked files count as fully added)."""
-    rng = [base] if head is None else [base, head]
-    added: dict[str, list[str]] = {}
-    removed: dict[str, list[str]] = {}
-    old = new = None
-    for line in git(repo, "diff", "-U0", "-M", *rng).splitlines():
-        if line.startswith("--- "):
-            old = line[6:] if line.startswith("--- a/") else None
-        elif line.startswith("+++ "):
-            new = line[6:] if line.startswith("+++ b/") else None
-        elif new and line.startswith("+"):
-            added.setdefault(new, []).append(line[1:])
-        elif old and line.startswith("-"):
-            removed.setdefault(old, []).append(line[1:])
-    if head is None:
-        for c in changes:
-            text = read_at(repo, None, c.path) if c.status == "A" and c.path not in added else None
-            if text is not None:
-                added[c.path] = text.splitlines()
-    return added, removed
+class LineDiff:
+    """Added and removed lines per path."""
+
+    def __init__(self) -> None:
+        self.added: dict[str, list[str]] = {}
+        self.removed: dict[str, list[str]] = {}
+
+    @classmethod
+    def from_unified(cls, text: str) -> LineDiff:
+        diff = cls()
+        old = new = None
+        for line in text.splitlines():
+            if line.startswith("--- "):
+                old = cls._file_named(line, "--- a/")
+            elif line.startswith("+++ "):
+                new = cls._file_named(line, "+++ b/")
+            elif line.startswith("+"):
+                cls._keep(diff.added, new, line)
+            elif line.startswith("-"):
+                cls._keep(diff.removed, old, line)
+        return diff
+
+    @staticmethod
+    def _file_named(header: str, side: str) -> str | None:
+        """The path in a `--- a/<path>` or `+++ b/<path>` header; None for /dev/null."""
+        return header[6:] if header.startswith(side) else None
+
+    @staticmethod
+    def _keep(lines: dict[str, list[str]], path: str | None, line: str) -> None:
+        if path:
+            lines.setdefault(path, []).append(line[1:])
+
+    def add_whole_file(self, path: str, text: str | None) -> None:
+        if text is not None:
+            self.added[path] = text.splitlines()
+
+    def added_source_lines(self) -> Iterator[tuple[str, str]]:
+        for path, lines in self.added.items():
+            if is_source(path):
+                yield from ((path, line) for line in lines)
 
 
-# --- CodeScene MCP client (stdio) --------------------------------------------------------------
+@dataclass(frozen=True)
+class Comparison:
+    """The two states being compared in one repository; head None means the working tree."""
 
-_ids = itertools.count(1)
+    repo: Path
+    base: str
+    head: str | None
 
+    def git(self, *args: str, check: bool = True) -> str:
+        return git(self.repo, *args, check=check)
 
-def mcp_start() -> subprocess.Popen:
-    cmd = shlex.split(os.environ.get("ARCH_CS_MCP_CMD", "npx -y @codescene/codehealth-mcp"))
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    _mcp_request(proc, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "arch-check", "version": "1"}})
-    _mcp_send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
-    return proc
+    @property
+    def refs(self) -> list[str]:
+        return [self.base] if self.head is None else [self.base, self.head]
 
+    def working_tree_text(self, path: str) -> str | None:
+        p = self.repo / path
+        return p.read_text(errors="ignore") if p.is_file() else None
 
-def mcp_review(proc: subprocess.Popen, file_path: Path) -> dict:
-    """Parsed code_health_review JSON (keys: score, review, path); score is None for unscorable code."""
-    result = _mcp_request(proc, "tools/call", {"name": "code_health_review", "arguments": {"file_path": str(file_path)}})
-    text = "\n".join(c.get("text", "") for c in result.get("content", []))
-    for line in reversed(text.splitlines()):
-        if line.startswith("{"):
-            return json.loads(line)
-    raise RuntimeError(text.strip()[:300] or "empty review")
+    def _text_at(self, ref: str | None, path: str) -> str | None:
+        if ref is None:
+            return self.working_tree_text(path)
+        out = subprocess.run(["git", "-C", str(self.repo), "show", f"{ref}:{path}"], capture_output=True, text=True)
+        return out.stdout if out.returncode == 0 else None
 
+    def before(self, change: Change) -> str | None:
+        """The file's content on the base side; None when the change added it."""
+        return None if change.status == "A" else self._text_at(self.base, change.old_path)
 
-def _mcp_send(proc: subprocess.Popen, msg: dict) -> None:
-    if proc.stdin is None:
-        raise RuntimeError("CodeScene MCP server has no stdin")
-    proc.stdin.write(json.dumps(msg) + "\n")
-    proc.stdin.flush()
+    def after(self, change: Change) -> str | None:
+        """The file's content on the head side; None when the change deleted it."""
+        return None if change.status == "D" else self._text_at(self.head, change.path)
 
+    def changes(self) -> list[Change]:
+        """Changed files; against the working tree, untracked files count as added."""
+        changes = [Change.from_name_status(line) for line in self.git("diff", "--name-status", "-M", *self.refs).splitlines()]
+        if self.head is None:
+            changes += [Change("A", p, p) for p in self.git("ls-files", "--others", "--exclude-standard").splitlines()]
+        return changes
 
-def _mcp_request(proc: subprocess.Popen, method: str, params: dict) -> dict:
-    rid = next(_ids)
-    _mcp_send(proc, {"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
-    if proc.stdout is None:
-        raise RuntimeError("CodeScene MCP server has no stdout")
-    for line in proc.stdout:
-        try:
-            msg = json.loads(line)
-        except ValueError:
-            continue
-        if msg.get("id") == rid:
-            if "error" in msg:
-                raise RuntimeError(msg["error"])
-            return msg["result"]
-    raise RuntimeError("CodeScene MCP server closed the connection")
+    def line_diff(self, changes: list[Change]) -> LineDiff:
+        """Added and removed lines per path (untracked files count as fully added)."""
+        diff = LineDiff.from_unified(self.git("diff", "-U0", "-M", *self.refs))
+        if self.head is not None:
+            return diff
+        for change in changes:
+            if change.status == "A" and change.path not in diff.added:
+                diff.add_whole_file(change.path, self.working_tree_text(change.path))
+        return diff
 
 
 # --- Code Health -------------------------------------------------------------------------------
 
 
-def findings(review: dict | None) -> dict[tuple[str, str], str]:
-    found: dict[tuple[str, str], str] = {}
-    for item in (review or {}).get("review", []):
-        for fn in item.get("functions") or [{"title": "<file>", "details": ""}]:
-            found[(item["category"], fn.get("title", "<file>"))] = fn.get("details", "")
-    return found
+@dataclass
+class Review:
+    """One side's code_health_review. Not reviewed: that side has no file. Score None: unscorable code."""
+
+    reviewed: bool = False
+    score: float | None = None
+    findings: dict[tuple[str, str], str] = field(default_factory=dict)
+
+    @classmethod
+    def parse(cls, payload: dict) -> Review:
+        found: dict[tuple[str, str], str] = {}
+        for item in payload.get("review", []):
+            for fn in item.get("functions") or [{"title": "<file>", "details": ""}]:
+                found[(item["category"], fn.get("title", "<file>"))] = fn.get("details", "")
+        return cls(True, payload.get("score"), found)
+
+    @property
+    def unscorable(self) -> bool:
+        return self.reviewed and self.score is None
 
 
-def score_files(repo: Path, base: str, head: str | None, changes: list[Change], report: Report) -> None:
-    targets = [c for c in changes if Path(c.path).suffix in SOURCE_EXT]
+@dataclass
+class FileHealth:
+    """Code Health of one changed file, before against after."""
+
+    path: str
+    status: str
+    before: float | None
+    after: float | None
+    resolved: list[str]
+    new: list[str]
+    persisting: list[str]
+
+    @classmethod
+    def compare(cls, change: Change, before: Review, after: Review) -> FileHealth:
+        fb, fa = before.findings, after.findings
+        return cls(
+            path=change.path,
+            status=change.status,
+            before=before.score,
+            after=after.score,
+            resolved=[f"{k[0]} {k[1]} ({fb[k]})" for k in sorted(fb) if k not in fa],
+            new=[f"{k[0]} {k[1]} ({fa[k]})" for k in sorted(fa) if k not in fb],
+            persisting=[f"{k[0]} {k[1]} ({fb[k]} -> {fa[k]})" for k in sorted(fb) if k in fa],
+        )
+
+    @property
+    def score_dropped(self) -> bool:
+        if None in (self.before, self.after):
+            return False
+        return self.after < self.before
+
+    def displacement(self) -> list[str]:
+        notes = [f"{self.path}: new finding {item}" for item in self.new]
+        if self.score_dropped:
+            notes.append(f"{self.path}: score dropped {self.before} -> {self.after}")
+        return notes
+
+    def render(self) -> list[str]:
+        out = [f"{self.path} [{self.status}]: {self.before} -> {self.after}"]
+        for key, items in (("resolved", self.resolved), ("new", self.new), ("persisting", self.persisting)):
+            out += [f"  {key}: {item}" for item in items]
+        return out
+
+
+class CodeSceneClient:
+    """The CodeScene MCP server over stdio: connect() launches and initialises it, close() stops it."""
+
+    def __init__(self, proc: subprocess.Popen) -> None:
+        self._proc = proc
+        self._ids = itertools.count(1)
+
+    @classmethod
+    def connect(cls) -> CodeSceneClient:
+        cmd = shlex.split(os.environ.get("ARCH_CS_MCP_CMD", "npx -y @codescene/codehealth-mcp"))
+        client = cls(subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True))
+        try:
+            client._request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "arch-check", "version": "1"}})
+            client._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        except RuntimeError:
+            client.close()
+            raise
+        return client
+
+    def close(self) -> None:
+        self._proc.terminate()
+
+    def __enter__(self) -> CodeSceneClient:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
+    def review(self, file_path: Path) -> dict:
+        """Parsed code_health_review JSON (keys: score, review, path); score is None for unscorable code."""
+        result = self._request("tools/call", {"name": "code_health_review", "arguments": {"file_path": str(file_path)}})
+        text = "\n".join(c.get("text", "") for c in result.get("content", []))
+        for line in reversed(text.splitlines()):
+            if line.startswith("{"):
+                return json.loads(line)
+        raise RuntimeError(text.strip()[:300] or "empty review")
+
+    def _send(self, msg: dict) -> None:
+        if self._proc.stdin is None:
+            raise RuntimeError("CodeScene MCP server has no stdin")
+        self._proc.stdin.write(json.dumps(msg) + "\n")
+        self._proc.stdin.flush()
+
+    def _request(self, method: str, params: dict) -> dict:
+        rid = next(self._ids)
+        self._send({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
+        for msg in self._messages():
+            if msg.get("id") == rid:
+                return self._result(msg)
+        raise RuntimeError("CodeScene MCP server closed the connection")
+
+    def _messages(self) -> Iterator[dict]:
+        if self._proc.stdout is None:
+            raise RuntimeError("CodeScene MCP server has no stdout")
+        for line in self._proc.stdout:
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            yield msg
+
+    @staticmethod
+    def _result(msg: dict) -> dict:
+        if "error" in msg:
+            raise RuntimeError(msg["error"])
+        return msg["result"]
+
+
+class SnapshotReviewer:
+    """Reviews file contents from either side of the comparison as copies in a scratch git repository."""
+
+    def __init__(self, client: CodeSceneClient, scratch: Path) -> None:
+        git(scratch, "init", "-q")  # the CodeScene CLI only scores files inside a git repository
+        self._client = client
+        self._scratch = scratch
+
+    def record_health(self, comparison: Comparison, targets: list[Change], report: Report) -> None:
+        """Review each target on both sides of the comparison and record its Code Health in the report."""
+        for i, change in enumerate(targets):
+            before = self.review(comparison.before(change), f"b{i}", change.old_path)
+            after = self.review(comparison.after(change), f"a{i}", change.path)
+            report.record_health(change, before, after)
+
+    def review(self, text: str | None, folder: str, path: str) -> Review:
+        if text is None:
+            return Review()
+        copy = self._scratch / folder / Path(path).name
+        copy.parent.mkdir(parents=True)
+        copy.write_text(text)
+        return Review.parse(self._client.review(copy))
+
+
+def score_files(comparison: Comparison, changes: list[Change], report: Report) -> None:
+    targets = [c for c in changes if c.is_source]
     if not targets:
         return
     try:
-        cs = mcp_start()
+        client = CodeSceneClient.connect()
     except (OSError, RuntimeError) as exc:
         report.codescene = f"unavailable: {exc}"
         return
-    with tempfile.TemporaryDirectory(prefix="arch-check-") as tmp:
-        git(Path(tmp), "init", "-q")  # the CodeScene CLI only scores files inside a git repository
+    with tempfile.TemporaryDirectory(prefix="arch-check-") as scratch, client:
         try:
-            for i, c in enumerate(targets):
-                before = _review(cs, read_at(repo, base, c.old_path) if c.status != "A" else None, Path(tmp) / f"b{i}", c.old_path)
-                after = _review(cs, read_at(repo, head, c.path) if c.status != "D" else None, Path(tmp) / f"a{i}", c.path)
-                _record(report, c, before, after)
+            SnapshotReviewer(client, Path(scratch)).record_health(comparison, targets, report)
         except RuntimeError as exc:
             report.codescene = f"error: {exc}"
-        finally:
-            cs.terminate()
-
-
-def _review(cs: subprocess.Popen, text: str | None, folder: Path, path: str) -> dict | None:
-    if text is None:
-        return None
-    folder.mkdir(parents=True)
-    copy = folder / Path(path).name
-    copy.write_text(text)
-    return mcp_review(cs, copy)
-
-
-def _record(report: Report, c: Change, before: dict | None, after: dict | None) -> None:
-    fb, fa = findings(before), findings(after)
-    entry = {
-        "path": c.path,
-        "status": c.status,
-        "before": (before or {}).get("score"),
-        "after": (after or {}).get("score"),
-        "resolved": [f"{k[0]} {k[1]} ({fb[k]})" for k in sorted(fb) if k not in fa],
-        "new": [f"{k[0]} {k[1]} ({fa[k]})" for k in sorted(fa) if k not in fb],
-        "persisting": [f"{k[0]} {k[1]} ({fb[k]} -> {fa[k]})" for k in sorted(fb) if k in fa],
-    }
-    report.files.append(entry)
-    report.displacement += [f"{c.path}: new finding {item}" for item in entry["new"]]
-    if entry["before"] is not None and entry["after"] is not None and entry["after"] < entry["before"]:
-        report.displacement.append(f"{c.path}: score dropped {entry['before']} -> {entry['after']}")
-    if after is not None and entry["after"] is None and entry["before"] is not None:
-        report.flags.append(f"{c.path}: no longer scorable by CodeScene (code hidden behind macros, re-exports or generated shims?)")
 
 
 def decision_points(text: str | None) -> int:
@@ -224,43 +356,66 @@ def decision_points(text: str | None) -> int:
     return sum(len(DECISION.findall(line)) for line in text.splitlines() if not COMMENT.match(line) and not line.strip().startswith(('"', "'")))
 
 
-def displaced_complexity(repo: Path, base: str, head: str | None, changes: list[Change], report: Report) -> None:
-    """Flag decision points that left one changed file and reappeared in another (callers, new modules, tests)."""
+def decision_point_deltas(comparison: Comparison, changes: list[Change]) -> dict[str, int]:
+    """Per changed source file, how many decision points it gained or lost (unchanged counts left out)."""
     deltas = {}
-    for c in changes:
-        if Path(c.path).suffix in SOURCE_EXT:
-            before = decision_points(read_at(repo, base, c.old_path) if c.status != "A" else None)
-            after = decision_points(read_at(repo, head, c.path) if c.status != "D" else None)
-            if after != before:
-                deltas[c.path] = after - before
-    grew = {p: d for p, d in deltas.items() if d > 0}
-    shrank = {p: d for p, d in deltas.items() if d < 0}
+    for change in changes:
+        if not change.is_source:
+            continue
+        delta = decision_points(comparison.after(change)) - decision_points(comparison.before(change))
+        if delta:
+            deltas[change.path] = delta
+    return deltas
+
+
+def displaced_complexity(comparison: Comparison, changes: list[Change], report: Report) -> None:
+    """Flag decision points that left one changed file and reappeared in another (callers, new modules, tests)."""
+    deltas = decision_point_deltas(comparison, changes)
+    grew = any(d > 0 for d in deltas.values())
+    shrank = any(d < 0 for d in deltas.values())
     if grew and shrank:
         moved = ", ".join(f"{p} {d:+d}" for p, d in sorted(deltas.items()))
         report.displacement.append(f"decision points moved between files ({moved}): did complexity leave the target only to land elsewhere?")
 
 
-# --- Gaming flags ------------------------------------------------------------------------------
+# --- Gaming flags: one detector per pattern ------------------------------------------------------
 
 
-def gaming_flags(repo: Path, base: str, changes: list[Change], added: dict[str, list[str]], removed: dict[str, list[str]], report: Report) -> None:
-    for c in changes:
-        if MEASUREMENT_PATH.search(c.path):
-            report.flags.append(f"{c.path}: measurement or debt-baseline file changed (needs user approval)")
-        before = read_at(repo, base, c.old_path) if c.status in "MDR" and Path(c.path).suffix in SOURCE_EXT else None
-        if before and GENERATED_MARK.search(before[:2000]):
-            report.flags.append(f"{c.path}: generated file edited (fix the generator, or prove equivalence)")
-    for path, lines in added.items():
-        if Path(path).suffix in SOURCE_EXT:
-            for line in lines:
-                report.flags += _line_flags(repo, path, line)
-    for path, lines in removed.items():
-        report.flags += _removed_flags(path, lines, added.get(path, []))
+def gaming_flags(comparison: Comparison, changes: list[Change], diff: LineDiff, report: Report) -> None:
+    for change in changes:
+        report.flags += changed_measurement(change) + edited_generated_file(comparison, change)
+    for path, line in diff.added_source_lines():
+        report.flags += placeholder_names(path, line) + bag_types(path, line) + interface_dodges(path, line) + hypothetical_seam(comparison, path, line)
+    for path, removed in diff.removed.items():
+        added = diff.added.get(path, [])
+        report.flags += weakened_test(path, removed, added) + exposed_private_functions(path, removed, added)
 
 
-def _line_flags(repo: Path, path: str, line: str) -> list[str]:
-    flags = [f"{path}: placeholder-named function `{n}` (does it name a domain step?)" for n in DECL.findall(line) if PLACEHOLDER.search(n)]
-    flags += [f"{path}: bag-shaped type `{n}` (a concept with an invariant, or grouped arguments?)" for n in BAG_TYPE.findall(line)]
+def changed_measurement(change: Change) -> list[str]:
+    if not MEASUREMENT_PATH.search(change.path):
+        return []
+    return [f"{change.path}: measurement or debt-baseline file changed (needs user approval)"]
+
+
+def edited_generated_file(comparison: Comparison, change: Change) -> list[str]:
+    if change.status not in "MDR" or not change.is_source:
+        return []
+    before = comparison.before(change)
+    if before and GENERATED_MARK.search(before[:2000]):
+        return [f"{change.path}: generated file edited (fix the generator, or prove equivalence)"]
+    return []
+
+
+def placeholder_names(path: str, line: str) -> list[str]:
+    return [f"{path}: placeholder-named function `{n}` (does it name a domain step?)" for n in DECL.findall(line) if PLACEHOLDER.search(n)]
+
+
+def bag_types(path: str, line: str) -> list[str]:
+    return [f"{path}: bag-shaped type `{n}` (a concept with an invariant, or grouped arguments?)" for n in BAG_TYPE.findall(line)]
+
+
+def interface_dodges(path: str, line: str) -> list[str]:
+    """Added-line patterns that hide an interface, inject behaviour, silence or evade the analyser."""
     checks = (
         (KWARGS, "new **kwargs parameter (hides the interface)"),
         (CALLABLE_FIELD, "callable-carrying field or lambda argument (behaviour injected instead of a named concept?)"),
@@ -268,62 +423,78 @@ def _line_flags(repo: Path, path: str, line: str) -> list[str]:
         (WIDENED_RS, "visibility widened to pub(super)/pub(crate) (split forced exposure?)"),
         (MACRO_RS, "new macro_rules! (code the analyser cannot score?)"),
     )
-    flags += [f"{path}: {msg}" for rx, msg in checks if rx.search(line)]
-    seam = _single_impl(repo, line)
-    return flags + ([f"{path}: {seam}"] if seam else [])
+    return [f"{path}: {msg}" for rx, msg in checks if rx.search(line)]
 
 
-def _removed_flags(path: str, removed: list[str], added: list[str]) -> list[str]:
-    flags = []
-    if TEST_PATH.search(path):
-        lost = sum(1 for line in removed if ASSERTION.search(line)) - sum(1 for line in added if ASSERTION.search(line))
-        if lost > 0:
-            flags.append(f"{path}: {lost} fewer assertion lines (behaviour change or weakened test?)")
-    if path.endswith(".py"):  # module-level functions only: a helper becoming a method of a new concept is not exposure
-        top = re.compile(r"^(?:async\s+)?def\s+(\w+)")
-        gone = {m.group(1) for line in removed if (m := top.match(line)) and m.group(1).startswith("_") and not m.group(1).startswith("__")}
-        now_public = {m.group(1) for line in added if (m := top.match(line))}
-        flags += [f"{path}: `{n}` made public as `{n.lstrip('_')}` (split forced exposure?)" for n in sorted(gone) if n.lstrip("_") in now_public]
-    return flags
+class AbstractType(NamedTuple):
+    """An abstract type declaration (Python ABC/Protocol or Rust trait) and what an implementation of it looks like."""
 
+    name: str
+    implementation: re.Pattern
 
-def _single_impl(repo: Path, line: str) -> str | None:
-    m = ABSTRACT_PY.match(line)
-    if m:
-        pattern = re.compile(rf"class\s+\w+\([^)]*\b{m.group(1)}\b")
-    else:
+    @classmethod
+    def declared_on(cls, line: str) -> AbstractType | None:
+        m = ABSTRACT_PY.match(line)
+        if m:
+            return cls(m.group(1), re.compile(rf"class\s+\w+\([^)]*\b{m.group(1)}\b"))
         m = TRAIT_RS.match(line)
-        if not m:
-            return None
-        pattern = re.compile(rf"impl(<[^>]*>)?\s+{m.group(1)}\s+for\b")
-    candidates = git(repo, "-c", "submodule.recurse=false", "grep", "-l", "-F", "--untracked", m.group(1), check=False).splitlines()
-    count = sum(len(pattern.findall(read_at(repo, None, p) or "")) for p in candidates)
-    if count > 1:
+        if m:
+            return cls(m.group(1), re.compile(rf"impl(<[^>]*>)?\s+{m.group(1)}\s+for\b"))
         return None
-    return f"new abstract type `{m.group(1)}` with {count} implementation(s) (hypothetical seam unless repo standards require it)"
+
+    def implementations(self, comparison: Comparison) -> int:
+        candidates = comparison.git("-c", "submodule.recurse=false", "grep", "-l", "-F", "--untracked", self.name, check=False).splitlines()
+        return sum(len(self.implementation.findall(comparison.working_tree_text(p) or "")) for p in candidates)
+
+
+def hypothetical_seam(comparison: Comparison, path: str, line: str) -> list[str]:
+    abstract = AbstractType.declared_on(line)
+    if abstract is None:
+        return []
+    count = abstract.implementations(comparison)
+    if count > 1:
+        return []
+    return [f"{path}: new abstract type `{abstract.name}` with {count} implementation(s) (hypothetical seam unless repo standards require it)"]
+
+
+def weakened_test(path: str, removed: list[str], added: list[str]) -> list[str]:
+    if not TEST_PATH.search(path):
+        return []
+    lost = sum(1 for line in removed if ASSERTION.search(line)) - sum(1 for line in added if ASSERTION.search(line))
+    if lost > 0:
+        return [f"{path}: {lost} fewer assertion lines (behaviour change or weakened test?)"]
+    return []
+
+
+def exposed_private_functions(path: str, removed: list[str], added: list[str]) -> list[str]:
+    """Module-level functions only: a helper becoming a method of a new concept is not exposure."""
+    if not path.endswith(".py"):
+        return []
+    gone = {n for n in top_level_functions(removed) if n.startswith("_") and not n.startswith("__")}
+    now_public = top_level_functions(added)
+    return [f"{path}: `{n}` made public as `{n.lstrip('_')}` (split forced exposure?)" for n in sorted(gone) if n.lstrip("_") in now_public]
+
+
+def top_level_functions(lines: list[str]) -> set[str]:
+    return {m.group(1) for m in map(TOP_LEVEL_DEF_PY.match, lines) if m}
 
 
 # --- Impact floor ------------------------------------------------------------------------------
 
 
-def impact_floor(repo: Path, base: str, head: str | None, changes: list[Change], report: Report) -> None:
+def impact_floor(comparison: Comparison, changes: list[Change], report: Report) -> None:
     packages = set()
-    verbs = {"A": "added", "D": "deleted", "R": "renamed"}
-    for c in changes:
-        if CONTRACT_PATH.search(c.path):
-            raise_level(report,"Architectural", f"contract file changed: {c.path}")
-        if Path(c.path).suffix not in SOURCE_EXT:
-            continue
-        packages.add(_package_of(repo, c.path))
-        if c.status in verbs:
-            raise_level(report,"Module", f"source file {verbs[c.status]}: {c.path}")
-        elif not TEST_PATH.search(c.path):
-            _signature_level(repo, base, head, c.path, report)
+    for change in changes:
+        if CONTRACT_PATH.search(change.path):
+            report.raise_level("Architectural", f"contract file changed: {change.path}")
+        if change.is_source:
+            packages.add(package_root(comparison.repo, change.path))
+            _source_change_level(comparison, change, report)
     if len(packages) > 1:
-        raise_level(report,"Architectural", f"changes span packages: {', '.join(sorted(packages))}")
+        report.raise_level("Architectural", f"changes span packages: {', '.join(sorted(packages))}")
 
 
-def _package_of(repo: Path, path: str) -> str:
+def package_root(repo: Path, path: str) -> str:
     parent = Path(path).parent
     while str(parent) not in ("", "."):
         if any((repo / parent / m).exists() for m in PACKAGE_MARKERS):
@@ -333,61 +504,105 @@ def _package_of(repo: Path, path: str) -> str:
     return parts[0] if len(parts) > 1 else "."
 
 
-def _signature_level(repo: Path, base: str, head: str | None, path: str, report: Report) -> None:
-    before, after = read_at(repo, base, path), read_at(repo, head, path)
+def _source_change_level(comparison: Comparison, change: Change, report: Report) -> None:
+    if change.status in FILE_VERBS:
+        report.raise_level("Module", f"source file {FILE_VERBS[change.status]}: {change.path}")
+    elif not TEST_PATH.search(change.path):
+        _signature_level(comparison, change, report)
+
+
+def _signature_level(comparison: Comparison, change: Change, report: Report) -> None:
+    before, after = comparison.before(change), comparison.after(change)
     if before is None or after is None:
         return
-    if path.endswith(".py"):
-        sb, sa, abstract = _py_public(before), _py_public(after), "ABC" in before or "abstractmethod" in before
-    elif path.endswith(".rs"):
-        sb, sa, abstract = _rs_public(before), _rs_public(after), "trait " in before
-    else:
+    old = PublicInterface.of(change.path, before)
+    if old is None:
         return
-    changed = sorted(k for k in sb if sa.get(k) != sb[k])
+    changed = old.changed_or_removed_in(PublicInterface.of(change.path, after))
     if changed:
-        level = "Architectural" if abstract else "Module"
-        raise_level(report,level, f"{path}: public signature changed or removed: {', '.join(changed[:5])}")
+        level = "Architectural" if old.abstract else "Module"
+        report.raise_level(level, f"{change.path}: public signature changed or removed: {', '.join(changed[:5])}")
 
 
-def _py_public(text: str) -> dict[str, str]:
+class PublicInterface(NamedTuple):
+    """Public signatures of a Python or Rust source text, and whether the text defines an abstract interface."""
+
+    signatures: dict[str, str]
+    abstract: bool
+
+    @classmethod
+    def of(cls, path: str, text: str) -> PublicInterface | None:
+        if path.endswith(".py"):
+            return cls(python_signatures(text), "ABC" in text or "abstractmethod" in text)
+        if path.endswith(".rs"):
+            return cls(rust_signatures(text), "trait " in text)
+        return None
+
+    def changed_or_removed_in(self, later: PublicInterface) -> list[str]:
+        return sorted(k for k, sig in self.signatures.items() if later.signatures.get(k) != sig)
+
+
+def python_signatures(text: str) -> dict[str, str]:
     try:
         tree = ast.parse(text)
     except SyntaxError:
         return {}
-    sigs: dict[str, str] = {}
-
-    def visit(nodes: list[ast.stmt], prefix: str) -> None:
-        for n in nodes:
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and not n.name.startswith("_"):
-                sigs[prefix + n.name] = ast.unparse(n.args)
-            elif isinstance(n, ast.ClassDef) and not n.name.startswith("_"):
-                sigs[prefix + n.name] = ",".join(ast.unparse(b) for b in n.bases)
-                visit(n.body, f"{prefix}{n.name}.")
-
-    visit(tree.body, "")
-    return sigs
+    return dict(public_definitions(tree.body, ""))
 
 
-def _rs_public(text: str) -> dict[str, str]:
-    pattern = r"pub\s+(?:async\s+)?fn\s+(\w+)\s*(<[^>]*>)?\s*\(([^)]*)\)([^{;]*)"
-    return {m.group(1): " ".join((m.group(3) + m.group(4)).split()) for m in re.finditer(pattern, text)}
+def public_definitions(nodes: list[ast.stmt], prefix: str) -> Iterator[tuple[str, str]]:
+    """Public functions (with their arguments) and classes (with their bases), classes searched recursively."""
+    for n in nodes:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and not n.name.startswith("_"):
+            yield prefix + n.name, ast.unparse(n.args)
+        elif isinstance(n, ast.ClassDef) and not n.name.startswith("_"):
+            yield prefix + n.name, ",".join(ast.unparse(b) for b in n.bases)
+            yield from public_definitions(n.body, f"{prefix}{n.name}.")
 
 
-# --- Output ------------------------------------------------------------------------------------
+def rust_signatures(text: str) -> dict[str, str]:
+    return {m.group(1): " ".join((m.group(3) + m.group(4)).split()) for m in PUBLIC_FN_RS.finditer(text)}
 
 
-def render(report: Report) -> str:
-    out = [f"impact floor: {report.level}"]
-    out += [f"  - {r}" for r in report.level_reasons] or ["  - no structural signals"]
-    out.append(f"codescene: {report.codescene}")
-    for f in report.files:
-        out.append(f"{f['path']} [{f['status']}]: {f['before']} -> {f['after']}")
-        out += [f"  {key}: {item}" for key in ("resolved", "new", "persisting") for item in f[key]]
-    out.append("displacement:" if report.displacement else "displacement: none")
-    out += [f"  - {d}" for d in report.displacement]
-    out.append("flags (each needs confirmed/dismissed):" if report.flags else "flags: none")
-    out += [f"  - {fl}" for fl in dict.fromkeys(report.flags)]
-    return "\n".join(out)
+# --- Report ------------------------------------------------------------------------------------
+
+
+@dataclass
+class Report:
+    level: str = "Local"
+    level_reasons: list[str] = field(default_factory=list)
+    files: list[FileHealth] = field(default_factory=list)
+    displacement: list[str] = field(default_factory=list)
+    flags: list[str] = field(default_factory=list)
+    codescene: str = "ok"
+
+    def raise_level(self, level: str, reason: str) -> None:
+        if LEVELS.index(level) > LEVELS.index(self.level):
+            self.level = level
+        self.level_reasons.append(f"{level}: {reason}")
+
+    def record_health(self, change: Change, before: Review, after: Review) -> None:
+        health = FileHealth.compare(change, before, after)
+        self.files.append(health)
+        self.displacement += health.displacement()
+        if after.unscorable and before.score is not None:
+            self.flags.append(f"{change.path}: no longer scorable by CodeScene (code hidden behind macros, re-exports or generated shims?)")
+
+    def render(self) -> str:
+        out = [f"impact floor: {self.level}"]
+        out += [f"  - {r}" for r in self.level_reasons] or ["  - no structural signals"]
+        out.append(f"codescene: {self.codescene}")
+        for health in self.files:
+            out += health.render()
+        out += listing("displacement", self.displacement)
+        out += listing("flags", list(dict.fromkeys(self.flags)), note=" (each needs confirmed/dismissed)")
+        return "\n".join(out)
+
+
+def listing(name: str, items: list[str], note: str = "") -> list[str]:
+    if not items:
+        return [f"{name}: none"]
+    return [f"{name}{note}:"] + [f"  - {item}" for item in items]
 
 
 def main() -> int:
@@ -399,17 +614,17 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args()
     repo = Path(git(Path(args.repo), "rev-parse", "--show-toplevel").strip())
-    changes = collect_changes(repo, args.base, args.head)
-    report = new_report()
-    impact_floor(repo, args.base, args.head, changes, report)
-    added, removed = diff_lines(repo, args.base, args.head, changes)
-    gaming_flags(repo, args.base, changes, added, removed, report)
-    displaced_complexity(repo, args.base, args.head, changes, report)
+    comparison = Comparison(repo, args.base, args.head)
+    changes = comparison.changes()
+    report = Report()
+    impact_floor(comparison, changes, report)
+    gaming_flags(comparison, changes, comparison.line_diff(changes), report)
+    displaced_complexity(comparison, changes, report)
     if args.no_codescene:
         report.codescene = "skipped (--no-codescene)"
     else:
-        score_files(repo, args.base, args.head, changes, report)
-    print(json.dumps(vars(report), indent=2) if args.json else render(report))
+        score_files(comparison, changes, report)
+    print(json.dumps(asdict(report), indent=2) if args.json else report.render())
     return 0
 
 
