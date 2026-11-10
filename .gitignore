@@ -7,5 +7,7 @@
 .idea/
 .vscode/
 
-# Local agent state (worktrees, caches): never part of the repository.
-.claude/
+# Local agent state (worktrees, caches, settings) is never part of the
+# repository; the shared agent skills are.
+.claude/*
+!.claude/skills/
