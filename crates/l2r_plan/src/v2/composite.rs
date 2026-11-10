@@ -23,6 +23,31 @@ pub fn artifacts(generator: &Gen<'_>, component: &Component) -> Result<Vec<Artif
     Ok(artifacts)
 }
 
+/// The two files of a composite's module.
+#[derive(Clone, Copy)]
+enum ModuleFile {
+    /// `mod.rs`, generated.
+    Contract,
+    /// `routes.rs`, written by the implementer.
+    Routes,
+}
+
+impl ModuleFile {
+    fn name(self) -> &'static str {
+        match self {
+            ModuleFile::Contract => "mod.rs",
+            ModuleFile::Routes => "routes.rs",
+        }
+    }
+
+    fn ownership(self) -> Ownership {
+        match self {
+            ModuleFile::Contract => Ownership::Generated,
+            ModuleFile::Routes => Ownership::Implementation,
+        }
+    }
+}
+
 /// A composite as its profile sees it: the component with its children, its
 /// ports, and the translations it owns.
 struct Composite<'a> {
@@ -99,39 +124,34 @@ impl<'a> Composite<'a> {
         sources
     }
 
-    /// `mod.rs`: the generated contract.
+    /// `mod.rs`: the contract, generated.
     fn contract_artifact(&self) -> Result<Artifact, PlanError> {
-        let purpose = if self.is_root() {
-            "Root composite: boundary, bounded mailboxes and outboxes, and the scheduler"
-        } else {
-            "Composite contract: children and typed boundary"
-        };
-        self.artifact("mod.rs", Ownership::Generated, purpose, self.contract()?)
+        self.artifact(ModuleFile::Contract, self.contract()?)
     }
 
     /// `routes.rs`: the translations, for the implementer.
     fn routes_artifact(&self) -> Result<Artifact, PlanError> {
-        self.artifact(
-            "routes.rs",
-            Ownership::Implementation,
-            "Message and port translations, owned by the implementer",
-            self.routes()?,
-        )
+        self.artifact(ModuleFile::Routes, self.routes()?)
+    }
+
+    /// What a file of this composite's module is for.
+    fn purpose(&self, file: ModuleFile) -> &'static str {
+        match file {
+            ModuleFile::Contract if self.is_root() => {
+                "Root composite: boundary, bounded mailboxes and outboxes, and the scheduler"
+            }
+            ModuleFile::Contract => "Composite contract: children and typed boundary",
+            ModuleFile::Routes => "Message and port translations, owned by the implementer",
+        }
     }
 
     /// A file of the composite's module, with what it was generated from.
-    fn artifact(
-        &self,
-        file: &str,
-        ownership: Ownership,
-        purpose: &str,
-        content: String,
-    ) -> Result<Artifact, PlanError> {
+    fn artifact(&self, file: ModuleFile, content: String) -> Result<Artifact, PlanError> {
         Ok(Artifact {
-            path: planned_path(format!("{}/{file}", self.dir()))?,
-            ownership,
+            path: planned_path(format!("{}/{}", self.dir(), file.name()))?,
+            ownership: file.ownership(),
             profile: COMPOSITE_V2.into(),
-            purpose: purpose.into(),
+            purpose: self.purpose(file).into(),
             components: self.sources(),
             lean: self.lean(),
             content,
