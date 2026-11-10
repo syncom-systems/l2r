@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 
 use l2r_apply::{ActionKind, Assessment};
-use l2r_model::{Model, profiles};
+use l2r_model::{Component, Model, Port, profiles};
 use l2r_plan::{Ownership, Plan};
 
 use crate::diff::line_diff;
@@ -193,61 +193,80 @@ fn render_node(model: &Model, id: &str, depth: usize, out: &mut String) {
     let Some(component) = model.component(id) else {
         return;
     };
-    let indent = "  ".repeat(depth);
-    if [
+    if is_composite(component) {
+        render_composite(model, component, depth, out);
+    } else {
+        render_machine(component, depth, out);
+    }
+}
+
+fn is_composite(component: &Component) -> bool {
+    [
         profiles::COMPOSITE_V0,
         profiles::COMPOSITE_V1,
         profiles::COMPOSITE_V2,
     ]
     .contains(&component.profile.as_str())
-    {
-        let _ = writeln!(
-            out,
-            "{indent}subgraph {}[\"{} ({})\"]",
-            component.id,
-            quoted(&component.name),
-            component.profile
-        );
-        if component.profile == profiles::COMPOSITE_V2 {
-            for port in model.ports.iter().filter(|p| p.composite == component.id) {
-                let (shape_open, shape_close, direction) = if port.is_out() {
-                    ("[/\"", "\"/]", "out")
-                } else {
-                    ("[\\\"", "\"\\]", "in")
-                };
-                let capacity = port
-                    .capacity
-                    .map(|n| format!("<br/>outbox {n}"))
-                    .unwrap_or_default();
-                let _ = writeln!(
-                    out,
-                    "{indent}  port__{id}{shape_open}{direction} {id}<br/>{msg}{capacity}{shape_close}",
-                    id = port.id,
-                    msg = quoted(&port.message),
-                );
-            }
+}
+
+/// A composite: a subgraph holding its boundary ports (schema `v2`) and its
+/// children.
+fn render_composite(model: &Model, component: &Component, depth: usize, out: &mut String) {
+    let indent = "  ".repeat(depth);
+    let _ = writeln!(
+        out,
+        "{indent}subgraph {}[\"{} ({})\"]",
+        component.id,
+        quoted(&component.name),
+        component.profile
+    );
+    if component.profile == profiles::COMPOSITE_V2 {
+        for port in model.ports.iter().filter(|p| p.composite == component.id) {
+            let _ = writeln!(out, "{indent}  {}", port_node(port));
         }
-        for child in model.children(id) {
-            render_node(model, &child.id, depth + 1, out);
-        }
-        let _ = writeln!(out, "{indent}end");
-    } else {
-        let owns = component
-            .behavior
-            .as_ref()
-            .map(|b| b.owned_state.as_str())
-            .unwrap_or("-");
-        let capacity = component
-            .mailbox_capacity
-            .map(|n| format!("<br/>mailbox {n}"))
-            .unwrap_or_default();
-        let _ = writeln!(
-            out,
-            "{indent}{}[\"{}<br/>owns {}<br/>{}{capacity}\"]",
-            component.id,
-            quoted(&component.name),
-            quoted(owns),
-            component.profile
-        );
     }
+    for child in model.children(&component.id) {
+        render_node(model, &child.id, depth + 1, out);
+    }
+    let _ = writeln!(out, "{indent}end");
+}
+
+/// A port on the boundary of its composite; the shape tells `in` from `out`.
+fn port_node(port: &Port) -> String {
+    let (shape_open, shape_close, direction) = if port.is_out() {
+        ("[/\"", "\"/]", "out")
+    } else {
+        ("[\\\"", "\"\\]", "in")
+    };
+    let capacity = port
+        .capacity
+        .map(|n| format!("<br/>outbox {n}"))
+        .unwrap_or_default();
+    format!(
+        "port__{id}{shape_open}{direction} {id}<br/>{msg}{capacity}{shape_close}",
+        id = port.id,
+        msg = quoted(&port.message),
+    )
+}
+
+/// A machine: the state it owns, its profile and its mailbox.
+fn render_machine(component: &Component, depth: usize, out: &mut String) {
+    let indent = "  ".repeat(depth);
+    let owns = component
+        .behavior
+        .as_ref()
+        .map(|b| b.owned_state.as_str())
+        .unwrap_or("-");
+    let capacity = component
+        .mailbox_capacity
+        .map(|n| format!("<br/>mailbox {n}"))
+        .unwrap_or_default();
+    let _ = writeln!(
+        out,
+        "{indent}{}[\"{}<br/>owns {}<br/>{}{capacity}\"]",
+        component.id,
+        quoted(&component.name),
+        quoted(owns),
+        component.profile
+    );
 }
