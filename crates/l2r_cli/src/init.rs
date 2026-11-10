@@ -90,7 +90,8 @@ pub struct NewProject {
 
 /// Replaces `Starter` by `lean_root` and `starter` by `id`, in one pass, so
 /// that replaced text is never scanned again.
-fn instantiate(text: &str, id: &str, lean_root: &str) -> String {
+fn instantiate(text: &str, project: &NewProject) -> String {
+    let NewProject { id, lean_root, .. } = project;
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(c) = rest.chars().next() {
@@ -119,7 +120,8 @@ fn is_lean_root(name: &str) -> bool {
     chars.next().is_some_and(|c| c.is_ascii_uppercase()) && chars.all(|c| c.is_ascii_alphanumeric())
 }
 
-fn build_file(id: &str) -> String {
+fn build_file(project: &NewProject) -> String {
+    let id = &project.id;
     format!(
         "load(\"@l2r//bazel:l2r.bzl\", \"l2r_check_test\", \"l2r_conformance_traces\")\n\
          \n\
@@ -139,7 +141,9 @@ fn build_file(id: &str) -> String {
 const UNPINNED_LAKE_REQUIREMENT: &str = "-- Pin this to the L2R commit your workspace uses.\n\
      require l2r from git \"https://github.com/syncom-systems/l2r.git\" @ \"main\" / \"lean\"";
 
-fn verification_lakefile(id: &str, source: Option<&L2rSource>) -> String {
+fn verification_lakefile(project: &NewProject) -> String {
+    let id = &project.id;
+    let source = project.workspace.as_ref();
     let l2r = match source {
         Some(source) => source.lake_requirement(),
         None => UNPINNED_LAKE_REQUIREMENT.to_string(),
@@ -158,7 +162,8 @@ fn verification_lakefile(id: &str, source: Option<&L2rSource>) -> String {
     )
 }
 
-fn verification_readme(id: &str) -> String {
+fn verification_readme(project: &NewProject) -> String {
+    let id = &project.id;
     format!(
         "# Evidence about the composed system\n\
          \n\
@@ -198,7 +203,8 @@ fn verification_readme(id: &str) -> String {
     )
 }
 
-fn module_file(id: &str, source: &L2rSource) -> String {
+fn module_file(project: &NewProject, source: &L2rSource) -> String {
+    let id = &project.id;
     let l2r_override = source.bazel_override();
     format!(
         "\"\"\"{id}: a system built with L2R (human-approved architecture, Lean behaviour, Rust implementation).\"\"\"\n\
@@ -223,7 +229,8 @@ fn module_file(id: &str, source: &L2rSource) -> String {
     )
 }
 
-fn readme(id: &str, lean_root: &str) -> String {
+fn readme(project: &NewProject) -> String {
+    let NewProject { id, lean_root, .. } = project;
     format!(
         "# {id}\n\
          \n\
@@ -276,9 +283,9 @@ fn readme(id: &str, lean_root: &str) -> String {
 }
 
 /// The files of a Bazel workspace around the project.
-fn workspace_files(id: &str, source: &L2rSource) -> [(String, String); 4] {
+fn workspace_files(project: &NewProject, source: &L2rSource) -> [(String, String); 4] {
     [
-        ("MODULE.bazel".into(), module_file(id, source)),
+        ("MODULE.bazel".into(), module_file(project, source)),
         (".bazelversion".into(), "9.2.0\n".into()),
         (
             ".bazelrc".into(),
@@ -321,26 +328,20 @@ impl NewProject {
     /// Every file of the project, as `(path, content)` in path order. The
     /// project is the root its README's paths are relative to.
     fn files(&self) -> Vec<(String, String)> {
-        let Self { id, lean_root, .. } = self;
         let mut files: Vec<(String, String)> = TEMPLATE
             .iter()
-            .map(|(path, text)| {
-                (
-                    instantiate(path, id, lean_root),
-                    instantiate(text, id, lean_root),
-                )
-            })
+            .map(|(path, text)| (instantiate(path, self), instantiate(text, self)))
             .collect();
-        files.push(("BUILD.bazel".into(), build_file(id)));
+        files.push(("BUILD.bazel".into(), build_file(self)));
         files.push((
             "verification/lakefile.lean".into(),
-            verification_lakefile(id, self.workspace.as_ref()),
+            verification_lakefile(self),
         ));
         files.push(("verification/lean-toolchain".into(), LEAN_TOOLCHAIN.into()));
-        files.push(("verification/README.md".into(), verification_readme(id)));
-        files.push(("README.md".into(), readme(id, lean_root)));
+        files.push(("verification/README.md".into(), verification_readme(self)));
+        files.push(("README.md".into(), readme(self)));
         if let Some(source) = &self.workspace {
-            files.extend(workspace_files(id, source));
+            files.extend(workspace_files(self, source));
         }
         files.sort();
         files
@@ -404,13 +405,28 @@ mod tests {
 
     use super::*;
 
+    fn project(id: &str, lean_root: &str) -> NewProject {
+        NewProject {
+            dir: PathBuf::new(),
+            id: id.into(),
+            lean_root: lean_root.into(),
+            workspace: None,
+        }
+    }
+
     #[test]
     fn instantiation_replaces_both_names_in_one_pass() {
         assert_eq!(
-            instantiate("Starter.Monitor in starter_spec", "re_starter", "Restarter"),
+            instantiate(
+                "Starter.Monitor in starter_spec",
+                &project("re_starter", "Restarter")
+            ),
             "Restarter.Monitor in re_starter_spec"
         );
-        assert_eq!(instantiate("no names here", "a", "A"), "no names here");
+        assert_eq!(
+            instantiate("no names here", &project("a", "A")),
+            "no names here"
+        );
     }
 
     #[test]
@@ -429,9 +445,9 @@ mod tests {
     fn the_template_is_a_valid_model_under_any_names() {
         let model = TEMPLATE[0].1;
         let inventory = TEMPLATE[1].1;
-        let model = load::parse_model(&instantiate(model, "pump_station", "PumpStation")).unwrap();
-        let inventory =
-            load::parse_inventory(&instantiate(inventory, "pump_station", "PumpStation")).unwrap();
+        let pump_station = project("pump_station", "PumpStation");
+        let model = load::parse_model(&instantiate(model, &pump_station)).unwrap();
+        let inventory = load::parse_inventory(&instantiate(inventory, &pump_station)).unwrap();
         // Renaming the root uniformly keeps the inventory canonical and the model valid.
         assert_eq!(inventory, inventory.canonical());
         let validated = l2r_validate::validate(&model, &inventory).expect("valid");
