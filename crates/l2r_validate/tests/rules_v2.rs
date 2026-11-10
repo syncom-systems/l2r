@@ -45,6 +45,25 @@ fn edge<'a>(model: &'a mut Model, id: &str) -> &'a mut MessageEdge {
         .expect("edge exists")
 }
 
+/// The tank station as it would be had the Lean project called the type
+/// `from` by the name `to`: in the ports that carry it, and in every
+/// declaration, type and constructor name of the inventory.
+fn tank_with_lean_type_renamed(from: &str, to: &str) -> (Model, Inventory) {
+    let mut model = tank_model();
+    for port in model.ports.iter_mut().filter(|p| p.message == from) {
+        port.message = to.to_string();
+    }
+    let mut inventory = tank_inventory();
+    for declaration in &mut inventory.declarations {
+        declaration.name = declaration.name.replace(from, to);
+        declaration.type_ = declaration.type_.replace(from, to);
+        for constructor in &mut declaration.constructors {
+            constructor.name = constructor.name.replace(from, to);
+        }
+    }
+    (model, inventory)
+}
+
 #[test]
 fn the_tank_station_is_valid_and_flattens_to_its_machines() {
     let validated = validate(&tank_model(), &tank_inventory()).expect("valid");
@@ -331,21 +350,8 @@ fn generated_names_must_be_distinct() {
 #[test]
 fn a_lean_type_may_not_take_the_name_of_a_rust_prelude_type() {
     for name in ["Vec", "Option", "Box", "String", "Result"] {
-        let mut model = tank_model();
-        let mut inventory = tank_inventory();
-        let renamed = format!("Tank.Ports.{name}");
-        for port in &mut model.ports {
-            if port.message == "Tank.Ports.Sample" {
-                port.message = renamed.clone();
-            }
-        }
-        for declaration in &mut inventory.declarations {
-            declaration.name = declaration.name.replace("Tank.Ports.Sample", &renamed);
-            declaration.type_ = declaration.type_.replace("Tank.Ports.Sample", &renamed);
-            for constructor in &mut declaration.constructors {
-                constructor.name = constructor.name.replace("Tank.Ports.Sample", &renamed);
-            }
-        }
+        let (model, inventory) =
+            tank_with_lean_type_renamed("Tank.Ports.Sample", &format!("Tank.Ports.{name}"));
         let found = codes(&model, &inventory);
         assert!(found.contains(&"L2R-L007"), "{name}: {found:?}");
     }
