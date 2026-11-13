@@ -1,5 +1,6 @@
 //! `l2r init`: the starter project, written under the new project's names.
 
+use l2r_model::rust_names;
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
@@ -112,7 +113,7 @@ fn instantiate(text: &str, project: &NewProject) -> String {
 /// `MonitorSystem` → `monitor_system` is not attempted: the default Lean root
 /// is the identifier in upper camel case (`pump_station` → `PumpStation`).
 pub fn default_lean_root(id: &str) -> Option<String> {
-    names::upper_camel(id)
+    rust_names::rust_type_name(id)
 }
 
 fn is_lean_root(name: &str) -> bool {
@@ -317,7 +318,7 @@ impl NewProject {
                 "`{id}` is not a usable system id: use lower snake case, e.g. `pump_station`\n"
             ));
         }
-        if !is_lean_root(lean_root) || names::upper_camel(lean_root).is_none() {
+        if !is_lean_root(lean_root) || rust_names::rust_type_name(lean_root).is_none() {
             return Err(format!(
                 "`{lean_root}` is not a usable Lean root module: use upper camel case, e.g. `PumpStation`\n"
             ));

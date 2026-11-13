@@ -19,6 +19,9 @@ pub const METHODS: &[&str] = &[
 ];
 /// Types of the module the profile names itself, imports included.
 pub const TYPES: &[&str] = &["Envelope", "System", "Unsettled", "VecDeque"];
+/// Crates the generated code names in paths (`use std::collections::VecDeque`),
+/// so that no child module may take their name.
+pub const STD_MODULES: &[&str] = &["std"];
 
 /// A child of the composite, as its names are derived.
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +62,7 @@ impl SystemNames {
         claims.claim_fixed(Namespace::Field, FIELDS);
         claims.claim_fixed(Namespace::Method, METHODS);
         claims.claim_fixed(Namespace::Type, TYPES);
+        claims.claim_std(Namespace::Module, STD_MODULES);
         let mut named = BTreeMap::new();
         for child in children {
             let names = ChildNames::of(child);
@@ -118,6 +122,11 @@ impl SystemNames {
         id
     }
 
+    /// Every `Envelope` variant, in child order.
+    pub fn variants(&self) -> Vec<&str> {
+        self.children.values().map(|c| c.variant.as_str()).collect()
+    }
+
     /// Every field of `System`, in order.
     pub fn fields(&self) -> &[String] {
         &self.fields
@@ -144,6 +153,7 @@ impl ChildNames {
     /// its `Envelope` variant must be a Rust type name.
     fn claim(&self, id: &str, claims: &mut Claims) {
         let owner = Owner::Component(id.to_string());
+        claims.claim(Namespace::Module, &self.field, &owner);
         claims.claim(Namespace::Field, &self.field, &owner);
         claims.claim(Namespace::Method, &self.field, &owner);
         if let Some(inbox) = &self.inbox {
@@ -251,6 +261,19 @@ mod tests {
         assert!(matches!(
             &problems[..],
             [Problem::Conflict { namespace: Namespace::Method, name, .. }] if name == "run"
+        ));
+    }
+
+    #[test]
+    fn a_module_named_std_hides_the_standard_library() {
+        let problems = SystemNames::new(&[machine("x", "std")], &[]).unwrap_err();
+        assert!(matches!(
+            &problems[..],
+            [Problem::Conflict {
+                namespace: Namespace::Module,
+                first: Owner::Std,
+                ..
+            }]
         ));
     }
 

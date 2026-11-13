@@ -18,6 +18,9 @@ pub const METHODS: &[&str] = &[
 ];
 /// Types of the module the profile names itself.
 pub const TYPES: &[&str] = &["Attempt", "Progress", "Rejected", "Stopped", "System"];
+/// Standard-library types and traits the generated code names unqualified, so
+/// that no generated type may take their name.
+pub const STD_TYPES: &[&str] = &["Default", "Option", "Result"];
 
 /// A child machine of the composite.
 #[derive(Debug, Clone, Copy)]
@@ -79,6 +82,7 @@ impl SystemNames {
         claims.claim_fixed(Namespace::Field, FIELDS);
         claims.claim_fixed(Namespace::Method, METHODS);
         claims.claim_fixed(Namespace::Type, TYPES);
+        claims.claim_std(Namespace::Type, STD_TYPES);
         let mut named_children = BTreeMap::new();
         for child in children {
             let names = ChildNames::of(child);
@@ -301,9 +305,12 @@ mod tests {
             port("b", "M.SignalInbox"),
             port("c", "M.Timer'"),
             port("d", "M.Self"),
+            port("e", "M.Option"),
+            port("f", "M.Result"),
+            port("g", "M.Default"),
         ];
         let problems = SystemNames::new(&example_children(), &ports, &[]).unwrap_err();
-        assert_eq!(problems.len(), 4, "{problems:?}");
+        assert_eq!(problems.len(), 7, "{problems:?}");
         assert!(problems.iter().all(Problem::involves_lean_type));
     }
 

@@ -4,10 +4,10 @@
 use std::collections::BTreeMap;
 
 use l2r_model::Model;
+use l2r_model::rust_names;
 
 use super::{edge_subject, is_machine, port_subject, root_id};
 use crate::diagnostic::Findings;
-use crate::names;
 use crate::structure::subject;
 
 /// Names the root's generated code derives from identifiers must be distinct:
@@ -45,7 +45,7 @@ fn check_type_prefixes(
         .map(|(s, id)| (s, *id))
         .chain(root_ports.iter().map(|(s, id, _)| (s, *id)));
     for (subject, id) in ids {
-        let type_name = names::upper_camel(id).unwrap_or_default();
+        let type_name = rust_names::rust_type_name(id).unwrap_or_default();
         if let Some(other) = types.insert(type_name.clone(), subject) {
             findings.error(
                 "L2R-S020",

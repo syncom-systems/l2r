@@ -38,33 +38,6 @@ fn is_lean_segment(segment: &str) -> bool {
     valid_start && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '\'' | '!' | '?'))
 }
 
-/// The last segment of a Lean name.
-pub fn lean_last_segment(name: &str) -> &str {
-    name.rsplit('.').next().unwrap_or(name)
-}
-
-/// Converts `vehiclesGreen` or `vehicles_green` into `VehiclesGreen`.
-///
-/// Returns `None` when the segment cannot become a Rust type name.
-pub fn upper_camel(segment: &str) -> Option<String> {
-    if !segment
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
-        return None;
-    }
-    let mut out = String::new();
-    for part in segment.split('_').filter(|p| !p.is_empty()) {
-        let mut chars = part.chars();
-        if let Some(first) = chars.next() {
-            out.push(first.to_ascii_uppercase());
-            out.extend(chars);
-        }
-    }
-    let valid = out.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && out != "Self";
-    valid.then_some(out)
-}
-
 /// A relative path that cannot escape its base; see [`l2r_model::RelPath`].
 pub fn is_safe_relative_path(path: &str) -> bool {
     l2r_model::RelPath::parse(path).is_ok()
@@ -95,22 +68,6 @@ mod tests {
         for bad in ["", "Foo.", ".Foo", "Foo..bar", "Foo.1bar", "Foo bar"] {
             assert!(!is_lean_name(bad), "{bad}");
         }
-    }
-
-    #[test]
-    fn camel_case() {
-        assert_eq!(
-            upper_camel("vehiclesGreen").as_deref(),
-            Some("VehiclesGreen")
-        );
-        assert_eq!(
-            upper_camel("vehicles_green").as_deref(),
-            Some("VehiclesGreen")
-        );
-        assert_eq!(upper_camel("idle").as_deref(), Some("Idle"));
-        assert_eq!(upper_camel("self"), None);
-        assert_eq!(upper_camel("_"), None);
-        assert_eq!(upper_camel("a'"), None);
     }
 
     #[test]

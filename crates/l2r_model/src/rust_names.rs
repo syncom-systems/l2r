@@ -48,7 +48,7 @@ pub fn rust_type_name(identifier: &str) -> Option<String> {
 }
 
 /// The last `.`-separated segment of a Lean name.
-fn lean_last_segment(name: &str) -> &str {
+pub fn lean_last_segment(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or(name)
 }
 
@@ -66,6 +66,8 @@ pub enum Namespace {
     Variant,
     /// Functions of the composite's `routes.rs`.
     RouteFunction,
+    /// Modules and crates the composite's module names in paths.
+    Module,
 }
 
 impl fmt::Display for Namespace {
@@ -76,6 +78,7 @@ impl fmt::Display for Namespace {
             Namespace::Type => "the type",
             Namespace::Variant => "the enum variant",
             Namespace::RouteFunction => "the `routes.rs` function",
+            Namespace::Module => "the module",
         })
     }
 }
@@ -93,6 +96,8 @@ pub enum Owner {
     LeanType(String),
     /// A name the profile itself generates.
     Profile,
+    /// A name of the Rust standard library the generated code uses.
+    Std,
 }
 
 impl fmt::Display for Owner {
@@ -103,6 +108,7 @@ impl fmt::Display for Owner {
             Owner::Edge(id) => write!(f, "message `{id}`"),
             Owner::LeanType(name) => write!(f, "Lean type `{name}`"),
             Owner::Profile => f.write_str("the profile"),
+            Owner::Std => f.write_str("the Rust standard library"),
         }
     }
 }
@@ -159,6 +165,15 @@ impl fmt::Display for Problem {
             Problem::Conflict {
                 namespace,
                 name,
+                first: Owner::Std,
+                ..
+            } => write!(
+                f,
+                "generates {namespace} `{name}`, which would hide the standard `{name}` the generated code uses"
+            ),
+            Problem::Conflict {
+                namespace,
+                name,
                 first,
                 ..
             } => write!(
@@ -207,6 +222,14 @@ impl Claims {
         }
     }
 
+    /// Claims standard-library names the generated code refers to, so that no
+    /// generated item hides them. They are not names the profile declares.
+    fn claim_std(&mut self, namespace: Namespace, names: &[&str]) {
+        for name in names {
+            self.claim(namespace, name, &Owner::Std);
+        }
+    }
+
     /// Claims the route function of each message edge: the edge's own id.
     fn claim_edges(&mut self, edges: &[&str]) {
         for edge in edges {
@@ -236,12 +259,12 @@ impl Claims {
         }
     }
 
-    /// Every claimed name of `namespace`, in order.
+    /// Every name of `namespace` the generated code declares, in order.
     fn names(&self, namespace: Namespace) -> Vec<String> {
         self.taken
-            .keys()
-            .filter(|(n, _)| *n == namespace)
-            .map(|(_, name)| name.clone())
+            .iter()
+            .filter(|((n, _), owner)| *n == namespace && **owner != Owner::Std)
+            .map(|((_, name), _)| name.clone())
             .collect()
     }
 }
@@ -256,6 +279,22 @@ mod tests {
         assert_eq!(type_name("signal"), "Signal");
         assert_eq!(type_name("a_1"), "A1");
         assert_eq!(type_name("Timer'"), "Timer'");
+    }
+
+    #[test]
+    fn upper_camel_case_of_lean_and_model_names() {
+        assert_eq!(
+            rust_type_name("vehiclesGreen").as_deref(),
+            Some("VehiclesGreen")
+        );
+        assert_eq!(
+            rust_type_name("vehicles_green").as_deref(),
+            Some("VehiclesGreen")
+        );
+        assert_eq!(rust_type_name("idle").as_deref(), Some("Idle"));
+        assert_eq!(rust_type_name("a'"), None);
+        assert_eq!(lean_last_segment("Crossing.Latch.step"), "step");
+        assert_eq!(lean_last_segment("step"), "step");
     }
 
     #[test]

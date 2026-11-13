@@ -70,7 +70,9 @@ fn emitted(plan: &Plan, dir: &str) -> Emitted {
     let route_functions = names_after(routes.lines(), &["pub(super) fn "]);
     // The reading is not vacuous: each namespace has what every composite has.
     assert!(fields.contains("next") && methods.contains("step_once"));
-    assert!(types.contains("System") && !route_functions.is_empty());
+    // `routes.rs` exists only when the composite has edges; where it does,
+    // its functions are compared like everything else.
+    assert!(types.contains("System") && (routes.is_empty() || !route_functions.is_empty()));
     Emitted {
         fields,
         methods,
@@ -87,15 +89,60 @@ fn planned(validated: &Validated) -> Plan {
     plan(validated, &GeneratorIdentity::current()).expect("plans")
 }
 
+/// The v0 example with its two machines moved into a nested `composite/v0`
+/// `inner`, so a composite child (a field with no mailbox) is read back too.
+fn nested_v0() -> l2r_model::Model {
+    let mut model = example_model();
+    let mut inner = model
+        .components
+        .iter()
+        .find(|c| c.id == "crossing")
+        .expect("root")
+        .clone();
+    for c in &mut model.components {
+        if c.parent.as_deref() == Some("crossing") {
+            c.parent = Some("inner".into());
+        }
+    }
+    inner.id = "inner".into();
+    inner.name = "Inner".into();
+    inner.parent = Some("crossing".into());
+    inner.rust_module = "inner".into();
+    model.components.push(inner);
+    model
+}
+
 #[test]
 fn composite_v0_emits_exactly_the_declared_names() {
-    let validated = validate(&example_model(), &example_inventory()).expect("valid");
-    let names = validated.composite_v0_names("crossing").expect("checked");
-    let found = emitted(&planned(&validated), "src/crossing");
-    assert_eq!(found.fields, set(names.fields()));
-    assert_eq!(found.methods, set(names.methods()));
-    assert_eq!(found.types, set(names.types()));
-    assert_eq!(found.route_functions, set(names.route_functions()));
+    for (model, composites) in [
+        (example_model(), vec!["src/crossing"]),
+        (nested_v0(), vec!["src/crossing", "src/crossing/inner"]),
+    ] {
+        let validated = validate(&model, &example_inventory()).expect("valid");
+        let plan = planned(&validated);
+        for dir in composites {
+            let id = dir.rsplit('/').next().expect("id");
+            let names = validated.composite_v0_names(id).expect("checked");
+            let found = emitted(&plan, dir);
+            assert_eq!(found.fields, set(names.fields()), "{dir}");
+            assert_eq!(found.methods, set(names.methods()), "{dir}");
+            assert_eq!(found.types, set(names.types()), "{dir}");
+            assert_eq!(found.route_functions, set(names.route_functions()), "{dir}");
+            let contract = &plan
+                .artifact(&format!("{dir}/mod.rs"))
+                .expect("planned")
+                .content;
+            let variants: BTreeSet<String> = block(contract, "pub enum Envelope {")
+                .into_iter()
+                .filter(|l| !l.trim_start().starts_with("///"))
+                .filter_map(|l| l.trim_start().split('(').next().map(str::to_string))
+                .collect();
+            let declared: BTreeSet<String> =
+                names.variants().into_iter().map(str::to_string).collect();
+            assert!(!variants.is_empty());
+            assert_eq!(variants, declared, "{dir}");
+        }
+    }
 }
 
 #[test]
