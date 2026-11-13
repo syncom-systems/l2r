@@ -208,26 +208,68 @@ impl crate::architecture::Model {
 
     /// Every schema-gated feature the document uses: its own, its
     /// components' and its ports'.
+    ///
+    /// Each model struct is destructured without `..`: a field added to the
+    /// format is a compile error here until someone decides whether a schema
+    /// gates it (audit F10).
     pub fn features(&self) -> Vec<Feature> {
-        let own = (!self.ports.is_empty()).then_some(Feature::Ports);
-        let components = self
-            .components
+        let crate::architecture::Model {
+            schema: _,
+            system: _,
+            components,
+            messages: _,
+            ports,
+        } = self;
+        let own = (!ports.is_empty()).then_some(Feature::Ports);
+        let of_components = components
             .iter()
-            .filter(|c| c.mailbox_capacity.is_some())
-            .map(|_| Feature::MailboxCapacity);
-        let ports = self
-            .ports
-            .iter()
-            .flat_map(crate::architecture::Port::features);
-        own.into_iter().chain(components).chain(ports).collect()
+            .flat_map(crate::architecture::Component::features);
+        let of_ports = ports.iter().flat_map(crate::architecture::Port::features);
+        own.into_iter()
+            .chain(of_components)
+            .chain(of_ports)
+            .collect()
+    }
+}
+
+impl crate::architecture::Component {
+    /// The schema-gated features this component uses.
+    pub fn features(&self) -> Vec<Feature> {
+        let crate::architecture::Component {
+            id: _,
+            name: _,
+            parent: _,
+            profile: _,
+            responsibility: _,
+            rust_module: _,
+            notes: _,
+            implementation_budget_lines: _,
+            behavior: _,
+            mailbox_capacity,
+        } = self;
+        mailbox_capacity
+            .is_some()
+            .then_some(Feature::MailboxCapacity)
+            .into_iter()
+            .collect()
     }
 }
 
 impl crate::architecture::Port {
-    /// The schema-gated features this port uses.
+    /// The schema-gated features this port uses. Destructured without `..`,
+    /// like [`crate::architecture::Model::features`].
     pub fn features(&self) -> Vec<Feature> {
-        let direction = self.direction.is_some().then_some(Feature::PortDirection);
-        let capacity = self.capacity.is_some().then_some(Feature::PortCapacity);
+        let crate::architecture::Port {
+            id: _,
+            composite: _,
+            to: _,
+            message: _,
+            translation: _,
+            direction,
+            capacity,
+        } = self;
+        let direction = direction.is_some().then_some(Feature::PortDirection);
+        let capacity = capacity.is_some().then_some(Feature::PortCapacity);
         direction.into_iter().chain(capacity).collect()
     }
 }
