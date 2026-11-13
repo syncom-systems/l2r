@@ -119,6 +119,12 @@ impl Port { pub fn features(&self) -> Vec<Feature>; }
 As implemented (step 2a):
 - `must_be_root` was dropped. Its one use sits inside the `composite/v1` arm, where it was a tautology.
 - The model reports which gated features it uses, and the schema says which it admits. The S015 gates now ask both.
+- After the independent review:
+  - Every decision by schema or profile is an exhaustive `match`, or names the admitted schemas explicitly. That covers validate's dispatch, `Schema::admits`, S019, the profile-shape rules, `render`, packets and the Lean network tail.
+  - `admits_child` is correct for every profile.
+  - Classification within `v2` asks `kind()` among the profiles `v2` admits.
+  - The planner reads profiles from `Validated`.
+- Deliberately kept: rules of the frozen `v0`/`v1` profiles name their exact profile, for example M003 "only `transition-core/v0` sends" and the `composite/v0` planner's machine test. The rule belongs to that version, not to the kind.
 
 - **Guarantees carried by types:** after parsing, a schema or profile is one of a closed set. Every classification is an exhaustive `match`, so a new variant is a compile error at each site that must decide about it (`liskov-zilles-1974-abstract-data-types`, Interpretation 1). Each string is compared once, in `parse`. That is the opposite of a registry of string comparisons (G1).
 - **Obligations the signatures do not show:**

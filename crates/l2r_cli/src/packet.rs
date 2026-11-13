@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use l2r_model::{Behavior, Component, MessageEdge, Model, Port};
+use l2r_model::{Behavior, Component, MessageEdge, Model, Port, Schema};
 use l2r_plan::{Artifact, Ownership};
 use l2r_validate::flat::{Flat, Hop, HopKind};
 
@@ -251,38 +251,41 @@ impl WorkPacket<'_> {
             .collect()
     }
 
-    /// True when the edge's sender is a child of this component.
-    fn sent_by_a_child(&self, edge: &MessageEdge) -> bool {
-        let parent = self
-            .model()
-            .component(&edge.from)
-            .and_then(|c| c.parent.as_deref());
-        parent == Some(self.component.id.as_str())
-    }
-
     /// The translations of a model that has no flattened routes: those of the
     /// edges its children send on, then those of its own ports.
     fn declared_translations(&self) -> Vec<Translation> {
         let model = self.model();
+        // A routes.rs function of an edge is named by the edge's own id.
         let edges = model
-            .messages
-            .iter()
-            .filter(|edge| self.sent_by_a_child(edge))
+            .edges_within(&self.component.id)
+            .into_iter()
             .map(|edge| self.translation(edge.id.clone(), &edge.translation));
-        let ports = model
-            .ports
-            .iter()
-            .filter(|port| port.composite == self.component.id)
-            .map(|port| self.translation(format!("port_{}", port.id), port.translation_name()));
+        // Only a composite/v1 has ports, and its checked names say what their
+        // functions are called.
+        let v1_names = self
+            .session
+            .validated
+            .composite_v1_names(&self.component.id);
+        let ports = v1_names.into_iter().flat_map(|names| {
+            model
+                .ports
+                .iter()
+                .filter(|port| port.composite == self.component.id)
+                .map(|port| {
+                    let function = names.port_function(&port.id).to_string();
+                    self.translation(function, port.translation_name())
+                })
+        });
         edges.chain(ports).collect()
     }
 
     /// The translations this component's files implement. Empty when there
     /// are none.
     fn translations(&self) -> String {
-        let mut translations = match self.session.validated.flat() {
-            Some(flat) => self.routed_translations(flat),
-            None => self.declared_translations(),
+        let validated = &self.session.validated;
+        let mut translations = match (validated.schema(), validated.flat()) {
+            (Schema::V2, Some(flat)) => self.routed_translations(flat),
+            (Schema::V2, None) | (Schema::V0 | Schema::V1, _) => self.declared_translations(),
         };
         if translations.is_empty() {
             return String::new();

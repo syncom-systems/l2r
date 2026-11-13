@@ -19,6 +19,9 @@ use crate::resolved::ResolvedEnum;
 /// Applies the structural port rules.
 pub fn check(model: &Model, findings: &mut Findings) {
     let mut ids = BTreeSet::new();
+    // These rules run for v0 and v1 documents; an unknown schema (S001) is
+    // held to v1.
+    let schema = model.parsed_schema().unwrap_or(Schema::V1);
     for port in &model.ports {
         let subject = format!("port `{}`", port.id);
         if !names::is_identifier(&port.id) || names::is_rust_keyword(&port.id) {
@@ -32,7 +35,6 @@ pub fn check(model: &Model, findings: &mut Findings) {
             findings.error("L2R-P001", &subject, "duplicate port id");
         }
         // A `v1` document means what it always meant.
-        let schema = model.parsed_schema().unwrap_or(Schema::V1);
         if port.features().iter().any(|f| !schema.admits_feature(*f)) {
             findings.error(
                 "L2R-S015",

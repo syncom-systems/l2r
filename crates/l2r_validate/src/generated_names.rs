@@ -38,7 +38,8 @@ pub(crate) fn check(model: &Model, findings: &mut Findings) -> BTreeMap<String, 
         let names = match composite.parsed_profile() {
             Some(Profile::CompositeV0) => v0_names(model, composite).map(CompositeNames::V0),
             Some(Profile::CompositeV1) => v1_names(model, composite).map(CompositeNames::V1),
-            _ => continue,
+            Some(Profile::TransitionCoreV0 | Profile::TransitionCoreV1 | Profile::CompositeV2)
+            | None => continue,
         };
         match names {
             Ok(names) => {

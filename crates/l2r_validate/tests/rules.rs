@@ -468,3 +468,38 @@ fn a_v1_composite_must_be_the_root_and_hold_only_machines() {
     component(&mut model, "crossing").parent = Some("outer".into());
     v1_rejects(&model, "L2R-S016");
 }
+
+#[test]
+fn validated_carries_the_typed_schema_and_profiles() {
+    use l2r_model::{Profile, Schema};
+    let validated = validate(&example_model(), &example_inventory()).expect("valid");
+    assert_eq!(validated.schema(), Schema::V0);
+    assert_eq!(validated.profile("crossing"), Profile::CompositeV0);
+    assert_eq!(validated.profile("signal"), Profile::TransitionCoreV0);
+    let v1 = validate(&example_v1_model(), &example_v1_inventory()).expect("valid");
+    assert_eq!(v1.schema(), Schema::V1);
+    assert_eq!(v1.profile("crossing"), Profile::CompositeV1);
+}
+
+#[test]
+fn each_v1_feature_alone_needs_schema_v1() {
+    // composite/v1 alone (no ports, no capacities) under v0.
+    let mut profile_only = example_model();
+    component(&mut profile_only, "crossing").profile = "composite/v1".into();
+    rejects(&profile_only, "L2R-S015");
+    // a mailbox capacity alone under v0.
+    let mut capacity_only = example_model();
+    component(&mut capacity_only, "signal").mailbox_capacity = Some(1);
+    rejects(&capacity_only, "L2R-S015");
+}
+
+#[test]
+fn port_fields_of_v2_are_refused_under_v0_and_unknown_schemas() {
+    for schema in ["l2r.architecture/v0", "l2r.architecture/v9"] {
+        let mut model = example_v1_model();
+        model.schema = schema.into();
+        model.ports[0].direction = Some("in".into());
+        let found = v1_codes(&model);
+        assert!(found.contains(&"L2R-S015"), "{schema}: {found:?}");
+    }
+}

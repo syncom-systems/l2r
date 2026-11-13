@@ -30,8 +30,11 @@ use l2r_model::{Inventory, Model, Schema};
 pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<Diagnostic>> {
     let model = model.canonical();
     let inventory = inventory.canonical();
-    if model.parsed_schema() == Some(Schema::V2) {
-        return v2::validate(model, inventory);
+    // Each schema has its own rules; a new schema is a compile error here. An
+    // unknown schema is checked by the v0/v1 rules, which report it (S001).
+    match model.parsed_schema() {
+        Some(Schema::V2) => return v2::validate(model, inventory),
+        Some(Schema::V0 | Schema::V1) | None => {}
     }
     let mut findings = diagnostic::Findings::default();
 

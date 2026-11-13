@@ -13,7 +13,8 @@ pub fn check(model: &Model, findings: &mut Findings) {
     for component in &model.components {
         check_profile_shape(model, component, findings);
         // The v2 profiles belong to model schema v2, which has its own rules.
-        if component.parsed_profile().map(Profile::schema) == Some(Schema::V2) {
+        let later = component.parsed_profile().map(Profile::schema);
+        if matches!(later, Some(Schema::V2)) {
             findings.error(
                 "L2R-S019",
                 subject(component),
@@ -256,7 +257,7 @@ fn check_profile_shape(model: &Model, component: &Component, findings: &mut Find
                 }
             }
         }
-        _ => {}
+        Some(Profile::TransitionCoreV1 | Profile::CompositeV2) | None => {}
     }
     check_capacity(model, component, findings);
 }

@@ -123,8 +123,10 @@ fn quoted(text: &str) -> String {
 /// A Mermaid view of the architecture: containment as nested subgraphs, state
 /// ownership on each machine, approved message edges as arrows.
 pub fn mermaid(model: &Model) -> String {
-    if model.parsed_schema() == Some(Schema::V2) {
-        return mermaid_v2(model);
+    // `render` also draws invalid models; an unknown schema is drawn as v0/v1.
+    match model.parsed_schema() {
+        Some(Schema::V2) => return mermaid_v2(model),
+        Some(Schema::V0 | Schema::V1) | None => {}
     }
     let mut out = String::from("flowchart TB\n");
     if let Some(root) = model.components.iter().find(|c| c.parent.is_none()) {

@@ -97,7 +97,7 @@ impl Schema {
     pub fn admits(self, profile: Profile) -> bool {
         match self {
             Schema::V0 => profile.schema() == Schema::V0,
-            Schema::V1 => profile.schema() != Schema::V2,
+            Schema::V1 => matches!(profile.schema(), Schema::V0 | Schema::V1),
             Schema::V2 => profile.schema() == Schema::V2,
         }
     }
@@ -174,13 +174,16 @@ impl Profile {
     }
 
     /// True when a component of this profile may contain one of `child`.
-    /// Only `composite/v1` restricts its children here; the other containment
-    /// rules belong to each schema's validation.
     pub fn admits_child(self, child: Profile) -> bool {
         match self {
-            Profile::CompositeV1 => child == Profile::TransitionCoreV0,
             Profile::TransitionCoreV0 | Profile::TransitionCoreV1 => false,
-            Profile::CompositeV0 | Profile::CompositeV2 => true,
+            Profile::CompositeV0 => {
+                matches!(child, Profile::TransitionCoreV0 | Profile::CompositeV0)
+            }
+            Profile::CompositeV1 => child == Profile::TransitionCoreV0,
+            Profile::CompositeV2 => {
+                matches!(child, Profile::TransitionCoreV1 | Profile::CompositeV2)
+            }
         }
     }
 }
@@ -247,6 +250,64 @@ mod tests {
         assert_eq!(Schema::ALL.len(), crate::SUPPORTED_SCHEMAS.len());
         assert_eq!(Profile::parse("composite/v9"), None);
         assert_eq!(Schema::parse("l2r.architecture/v9"), None);
+    }
+
+    #[test]
+    fn schemas_admit_their_features() {
+        use Feature::*;
+        let admitted = |s: Schema| -> Vec<Feature> {
+            [Ports, MailboxCapacity, PortDirection, PortCapacity]
+                .into_iter()
+                .filter(|f| s.admits_feature(*f))
+                .collect()
+        };
+        assert_eq!(admitted(Schema::V0), []);
+        assert_eq!(admitted(Schema::V1), [Ports, MailboxCapacity]);
+        assert_eq!(
+            admitted(Schema::V2),
+            [Ports, MailboxCapacity, PortDirection, PortCapacity]
+        );
+    }
+
+    #[test]
+    fn kinds_schemas_and_children() {
+        use Profile::*;
+        let machines: Vec<Profile> = Profile::ALL
+            .into_iter()
+            .filter(|p| p.kind() == Kind::Machine)
+            .collect();
+        assert_eq!(machines, [TransitionCoreV0, TransitionCoreV1]);
+        let introduced: Vec<Schema> = Profile::ALL.into_iter().map(Profile::schema).collect();
+        assert_eq!(
+            introduced,
+            [Schema::V0, Schema::V0, Schema::V1, Schema::V2, Schema::V2]
+        );
+        let children = |parent: Profile| -> Vec<Profile> {
+            Profile::ALL
+                .into_iter()
+                .filter(|c| parent.admits_child(*c))
+                .collect()
+        };
+        assert_eq!(children(TransitionCoreV0), []);
+        assert_eq!(children(TransitionCoreV1), []);
+        assert_eq!(children(CompositeV0), [TransitionCoreV0, CompositeV0]);
+        assert_eq!(children(CompositeV1), [TransitionCoreV0]);
+        assert_eq!(children(CompositeV2), [TransitionCoreV1, CompositeV2]);
+    }
+
+    #[test]
+    fn a_document_lists_the_gated_features_it_uses() {
+        let mut model = crate::load::parse_model(
+            "schema = \"l2r.architecture/v1\"\n[system]\nid = \"s\"\nname = \"S\"\nrust_crate = \"s\"\nlean_inventory = \"i.json\"\noutput_dir = \"o\"\n\n[[component]]\nid = \"a\"\nname = \"A\"\nprofile = \"composite/v0\"\nresponsibility = \"r\"\nrust_module = \"a\"\n",
+        )
+        .expect("parses");
+        assert_eq!(model.parsed_schema(), Some(Schema::V1));
+        assert_eq!(model.components[0].kind(), Some(Kind::Composite));
+        assert_eq!(model.features(), []);
+        model.components[0].mailbox_capacity = Some(2);
+        assert_eq!(model.features(), [Feature::MailboxCapacity]);
+        model.components[0].profile = "composite/v9".into();
+        assert_eq!(model.components[0].parsed_profile(), None);
     }
 
     #[test]

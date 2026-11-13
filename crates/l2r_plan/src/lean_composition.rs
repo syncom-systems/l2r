@@ -121,12 +121,17 @@ pub fn lean_composition(validated: &Validated) -> Result<String, PlanError> {
     }
     for composite in composites {
         out.push('\n');
-        out.push_str(&network(model, composite, format)?);
+        out.push_str(&network(validated, composite, format)?);
     }
     Ok(out)
 }
 
-fn network(model: &Model, composite: &Component, format: &str) -> Result<String, PlanError> {
+fn network(
+    validated: &Validated,
+    composite: &Component,
+    format: &str,
+) -> Result<String, PlanError> {
+    let model = validated.model();
     let children = model.children(&composite.id);
     if children.is_empty() {
         return Err(PlanError(format!(
@@ -236,16 +241,26 @@ fn network(model: &Model, composite: &Component, format: &str) -> Result<String,
         &format!("def route : (c : Fin {n}) → Output c → List ((d : Fin {n}) × Input d)"),
         &|i| routes[i].clone(),
     ));
-    if composite.parsed_profile() == Some(Profile::CompositeV1) {
-        out.push_str(&v1_tail(model, composite, &children, n));
-    } else {
-        out.push_str(&format!(
-            "abbrev network : L2R.Async.Network := ⟨{n}, State, Input, Output, init, step, route⟩\n\n\
-             end L2RDerived.«{}».«{}»\n",
-            model.system.id, composite.id
-        ));
-    }
+    out.push_str(&match validated.profile(&composite.id) {
+        Profile::CompositeV1 => v1_tail(model, composite, &children, n),
+        Profile::CompositeV0 => v0_tail(model, composite, n),
+        other @ (Profile::TransitionCoreV0 | Profile::TransitionCoreV1 | Profile::CompositeV2) => {
+            return Err(PlanError(format!(
+                "`{}` is not a v0/v1 composite",
+                other.id()
+            )));
+        }
+    });
     Ok(out)
+}
+
+/// The `L2R.Async.Network` of a `composite/v0`.
+fn v0_tail(model: &Model, composite: &Component, n: usize) -> String {
+    format!(
+        "abbrev network : L2R.Async.Network := ⟨{n}, State, Input, Output, init, step, route⟩\n\n\
+         end L2RDerived.«{}».«{}»\n",
+        model.system.id, composite.id
+    )
 }
 
 /// Capacities and ports of a `composite/v1`, and the `L2R.Async1.Network`.
