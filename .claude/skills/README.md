@@ -21,6 +21,16 @@ stops with questions and alternatives for the architect. The design record is
 `architecture/design.md`; `architecture/design.c4` is a LikeC4 picture of it,
 checked against the record by `scripts/c4check.py`.
 
+## `audit-codebase-architecture`: findings in existing code for the architect
+
+The counterpart for code that exists. `scripts/deps.py` measures crate and
+module dependencies with `file:line` evidence and their loops; the skill looks
+for decisions known in more than one place, reliance not carried by types,
+authority checks with gaps and shallow interfaces, judged against
+`/architecture-knowledge`. It stops with findings and questions in
+`architecture/audit.md`; a remedy the architect wants designed goes to
+`design-codebase-architecture`.
+
 ## `arch`: code health and architecture together
 
 CodeScene Code Health is the measurement, architectural judgement decides, and
