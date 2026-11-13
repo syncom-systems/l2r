@@ -4,6 +4,14 @@ These are instructions for coding agents (Claude Code loads them from this
 directory). They are not part of L2R the tool and nothing in the build depends
 on them.
 
+## Architecture knowledge
+
+The architectural principles (Parnas, Liskov and Zilles, Saltzer and
+Schroeder, Ousterhout) and the architect's rulings live in
+[`/architecture-knowledge`](../../architecture-knowledge/README.md), outside any
+skill. Skills refer to those files; they do not restate them. The rulings
+outrank the skills.
+
 ## `arch`: code health and architecture together
 
 CodeScene Code Health is the measurement, architectural judgement decides, and
