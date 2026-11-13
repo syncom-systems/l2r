@@ -1,4 +1,9 @@
-//! Where each component's files live: its directory follows its containment path.
+//! Where each component's files live, for `v2` models: a component's directory
+//! follows its containment path.
+//!
+//! Frozen with the `v2` profiles (audit Q4). It starts as a copy of the `v0`/`v1`
+//! layout; the two are kept apart so that a later version can change one
+//! without moving a file of the other.
 
 use std::collections::BTreeMap;
 
