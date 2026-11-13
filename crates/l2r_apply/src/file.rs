@@ -67,8 +67,14 @@ impl PrivateDir {
     /// Creates a new directory in `parent` with mode `0700`. A name already
     /// taken, by a directory, a file or a link, is never used.
     pub fn create_in(parent: &Path) -> io::Result<PrivateDir> {
+        PrivateDir::create_named(|| parent.join(format!("l2r-{}", unique())))
+    }
+
+    /// Creates the directory at the first path `name` returns that nothing
+    /// occupies.
+    fn create_named(name: impl Fn() -> PathBuf) -> io::Result<PrivateDir> {
         let path = attempt(|| {
-            let path = parent.join(format!("l2r-{}", unique()));
+            let path = name();
             fs::DirBuilder::new()
                 .mode(0o700)
                 .create(&path)
@@ -164,6 +170,7 @@ fn unique() -> String {
 mod tests {
     use super::*;
     use std::cell::Cell;
+    use std::os::unix::fs::PermissionsExt;
 
     fn taken() -> io::Error {
         io::Error::from(io::ErrorKind::AlreadyExists)
@@ -228,6 +235,41 @@ mod tests {
         assert_eq!(tries.get(), 2);
         assert_eq!(fs::read_to_string(&victim).unwrap(), "victim");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_link_or_directory_at_a_private_dir_name_is_skipped_and_never_followed() {
+        // What an attacker sharing the temporary directory could plant at the
+        // name the exporter's directory would take: a link to a directory they
+        // control, or a directory of their own.
+        let base = std::env::temp_dir().join(format!("l2r-file-unit-{}", unique()));
+        fs::create_dir(&base).unwrap();
+        let theirs = base.join("theirs");
+        fs::create_dir(&theirs).unwrap();
+        let linked = base.join("linked");
+        std::os::unix::fs::symlink(&theirs, &linked).unwrap();
+        let tries = Cell::new(0);
+        let candidates = [linked.clone(), theirs.clone(), base.join("fresh")];
+        let dir = PrivateDir::create_named(|| {
+            tries.set(tries.get() + 1);
+            candidates[tries.get() - 1].clone()
+        })
+        .unwrap();
+        assert_eq!(dir.path(), base.join("fresh"));
+        dir.create_file("Exporter.lean", b"x").unwrap();
+        assert_eq!(
+            fs::read_dir(&theirs).unwrap().count(),
+            0,
+            "nothing written into theirs"
+        );
+        let mode = fs::metadata(dir.path()).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
+        drop(dir);
+        assert!(
+            theirs.exists() && linked.exists(),
+            "planted entries are left alone"
+        );
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
