@@ -5,7 +5,7 @@ Architect: the repository owner. Date: 2026-11-13. Knowledge base: `architecture
 Evidence labels: MEASURED (deps.py, compiler, build, a command that was run), READ (`file:line`), INFERRED (chain stated), ARCHITECT (answer, date).
 Marks: PROPOSED · DECIDED (architect, date) · OPEN.
 
-**Status (2026-11-13):** the architect answered Q1–Q7 on PR #21. The decisions are quoted verbatim under [Decided](#decided) and are authoritative. Remedies are delivered by separate engineering PRs; this record changes no code.
+**Status (2026-11-13):** the architect answered Q1–Q7 on PR #21. The decisions are quoted verbatim under [Decided](#decided) and are authoritative. Remedies are delivered by separate engineering PRs; this record changes no code. Evidence gathered after the decisions is dated as such.
 
 ## Verdict
 
@@ -21,7 +21,7 @@ What does not hold:
 - **No owner for what a profile is.** A profile is a `String` (READ `l2r_model/src/architecture.rs:74`). What a profile *is*, and which names its output uses, are rewritten in each module that needs them, across `l2r_validate`, `l2r_plan` and the CLI (F8, F9, F10).
 - **The likely change multiplies the cost.** Under immutability every new behaviour is a new version. The repository added such versions on 2026-11-02, 11-03 and 11-10 (INFERRED from `git log` on `l2r_model/src/profiles.rs` and the ADRs). So the most likely change is the one these findings make expensive.
 - **The cost has already been paid once.** Commit 05e855e records a gate that had been missed (READ).
-- **Two reachable defects come from the same cause.** In each, a validated model plans Rust that is wrong (F9). One is reproduced; the other is inferred.
+- **Two reachable defects come from the same cause.** In each, a validated model plans Rust that is wrong (F9). Both were reproduced after the decisions (F9).
 
 ## Architecture as built
 
@@ -96,10 +96,10 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 | Rank | Id | One line | Reachable today? |
 |---|---|---|---|
 | 1 | F8 | What a profile is (kind, schema) is decided separately in each module | no |
-| 2 | F9 | The generated-Rust naming scheme is written in the planner and again in three places | **yes**: one reproduced, one inferred |
+| 2 | F9 | The generated-Rust naming scheme is written in the planner and again in three places | **yes**: both reproduced |
 | 3 | F10 | One `Model` type for every schema; per-version field gates are written by hand | no (missed once, 05e855e) |
 | 4 | F11 | Frozen profiles share output helpers with versions still changing | no |
-| 5 | F12 | Three mechanisms write files beside the model; one follows symlinks | **yes** (inferred) |
+| 5 | F12 | Three mechanisms write files beside the model; one follows symlinks | **yes** (reproduced) |
 | 6 | F13 | The project layout and the meaning of `check` are decided in the CLI | no |
 | 7 | F14 | Guarantees carried by `Validated` are dropped inside the planner | no |
 | 8 | F1–F7 | `l2r_apply` (carried over) | see the PR #20 record |
@@ -148,15 +148,20 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
   - READ: the copies have already drifted once. Commit 05e855e: "S020: collisions … are computed from the full set of names, not from three reserved identifiers."
   - Reachable defect 1:
     - MEASURED, with `l2r` built from this commit (`bazel build //crates/l2r_cli:l2r`): copy `examples/crossing_v1` to a scratch directory, and in its `architecture.toml` change `rust_module = "signal"` to `rust_module = "next"`. `l2r validate architecture.toml` reports "model `crossing_v1` is valid" (exit 0). `l2r preview architecture.toml` then plans a `System` struct with two fields named `next` (`next: next::State` and `next: usize`).
-    - INFERRED: Rust rejects a struct with two fields of the same name (E0124). The generated crate was not compiled.
+    - MEASURED (2026-11-13, after the decisions): `l2r approve` and `l2r generate` on that copy, then compiling `scaffold/src/lib.rs` with rustc 1.94.1 (local Homebrew, not the pinned 1.97.1), fails with `error[E0124]: field 'next' is already declared` (`crossing/mod.rs:240`). The unmodified example compiles with no error under the same rustc.
+    - INFERRED, not run: `composite/v0` also emits a `next` field beside one field per child module (READ `l2r_plan/src/profiles/composite.rs:171`), so a v0 child module named `next` would fail the same way.
     - READ: v0/v1 validation reserves only `contract_tests`, `imp` and `routes` (`l2r_validate/src/names.rs:4`). S020 exists only for v2.
-  - Reachable defect 2 (INFERRED, not run): `composite/v1` names a port's message type by the last segment of its Lean name (READ `l2r_plan/src/profiles/composite_v1.rs:111-117`). It emits one enum per Rust name and skips repeats (`:212-220`). Two ports carrying `A.Command` and `B.Command` would share one `Command` enum mirroring `A.Command`. The derived Lean uses full names (`lean_composition.rs:283-285`), so the Rust and the Lean would disagree. READ: no v0/v1 rule rejects this (`l2r_validate/src/ports.rs`, codes P001–P004 and M007).
+  - Reachable defect 2. MEASURED (2026-11-13, after the decisions), with `main`'s `l2r` and a **hand-edited inventory** (no Lean project was built):
+    - A copy of `examples/crossing_v1` gets the declarations `CrossingV1.Timer.ButtonEvent` (constructor `expired`) and `CrossingV1.Timer.timerToSignal`, and port `timer` carries that type.
+    - `l2r validate` reports the model valid.
+    - `l2r preview` plans `send_timer(&mut self, message: ButtonEvent)`, and the only `ButtonEvent` enum documents and mirrors `CrossingV1.Ports.ButtonEvent` (constructor `pressed`).
+  - The mechanism of defect 2, as first inferred: `composite/v1` names a port's message type by the last segment of its Lean name (READ `l2r_plan/src/profiles/composite_v1.rs:111-117`). It emits one enum per Rust name and skips repeats (`:212-220`). Two ports carrying `A.Command` and `B.Command` would share one `Command` enum mirroring `A.Command`. The derived Lean uses full names (`lean_composition.rs:283-285`), so the Rust and the Lean would disagree. READ: no v0/v1 rule rejects this (`l2r_validate/src/ports.rs`, codes P001–P004 and M007).
 - **Single implementation searched for:** `hop_function_name` exists but is crate-private. Nothing shared defines the `System` members. The member lists of the planner and S020 agree today (READ).
 - **Change scenario:** a new composite version adds a `System` member or renames the route functions. The planner edit is necessary. The S020 lists and `packet.rs` are SILENT edits: a missed one shows up as a rustc error in the user's crate, or as a work packet naming the wrong function. `recorder.rs` is TESTED, but only under `--config=verify`.
 - **Reachable today?** Yes, both defects above, in the frozen v0/v1 profiles. Fixing either changes what a published schema accepts or what a published profile emits. That choice is the architect's (Q2).
 - **Cost:** a validated, approved model that does not compile, or a packet that misdirects an implementer.
 - **View:** `audit_F9`
-- **Mark:** DECIDED (architect, 2026-11-13): Q2, correct both defects in place at validation time; Q3 YES. Defect 2 stays INFERRED until it is reproduced (Q2).
+- **Mark:** DECIDED (architect, 2026-11-13): Q2, correct both defects in place at validation time; Q3 YES. Defect 2 was reproduced with a hand-edited inventory after the decision (see Evidence).
 
 ### F10: One `Model` type serves every schema; which fields each schema version may use is gated by hand
 
@@ -198,7 +203,8 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
   - READ: `l2r inventory` uses `fs::write` to the fixed name `<out>.json.tmp`, then renames it (`l2r/src/inventory.rs:49-51`). `fs::write` follows a symlink at that name.
   - READ: the exporter is written to the predictable path `temp_dir()/l2r-inventory-{pid}.lean` (`inventory.rs:70`).
   - INFERRED: git stores symlinks. In a cloned project with a committed `lean-inventory.json.tmp` symlink, `l2r inventory` would truncate the link's target and write JSON into it. Hostile trees are in the project's threat model (`l2r_apply/tests/hostile.rs`).
-- **Reachable today?** Yes, as inferred. It was not run.
+  - MEASURED (2026-11-13, after the decisions), with `main`'s `l2r`: in a project made by `l2r init`, a link `lean-inventory.json.tmp -> ../victim.txt` made `l2r inventory` exit 0, write the inventory JSON into `victim.txt`, and leave `lean-inventory.json` itself a link to it. The predictable exporter path was not exercised.
+- **Reachable today?** Yes (MEASURED, above).
 - **Scope note:** G1 covers the output tree only (`docs/generation-boundary.md:38`), so this does not breach a stated guarantee. Whether files written beside the model need the same rule is the architect's question (Q5).
 - **View:** `audit_F12`
 - **Mark:** DECIDED (architect, 2026-11-13): Q5, one trustworthy file-writing mechanism; each operation keeps its own authorization policy (inventory export needs no generation approval). Highest priority.
