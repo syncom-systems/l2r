@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use l2r_model::{Component, Feature, Model, Profile, SUPPORTED_SCHEMAS, Schema, profiles};
+use l2r_model::{Component, Feature, Model, Profile, SUPPORTED_SCHEMAS, Schema, System, profiles};
 
 use crate::diagnostic::Findings;
 use crate::names;
