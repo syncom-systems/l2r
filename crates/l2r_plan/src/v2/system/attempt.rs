@@ -4,6 +4,7 @@
 //! A delivery steps the machine, carries its output along every route, and is
 //! performed only if every receiver has room for everything it would be sent.
 
+use l2r_model::rust_names::composite_v2;
 use l2r_validate::flat::{Flat, Leaf, Target};
 
 use super::upper;
@@ -15,7 +16,12 @@ pub(super) fn dispatch(flat: &Flat) -> String {
         .leaves
         .iter()
         .enumerate()
-        .map(|(index, leaf)| format!("            {index} => self.attempt_{}(),\n", leaf.id))
+        .map(|(index, leaf)| {
+            format!(
+                "            {index} => self.{}(),\n",
+                composite_v2::Machine(&leaf.id).attempt()
+            )
+        })
         .collect();
     [
         "    fn attempt(&mut self, machine: usize) -> Attempt {\n        match machine {\n",
@@ -50,8 +56,11 @@ fn attempt(generator: &Gen<'_>, leaf: &Leaf) -> String {
 fn step(generator: &Gen<'_>, leaf: &Leaf) -> String {
     let id = &leaf.id;
     let module = generator.machine_module(id);
+    let attempt = composite_v2::Machine(id).attempt();
+    let inbox = composite_v2::Machine(id).inbox();
+    let state = composite_v2::Machine(id).state();
     format!(
-        "    fn attempt_{id}(&mut self) -> Attempt {{\n        let input = match self.{id}_inbox.peek() {{\n            Some(input) => input,\n            None => return Attempt::Idle,\n        }};\n        let (state, output) = {module}::step(self.{id}_state, input);\n"
+        "    fn {attempt}(&mut self) -> Attempt {{\n        let input = match self.{inbox}.peek() {{\n            Some(input) => input,\n            None => return Attempt::Idle,\n        }};\n        let (state, output) = {module}::step(self.{state}, input);\n"
     )
 }
 
@@ -130,15 +139,17 @@ fn commit(leaf: &Leaf) -> String {
         })
         .collect();
     format!(
-        "        let _ = self.{id}_inbox.pop();\n        self.{id}_state = state;\n{pushes}        Attempt::Delivered\n    }}\n\n"
+        "        let _ = self.{}.pop();\n        self.{} = state;\n{pushes}        Attempt::Delivered\n    }}\n\n",
+        composite_v2::Machine(id).inbox(),
+        composite_v2::Machine(id).state()
     )
 }
 
 /// The field of the buffer a route's messages go to.
 fn buffer(target: &Target) -> String {
     match target {
-        Target::Leaf(id) => format!("{id}_inbox"),
-        Target::Sink(port) => format!("{port}_outbox"),
+        Target::Leaf(id) => composite_v2::Machine(id).inbox(),
+        Target::Sink(port) => composite_v2::Port(port).outbox(),
     }
 }
 

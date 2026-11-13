@@ -1,7 +1,7 @@
 //! The route functions of the `System`: for every route of every machine, the
 //! translations a message passes on that route, composed.
 
-use l2r_model::rust_names;
+use l2r_model::rust_names::composite_v2;
 use l2r_validate::flat::{FlatRoute, Hop, HopKind, Leaf, Target};
 
 use super::{receiver, via};
@@ -24,7 +24,7 @@ pub(super) fn route_functions(generator: &Gen<'_>) -> String {
 
 /// The function composing the translations of one route.
 fn route_function(generator: &Gen<'_>, leaf: &Leaf, index: usize, route: &FlatRoute) -> String {
-    let ty = rust_names::type_name(&leaf.id);
+    let ty = composite_v2::type_prefix(&leaf.id);
     let body = route_expr(generator, &route.hops, "output", "    ");
     let allow = if ends_in_a_port(route) {
         "#[allow(clippy::manual_map)]\n"
@@ -44,8 +44,8 @@ fn route_function(generator: &Gen<'_>, leaf: &Leaf, index: usize, route: &FlatRo
 /// The type of the messages a route delivers.
 fn element(target: &Target) -> String {
     match target {
-        Target::Leaf(id) => format!("{}Input", rust_names::type_name(id)),
-        Target::Sink(port) => format!("{}Message", rust_names::type_name(port)),
+        Target::Leaf(id) => format!("{}Input", composite_v2::type_prefix(id)),
+        Target::Sink(port) => format!("{}Message", composite_v2::type_prefix(port)),
     }
 }
 

@@ -253,7 +253,16 @@ Mark: PROPOSED
 |---|---|---|
 | 1 | M2 `composite_v0` and `composite_v1`, used by the v0/v1 planners and by validation, with S021 and P005, and the ADR-0005 D9 clarification comment | The architect's priority: "first … invalid v1 input cases". Implemented on branch `fix/generated-name-conflicts` |
 | 2a | M1 and I3 (`Validated::schema`, `Validated::profile`). Validate, the planner (one planner per schema, chosen by an exhaustive `match`), Lean-composition and conformance dispatch, and the CLI's `render` moved onto them | "then schema/profile/naming ownership". Branch `refactor/profile-type`, stacked on step 1 |
-| 2b | M2 `composite_v2` replaces S020's lists, `packet.rs` and `recorder.rs` | Q3's remaining consumers |
+| 2b | M2 `composite_v2` replaces S020's lists, `packet.rs` and `recorder.rs` | Q3's remaining consumers. Branch `refactor/v2-generated-names`, stacked on 2a |
+
+As implemented (step 2b):
+- **No checked set for v2.** `composite_v2` derives names from typed `Machine`, `Port` and `Edge` values. S020's conflict search and its diagnostics are a published rule of schema `v2`, so the rule is kept and now asks these types for the names.
+- **The users:**
+  - the planner's `System`, attempts and buffers;
+  - the conformance recorder;
+  - work packets;
+  - `routes.rs` hop functions, through `Hop::function`.
+- **Which hops a composite's `routes.rs` implements** has one definition, `Flat::hops_owned_by`, which the planner and packets share.
 
 ## Questions for the architect
 

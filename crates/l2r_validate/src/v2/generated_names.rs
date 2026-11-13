@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use l2r_model::Model;
-use l2r_model::rust_names;
+use l2r_model::rust_names::{self, composite_v2};
 
 use super::{edge_subject, is_machine, port_subject, root_id};
 use crate::diagnostic::Findings;
@@ -45,6 +45,8 @@ fn check_type_prefixes(
         .map(|(s, id)| (s, *id))
         .chain(root_ports.iter().map(|(s, id, _)| (s, *id)));
     for (subject, id) in ids {
+        // `None` for an identifier S002 already rejects; the empty prefix keeps
+        // this rule's findings for such models what they always were.
         let type_name = rust_names::rust_type_name(id).unwrap_or_default();
         if let Some(other) = types.insert(type_name.clone(), subject) {
             findings.error(
@@ -56,41 +58,20 @@ fn check_type_prefixes(
     }
 }
 
-/// What the generated `System` names for itself.
-const SYSTEM_OWN_MEMBERS: &[&str] = &["attempt", "is_settled", "new", "next", "run", "step_once"];
-
-/// The `System` members generated for machine `id`.
-fn machine_members(id: &str) -> Vec<String> {
-    vec![
-        format!("{id}_state"),
-        format!("{id}_inbox"),
-        format!("attempt_{id}"),
-    ]
-}
-
-/// The `System` members generated for root port `id`.
-fn root_port_members(id: &str, is_out: bool) -> Vec<String> {
-    if is_out {
-        vec![format!("{id}_outbox"), format!("take_{id}")]
-    } else {
-        vec![format!("send_{id}")]
-    }
-}
-
 /// Every method and field name of the generated `System`, with who it is for.
 fn system_members<'a>(
     machines: &'a [(String, &str)],
     root_ports: &'a [(String, &str, bool)],
 ) -> Vec<(String, &'a str)> {
     let of_machines = machines.iter().flat_map(|(subject, id)| {
-        let members = machine_members(id).into_iter();
+        let members = composite_v2::Machine(id).members().into_iter();
         members.map(move |name| (name, subject.as_str()))
     });
     let of_root_ports = root_ports.iter().flat_map(|(subject, id, is_out)| {
-        let members = root_port_members(id, *is_out).into_iter();
+        let members = composite_v2::Port(id).members(*is_out).into_iter();
         members.map(move |name| (name, subject.as_str()))
     });
-    let own = SYSTEM_OWN_MEMBERS
+    let own = composite_v2::SYSTEM_MEMBERS
         .iter()
         .map(|name| (name.to_string(), "the generated `System` itself"));
     of_machines.chain(of_root_ports).chain(own).collect()
@@ -118,11 +99,12 @@ fn check_system_members(
 /// In `routes.rs` an edge is the function `<id>` and an input port `port_<id>`.
 fn check_route_functions(model: &Model, findings: &mut Findings) {
     for edge in &model.messages {
-        let port = edge
-            .id
-            .strip_prefix("port_")
-            .filter(|port| model.ports.iter().any(|p| p.id == *port));
-        if let Some(port) = port {
+        let function = composite_v2::Edge(&edge.id).function();
+        let port = model
+            .ports
+            .iter()
+            .find(|p| composite_v2::Port(&p.id).function() == function);
+        if let Some(port) = port.map(|p| &p.id) {
             findings.error(
                 "L2R-S020",
                 edge_subject(edge),

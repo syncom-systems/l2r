@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use l2r_model::{Component, Model, Profile};
 use l2r_validate::Validated;
-use l2r_validate::flat::{Flat, Hop, HopKind};
+use l2r_validate::flat::{Flat, Hop};
 
 use crate::plan::Artifact;
 use crate::{PlanError, layout};
@@ -90,31 +90,13 @@ impl<'a> Gen<'a> {
     pub fn hop_function(&self, hop: &Hop) -> String {
         let mut path = self.modules_below_root(&hop.owner);
         path.push("routes");
-        let name = hop_function_name(hop);
+        let name = hop.function();
         format!("{}::{name}", path.join("::"))
     }
 
     /// The hops implemented in `composite`'s `routes.rs`, by function name.
     pub fn hops_owned_by(&self, composite: &str) -> Vec<&'a Hop> {
-        let mut seen = BTreeSet::new();
-        let mut owned: Vec<&Hop> = self
-            .flat
-            .leaves
-            .iter()
-            .flat_map(|l| l.routes.iter().flat_map(|r| r.hops.iter()))
-            .chain(self.flat.inputs.iter().flat_map(|i| i.hops.iter()))
-            .filter(|h| h.owner == composite && seen.insert(hop_function_name(h)))
-            .collect();
-        owned.sort_by_key(|h| (h.kind == HopKind::Port, h.id.clone()));
-        owned
-    }
-}
-
-/// `filter_to_level` for an edge, `port_reading` for an input port.
-pub(crate) fn hop_function_name(hop: &Hop) -> String {
-    match hop.kind {
-        HopKind::Edge => hop.id.clone(),
-        HopKind::Port => format!("port_{}", hop.id),
+        self.flat.hops_owned_by(composite)
     }
 }
 

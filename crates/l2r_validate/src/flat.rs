@@ -10,6 +10,7 @@
 
 use std::collections::BTreeMap;
 
+use l2r_model::rust_names::composite_v2;
 use l2r_model::{Component, Kind, MessageEdge, Model, Port, Schema};
 
 /// The flat network of a `v2` model.
@@ -91,6 +92,16 @@ pub struct Hop {
     pub result: String,
 }
 
+impl Hop {
+    /// The `routes.rs` function implementing this hop.
+    pub fn function(&self) -> String {
+        match self.kind {
+            HopKind::Edge => composite_v2::Edge(&self.id).function(),
+            HopKind::Port => composite_v2::Port(&self.id).function(),
+        }
+    }
+}
+
 /// The two kinds of hop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HopKind {
@@ -101,6 +112,21 @@ pub enum HopKind {
 }
 
 impl Flat {
+    /// The hops whose translation composite `composite`'s `routes.rs`
+    /// implements, one per function, edges first, each kind by id.
+    pub fn hops_owned_by(&self, composite: &str) -> Vec<&Hop> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut owned: Vec<&Hop> = self
+            .leaves
+            .iter()
+            .flat_map(|l| l.routes.iter().flat_map(|r| r.hops.iter()))
+            .chain(self.inputs.iter().flat_map(|i| i.hops.iter()))
+            .filter(|h| h.owner == composite && seen.insert(h.function()))
+            .collect();
+        owned.sort_by_key(|h| (h.kind == HopKind::Port, h.id.clone()));
+        owned
+    }
+
     /// Scheduler index of a machine.
     pub fn leaf_index(&self, id: &str) -> Option<usize> {
         self.leaves.iter().position(|l| l.id == id)
