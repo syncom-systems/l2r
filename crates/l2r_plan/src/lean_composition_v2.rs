@@ -13,22 +13,11 @@ use l2r_validate::Validated;
 use l2r_validate::flat::{Flat, FlatInput, Hop, HopKind, Leaf, Sink, Target};
 
 use crate::PlanError;
-use crate::lean_composition::{SEMANTICS_VERSION_V1, semantics_digest_v1};
+use crate::lean_identity::{
+    LEAN_COMPOSITION_FORMAT_V2, PORTS_SCHEDULER_VERSION, SEMANTICS_VERSION_V1,
+    ports_scheduler_digest, semantics_digest_v1,
+};
 use crate::plan::GeneratorIdentity;
-
-/// Format identifier of the derived file for `v2` (hierarchical) models.
-pub const LEAN_COMPOSITION_FORMAT_V2: &str = "l2r.lean-composition/v2";
-
-/// Identity of the Lean model of the `composite/v2` scheduler
-/// (`lean/L2R/Async1Ports.lean`).
-pub const PORTS_SCHEDULER_VERSION: &str = "l2r.async1-ports/v1";
-
-const PORTS_SCHEDULER_SOURCE: &str = include_str!("../../../lean/L2R/Async1Ports.lean");
-
-/// Digest of the scheduler model source this build derives against.
-pub fn ports_scheduler_digest() -> String {
-    digest::sha256(PORTS_SCHEDULER_SOURCE.as_bytes())
-}
 
 /// A Lean function over the network's children: one arm per child.
 fn by_index(header: &str, arms: &[String]) -> String {

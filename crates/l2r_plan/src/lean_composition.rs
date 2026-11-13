@@ -17,41 +17,12 @@ use l2r_model::{Component, Kind, Model, Profile, Schema, digest};
 use l2r_validate::Validated;
 
 use crate::PlanError;
+use crate::lean_identity::{
+    LEAN_COMPOSITION_FORMAT, LEAN_COMPOSITION_FORMAT_V1, SEMANTICS_VERSION, SEMANTICS_VERSION_V1,
+    semantics_digest, semantics_digest_v1,
+};
 use crate::plan::GeneratorIdentity;
 use crate::profiles::composite::is_machine;
-
-/// Format identifier of the derived file for `composite/v0` composites.
-pub const LEAN_COMPOSITION_FORMAT: &str = "l2r.lean-composition/v0";
-
-/// Format identifier of the derived file for `composite/v1` composites: the
-/// network additionally records mailbox capacities and typed ports, and is wired
-/// to `l2r.async/v1`. `v0` output is unchanged.
-pub const LEAN_COMPOSITION_FORMAT_V1: &str = "l2r.lean-composition/v1";
-
-/// Identity of the `l2r.async/v1` semantics (`lean/L2R/Async1.lean`).
-pub const SEMANTICS_VERSION_V1: &str = "l2r.async/v1";
-
-const SEMANTICS_SOURCE_V1: &str = include_str!("../../../lean/L2R/Async1.lean");
-
-/// Digest of the `l2r.async/v1` semantics source this build derives against.
-pub fn semantics_digest_v1() -> String {
-    digest::sha256(SEMANTICS_SOURCE_V1.as_bytes())
-}
-
-/// Identity of the semantics the derived network is wired to. It names the
-/// version of `lean/L2R/Async.lean`; a behavioural change there is a new
-/// version with a new file, never an edit under the same name.
-pub const SEMANTICS_VERSION: &str = "l2r.async/v0";
-
-/// The exact text of the semantics file the derived network imports. Its digest
-/// is recorded in every derivation, so editing the semantics invalidates every
-/// derived file (and the freshness test) until it is derived again and reviewed.
-const SEMANTICS_SOURCE: &str = include_str!("../../../lean/L2R/Async.lean");
-
-/// Digest of the semantics source this build of L2R derives against.
-pub fn semantics_digest() -> String {
-    digest::sha256(SEMANTICS_SOURCE.as_bytes())
-}
 
 /// The Lean module path of the derived file for `model`, relative to its root.
 pub fn lean_composition_path(model: &Model) -> String {
