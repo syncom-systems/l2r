@@ -16,8 +16,8 @@ Agents are trained mostly on ordinary code, so an agent's sense of what is "norm
 |---|---|---|---|
 | [parnas-1972-information-hiding](principles/parnas-1972-information-hiding.md) | Decompose by the design decisions each module hides, not by processing steps | Deciding what the modules are; judging an interface; a decision found in more than one place | approved |
 | [parnas-1979-uses-hierarchy](principles/parnas-1979-uses-hierarchy.md) | Design the "uses" relation; keep it loop-free so each level is a usable subset | Deciding which module may rely on which; layering; a mutual dependency | approved |
-| [liskov-zilles-1974-abstract-data-types](principles/liskov-zilles-1974-abstract-data-types.md) | A type is defined by its operations; its representation is inaccessible outside them | Deciding what a type exposes; carrying a guarantee in a type; splitting a correctness argument | draft |
-| [saltzer-schroeder-1975-protection-principles](principles/saltzer-schroeder-1975-protection-principles.md) | Design principles for mechanisms that guard authority: economy of mechanism, fail-safe defaults, complete mediation, least privilege, … | Designing any boundary that decides what may be read, written, executed or overwritten | draft |
+| [liskov-zilles-1974-abstract-data-types](principles/liskov-zilles-1974-abstract-data-types.md) | A type is defined by its operations; its representation is inaccessible outside them | Deciding what a type exposes; carrying a guarantee in a type; splitting a correctness argument | approved |
+| [saltzer-schroeder-1975-protection-principles](principles/saltzer-schroeder-1975-protection-principles.md) | Design principles for mechanisms that guard authority: economy of mechanism, fail-safe defaults, complete mediation, least privilege, … | Designing any boundary that decides what may be read, written, executed or overwritten | approved |
 | [ousterhout-deep-modules](principles/ousterhout-deep-modules.md) | A module's interface should be much simpler than what it provides | Judging an interface; deciding whether a module earns its existence | provisional |
 
 ## How a principle file is written
