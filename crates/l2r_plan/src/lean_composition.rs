@@ -13,7 +13,7 @@
 //! the digests of the model and inventory it was derived from, and is not part
 //! of any generation plan, so deriving it never changes a plan digest.
 
-use l2r_model::{Component, Kind, Model, Profile, Schema, digest};
+use l2r_model::{Component, Kind, MessageEdge, Model, Profile, Schema, digest};
 use l2r_validate::Validated;
 
 use crate::PlanError;
@@ -118,34 +118,9 @@ fn network(
         )));
     }
     let n = children.len();
-    let index = |id: &str| children.iter().position(|c| c.id == id);
     let edges = model.edges_within(&composite.id);
 
-    let mut out = format!(
-        "/-!\n# Composite `{id}` ({name})\n\n\
-         The structure the architecture model approves, as an `L2R.Async.Network`.\n\
-         Children, by scheduler index (identifier order):\n\n",
-        id = composite.id,
-        name = composite.name,
-    );
-    for (i, child) in children.iter().enumerate() {
-        out.push_str(&format!("- {i}: `{}`\n", child.id));
-    }
-    out.push_str("\nApproved edges, in routing order:\n\n");
-    if edges.is_empty() {
-        out.push_str("- none\n");
-    }
-    for edge in &edges {
-        out.push_str(&format!(
-            "- `{}`: `{}` → `{}` via `{}`\n",
-            edge.id, edge.from, edge.to, edge.translation
-        ));
-    }
-    out.push_str("-/\n");
-    out.push_str(&format!(
-        "namespace L2RDerived.«{}».«{}»\n\n",
-        model.system.id, composite.id
-    ));
+    let mut out = network_header(model, composite, &children, &edges);
 
     let behavior = |c: &Component| {
         c.behavior
@@ -184,8 +159,59 @@ fn network(
         &|i| behaviors[i].step.clone(),
     ));
 
-    let mut routes = Vec::with_capacity(n);
-    for child in &children {
+    let routes = route_bodies(composite, &children, &edges)?;
+    out.push_str(&by_child(
+        &format!("def route : (c : Fin {n}) → Output c → List ((d : Fin {n}) × Input d)"),
+        &|i| routes[i].clone(),
+    ));
+    out.push_str(&network_tail(validated, composite, &children)?);
+    Ok(out)
+}
+
+/// The doc comment naming the children and edges, and the namespace.
+fn network_header(
+    model: &Model,
+    composite: &Component,
+    children: &[&Component],
+    edges: &[&MessageEdge],
+) -> String {
+    let mut out = format!(
+        "/-!\n# Composite `{id}` ({name})\n\n\
+         The structure the architecture model approves, as an `L2R.Async.Network`.\n\
+         Children, by scheduler index (identifier order):\n\n",
+        id = composite.id,
+        name = composite.name,
+    );
+    for (i, child) in children.iter().enumerate() {
+        out.push_str(&format!("- {i}: `{}`\n", child.id));
+    }
+    out.push_str("\nApproved edges, in routing order:\n\n");
+    if edges.is_empty() {
+        out.push_str("- none\n");
+    }
+    for edge in edges {
+        out.push_str(&format!(
+            "- `{}`: `{}` → `{}` via `{}`\n",
+            edge.id, edge.from, edge.to, edge.translation
+        ));
+    }
+    out.push_str("-/\n");
+    out.push_str(&format!(
+        "namespace L2RDerived.«{}».«{}»\n\n",
+        model.system.id, composite.id
+    ));
+    out
+}
+
+/// The body of `route` for each child: its outputs along its approved edges.
+fn route_bodies(
+    composite: &Component,
+    children: &[&Component],
+    edges: &[&MessageEdge],
+) -> Result<Vec<String>, PlanError> {
+    let index = |id: &str| children.iter().position(|c| c.id == id);
+    let mut routes = Vec::with_capacity(children.len());
+    for child in children {
         let parts = edges
             .iter()
             .filter(|e| e.from == child.id)
@@ -208,21 +234,27 @@ fn network(
             format!("fun o =>\n    {}", parts.join(" ++\n    "))
         });
     }
-    out.push_str(&by_child(
-        &format!("def route : (c : Fin {n}) → Output c → List ((d : Fin {n}) × Input d)"),
-        &|i| routes[i].clone(),
-    ));
-    out.push_str(&match validated.profile(&composite.id) {
-        Profile::CompositeV1 => v1_tail(model, composite, &children, n),
-        Profile::CompositeV0 => v0_tail(model, composite, n),
+    Ok(routes)
+}
+
+/// The network itself, by the composite's profile.
+fn network_tail(
+    validated: &Validated,
+    composite: &Component,
+    children: &[&Component],
+) -> Result<String, PlanError> {
+    let model = validated.model();
+    let n = children.len();
+    match validated.profile(&composite.id) {
+        Profile::CompositeV1 => Ok(v1_tail(model, composite, children, n)),
+        Profile::CompositeV0 => Ok(v0_tail(model, composite, n)),
         other @ (Profile::TransitionCoreV0 | Profile::TransitionCoreV1 | Profile::CompositeV2) => {
-            return Err(PlanError(format!(
+            Err(PlanError(format!(
                 "`{}` is not a v0/v1 composite",
                 other.id()
-            )));
+            )))
         }
-    });
-    Ok(out)
+    }
 }
 
 /// The `L2R.Async.Network` of a `composite/v0`.
