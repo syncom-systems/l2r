@@ -3,7 +3,12 @@ load("//bazel:rust.bzl", "l2r_rust_library", "l2r_rust_test")
 l2r_rust_library(
     name = "l2r_validate",
     srcs = glob(["src/**/*.rs"]),
-    visibility = ["//visibility:public"],
+    # Used by the crates above it only (model < validate < plan < apply < cli).
+    visibility = [
+        "//crates/l2r_apply:__pkg__",
+        "//crates/l2r_cli:__pkg__",
+        "//crates/l2r_plan:__pkg__",
+    ],
     deps = ["//crates/l2r_model"],
 )
 

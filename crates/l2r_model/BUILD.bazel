@@ -3,7 +3,8 @@ load("//bazel:rust.bzl", "l2r_rust_library", "l2r_rust_test")
 l2r_rust_library(
     name = "l2r_model",
     srcs = glob(["src/**/*.rs"]),
-    visibility = ["//visibility:public"],
+    # The bottom of the uses relation: every crate may use it.
+    visibility = ["//crates:__subpackages__"],
     deps = [
         "@crates//:serde",
         "@crates//:serde_json",

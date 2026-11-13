@@ -73,34 +73,13 @@ impl Session {
 pub fn validated(model_path: &Path) -> Result<Validated, SessionError> {
     let model = load::load_model(model_path).map_err(|e| SessionError::Load(e.to_string()))?;
     // Path fields are validated before they are used to open anything.
-    if let Err(diagnostics) = validate_paths(&model) {
+    if let Err(diagnostics) = l2r_validate::validate_system_paths(&model) {
         return Err(SessionError::Invalid(diagnostics));
     }
     let inventory_path = base_dir(model_path).join(&model.system.lean_inventory);
     let inventory =
         load::load_inventory(&inventory_path).map_err(|e| SessionError::Load(e.to_string()))?;
     validate(&model, &inventory).map_err(SessionError::Invalid)
-}
-
-fn validate_paths(model: &Model) -> Result<(), Vec<Diagnostic>> {
-    let system = &model.system;
-    let unsafe_paths: Vec<Diagnostic> = [
-        ("system.lean_inventory", &system.lean_inventory),
-        ("system.output_dir", &system.output_dir),
-    ]
-    .into_iter()
-    .filter(|(_, path)| !l2r_validate::names::is_safe_relative_path(path))
-    .map(|(field, path)| Diagnostic {
-        code: "L2R-S013",
-        subject: field.into(),
-        message: format!("`{path}` must be a relative path without `..` or hidden segments"),
-    })
-    .collect();
-    if unsafe_paths.is_empty() {
-        Ok(())
-    } else {
-        Err(unsafe_paths)
-    }
 }
 
 fn base_dir(model_path: &Path) -> PathBuf {

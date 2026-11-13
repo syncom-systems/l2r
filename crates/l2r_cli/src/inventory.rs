@@ -1,9 +1,9 @@
 //! `l2r inventory`: the declaration inventory a Lake project exports.
 
-use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
+use l2r_apply::file::{self, PrivateDir};
 use l2r_model::{Inventory, load};
 use l2r_validate::names;
 
@@ -46,10 +46,7 @@ fn replace_inventory(
     // Only a well-formed inventory replaces the previous one.
     let parsed: Inventory = load::parse_inventory(&text)
         .map_err(|e| format!("the exporter's output is not an inventory: {e}\n"))?;
-    let staged = out.with_extension("json.tmp");
-    fs::write(&staged, &text)
-        .and_then(|()| fs::rename(&staged, out))
-        .map_err(|e| format!("{}: {e}\n", out.display()))?;
+    file::replace(out, text.as_bytes()).map_err(|e| format!("{}: {e}\n", out.display()))?;
     Ok(format!(
         "wrote {} ({}, {} declarations, Lean {})\n\
          the inventory's digest is part of every plan: preview and approve again before generating\n",
@@ -65,13 +62,15 @@ fn is_lake_project(dir: &Path) -> bool {
 }
 
 /// Builds the Lake project and returns what the exporter prints for `roots`.
-/// The exporter is a temporary file for the duration of the run.
+/// The exporter is written to a fresh private directory, so no other user can
+/// replace the program `lean` runs; the directory is removed afterwards.
 fn export(project: &Path, v0: bool, roots: &[String]) -> Result<String, String> {
-    let exporter = std::env::temp_dir().join(format!("l2r-inventory-{}.lean", std::process::id()));
-    fs::write(&exporter, EXPORTER).map_err(|e| format!("{}: {e}\n", exporter.display()))?;
-    let result = run_exporter(project, &exporter, v0, roots);
-    let _ = fs::remove_file(&exporter);
-    result
+    let temp = std::env::temp_dir();
+    let dir = PrivateDir::create_in(&temp).map_err(|e| format!("{}: {e}\n", temp.display()))?;
+    let exporter = dir
+        .create_file("Exporter.lean", EXPORTER.as_bytes())
+        .map_err(|e| format!("{}: {e}\n", dir.path().display()))?;
+    run_exporter(project, &exporter, v0, roots)
 }
 
 /// Runs `lake` with `args` in `project`.

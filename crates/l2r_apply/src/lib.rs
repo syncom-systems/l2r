@@ -7,6 +7,7 @@
 //! validated [`l2r_model::RelPath`]. Generated files are replaced only while they
 //! still match what L2R wrote; implementation files are created once and never
 //! touched again. See [`transaction`] for the exact interruption guarantees.
+//! Files outside the output tree are written through [`file`].
 
 #[cfg(not(unix))]
 compile_error!(
@@ -17,6 +18,7 @@ pub mod approval;
 mod assess;
 mod check;
 pub mod fault;
+pub mod file;
 pub mod journal;
 pub mod lock;
 pub mod transaction;

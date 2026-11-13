@@ -5,7 +5,11 @@ l2r_rust_library(
     srcs = glob(["src/**/*.rs"]),
     # The semantics file whose digest every derived composition records.
     compile_data = ["//lean:sources"],
-    visibility = ["//visibility:public"],
+    # Used by the crates above it only (model < validate < plan < apply < cli).
+    visibility = [
+        "//crates/l2r_apply:__pkg__",
+        "//crates/l2r_cli:__pkg__",
+    ],
     deps = [
         "//crates/l2r_model",
         "//crates/l2r_validate",

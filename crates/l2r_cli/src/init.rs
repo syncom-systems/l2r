@@ -2,9 +2,10 @@
 
 use l2r_model::rust_names;
 use std::fs;
-use std::io::{self, Write as _};
+use std::io;
 use std::path::{Path, PathBuf};
 
+use l2r_apply::file;
 use l2r_validate::names;
 
 use crate::commands::Outcome;
@@ -296,17 +297,13 @@ fn workspace_files(project: &NewProject, source: &L2rSource) -> [(String, String
     ]
 }
 
-/// Creates the file `target` with `text`, and its directory. Fails when the
-/// file exists.
+/// Creates the file `target` with `text`, and its directory. Fails when
+/// anything, a symbolic link included, is at `target`.
 fn create_file(target: &Path, text: &str) -> io::Result<()> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(target)?;
-    file.write_all(text.as_bytes())
+    file::create(target, text.as_bytes())
 }
 
 impl NewProject {

@@ -199,3 +199,50 @@ and never repairs the model.
 
 The precise guarantees, assumptions and limits of writing are in
 [`generation-boundary.md`](generation-boundary.md).
+
+## Project layout and `l2r check`
+
+The `l2r` command is the one supported front end. It, not a library, decides
+where a project's files are and what `l2r check` means. The libraries
+(`l2r_validate`, `l2r_plan`, `l2r_apply`) are not a public API.
+
+**Layout.** Every path is relative to the directory of the model file:
+
+| File | Where | Decided by |
+| --- | --- | --- |
+| Model | the path given to `l2r` (e.g. `architecture.toml`) | the caller |
+| Lean inventory | `system.lean_inventory` | the model (rule S013: relative, no `..` or hidden segments) |
+| Output tree | `system.output_dir` | the model (rule S013) |
+| Approval record | `<model stem>.approval.json` beside the model (`architecture.toml` → `architecture.approval.json`) | the CLI (`crates/l2r_cli/src/session.rs`) |
+| Lock and journal | inside the output tree | `l2r_apply` |
+
+The CLI checks rule S013 before it opens the inventory, and validation checks
+it again with every other rule. Both use one definition
+(`l2r_validate::validate_system_paths`). The approval record's name is also
+written in `bazel/l2r.bzl` and in `l2r_apply`'s crash-test binary. Neither can
+use the CLI's code (one is Starlark, the other sits below the CLI). A change of
+the name must change all three.
+
+**`l2r check <model>`** fails, listing every finding, when any of these holds:
+
+1. the model or the inventory does not load, the model is invalid, or it cannot be planned;
+2. the output tree does not exist;
+3. a planned file (generated or implementation) is missing, a generated file is
+   out of date with the plan or no longer planned, or an implementation file is
+   no longer planned;
+4. the tree has a conflict generation would refuse: a symbolic link, a foreign
+   or edited file where a generated one belongs, an invalid lock, a pending
+   journal of an interrupted run, … (the full list is G4 in
+   [`generation-boundary.md`](generation-boundary.md));
+5. there is no lock, or it records another plan;
+6. an implementation file exceeds its component's
+   `implementation_budget_lines`;
+7. there is no approval record, it cannot be read or has an unsupported format,
+   or it is not for the current plan digest (the model, the inventory, the
+   generator, a profile or the planned files changed).
+
+Items 2 to 6 are `l2r_apply::check`. Item 7 is added by the CLI. A program that
+calls `l2r_apply::check` directly gets no approval check. `l2r_check_test`
+(`bazel/l2r.bzl`) runs `l2r check` on a copy of the project that Bazel makes
+with symbolic links resolved, so a link in the output tree is not seen there;
+run `l2r check` in the project itself for that.

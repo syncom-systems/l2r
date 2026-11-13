@@ -236,30 +236,8 @@ pub fn from_json(text: &str) -> Result<Approval, String> {
     serde_json::from_str(text).map_err(|e| e.to_string())
 }
 
-/// Writes a record to `path` atomically: an exclusively created temporary in the
-/// same directory, renamed over `path`. A symbolic link planted at `path` is
-/// replaced, never followed.
+/// Writes a record to `path` atomically (see [`crate::file::replace`]). A
+/// symbolic link planted at `path` is replaced, never followed.
 pub fn write_record(path: &std::path::Path, approval: &Approval) -> std::io::Result<()> {
-    use std::io::Write;
-    let dir = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(std::path::Path::new("."));
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let temporary = dir.join(format!(".{name}.{}.tmp", std::process::id()));
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)?;
-    let written = file
-        .write_all(to_json(approval).as_bytes())
-        .and_then(|()| file.sync_all());
-    if let Err(e) = written.and_then(|()| std::fs::rename(&temporary, path)) {
-        let _ = std::fs::remove_file(&temporary);
-        return Err(e);
-    }
-    Ok(())
+    crate::file::replace(path, to_json(approval).as_bytes())
 }

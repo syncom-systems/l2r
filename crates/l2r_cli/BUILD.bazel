@@ -10,6 +10,7 @@ l2r_rust_binary(
         "//tools/lean_inventory:exporter",
     ],
     crate_root = "src/main.rs",
+    # The public integration entrypoint: `@l2r//crates/l2r_cli:l2r`.
     visibility = ["//visibility:public"],
     deps = [
         "//crates/l2r_apply",

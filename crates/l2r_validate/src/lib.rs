@@ -23,6 +23,19 @@ use resolved::Resolution;
 
 use l2r_model::{Inventory, Model, Schema};
 
+/// Rule S013 alone: every path in `[system]` is relative and cannot escape
+/// the model's directory. Run it before opening a file those paths name;
+/// [`validate`] applies it again with every other rule.
+pub fn validate_system_paths(model: &Model) -> Result<(), Vec<Diagnostic>> {
+    let mut findings = diagnostic::Findings::default();
+    structure::check_paths(&model.system, &mut findings);
+    if findings.is_empty() {
+        Ok(())
+    } else {
+        Err(findings.into_sorted())
+    }
+}
+
 /// Validates `model` against `inventory`.
 ///
 /// Both inputs are canonicalized first, so the result does not depend on the
