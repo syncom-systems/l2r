@@ -148,10 +148,10 @@ the architecture model changed, until the new plan has been previewed and approv
 | `docs/model-reference.md` | Model schema, profiles, validation rules, write semantics |
 | `docs/generation-boundary.md` | Exact write guarantees, threat model, limits, and the tests behind them |
 | `docs/verification.md` | Kinds of evidence, the verification route, and what is and is not proved |
-
-The crates form one order, `l2r_model` < `l2r_validate` < `l2r_plan` < `l2r_apply` < `l2r_cli`. Each library is visible in Bazel only to the crates above it, and `l2r_testing` only to the crates' tests, so a dependency against the order does not build. The supported entrypoints for other workspaces are `@l2r//crates/l2r_cli:l2r`, the macros in `@l2r//bazel:l2r.bzl` and `@l2r//tools/lean:bin_path`; the libraries are not a public API.
 | `docs/release-notes.md` | What each release contains; proved, tested and assumed, side by side |
 | `.claude/skills` | Instructions for coding agents working on L2R itself (not part of the tool) |
+
+The crates form one order, `l2r_model` < `l2r_validate` < `l2r_plan` < `l2r_apply` < `l2r_cli`. Each library is visible in Bazel only to the crates above it, and `l2r_testing` only to the crates' tests, so a dependency against the order does not build. The supported entrypoints for other workspaces are `@l2r//crates/l2r_cli:l2r`, the macros in `@l2r//bazel:l2r.bzl` and `@l2r//tools/lean:bin_path`; the libraries are not a public API.
 
 ## Documentation and decisions
 
