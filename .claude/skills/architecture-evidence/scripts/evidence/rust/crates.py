@@ -1,6 +1,6 @@
 """A Rust crate as the build declares it, whichever build system that is
-(`bazel_rules`, `cargo`). Each declared dependency lands in one bucket: a
-crate of this workspace, an external crate, or unresolved.
+(`bazel_rules`, `cargo`). Each declared dependency lands in one bucket of its
+unit: a crate of this workspace, an external crate, or unresolved.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..graph import excluded
 from ..model import DECLARED, Dependency, NoMeasurement, Unit
 
 ROOT_FILES = ("lib.rs", "main.rs")
@@ -17,34 +16,32 @@ ROOT_FILES = ("lib.rs", "main.rs")
 
 @dataclass
 class Crate:
-    key: str            # unique among crates; its module ids start with it
     name: str           # the crate name, as code refers to it
     root: Path          # the crate root file
     files: list[Path]
-    unit: Unit
+    unit: Unit          # its id is unique among crates, and its module ids start with it
     dep_ids: list[str] = field(default_factory=list)       # labels or names, as declared
-    deps: list[str] = field(default_factory=list)          # keys of crates in this workspace
-    declared: dict[str, str] = field(default_factory=dict)  # dep key -> the label as declared
+    declared: dict[str, str] = field(default_factory=dict)  # dep crate id -> the label as declared
     dep_at: dict[str, str] = field(default_factory=dict)    # declared label -> file:line, when known
+
+    @property
+    def key(self) -> str:
+        return self.unit.id
+
+    @property
+    def deps(self) -> list[str]:
+        """The crates of this workspace it declares, by id."""
+        return self.unit.workspace_deps
 
     def add_dependency(self, dep: str, key: str | None) -> None:
         """Record declared dependency `dep`, which is crate `key` of this workspace or None."""
         if key:
             self.declared.setdefault(key, dep)
-            self.deps.append(key)
+            self.unit.workspace_deps.append(key)
         elif is_external(dep):
             self.unit.external_deps.append(dep)
         else:
             self.unit.unresolved_deps.append(dep)
-
-    def keep_readable(self, repo: Path, exclude: list[str]) -> None:
-        """Keep the source files that exist and do not match `exclude`. A declared source
-        that does not exist (generated, or missing) is recorded as a gap."""
-        present = [f for f in self.files if f.exists()]
-        if len(present) < len(self.files):
-            missing = [str(f.relative_to(repo)) for f in self.files if f not in present]
-            self.unit.not_measured.append(f"generated or missing sources {missing}")
-        self.files = [f for f in present if not excluded(repo, f, exclude)]
 
     def declared_dependency(self, dep: str) -> Dependency:
         label = self.declared[dep]
@@ -69,14 +66,13 @@ def crate_root(files: list[Path], declared: Path | None) -> Path:
 
 
 def unique_keys(crates: list[Crate]) -> None:
-    """Binaries in different packages may share a crate name; their keys must not."""
+    """Binaries in different packages may share a crate name; their ids must not."""
     count: dict[str, int] = defaultdict(int)
     for crate in crates:
         count[crate.name] += 1
     for crate in crates:
         if count[crate.name] > 1:
-            crate.key = f"{crate.name}__{crate.unit.declared_at.rsplit('/', 1)[0].replace('/', '_')}"
-            crate.unit.id = crate.key
+            crate.unit.id = f"{crate.name}__{crate.unit.package.replace('/', '_')}"
 
 
 def resolve_deps(crates: list[Crate]) -> None:
@@ -84,4 +80,4 @@ def resolve_deps(crates: list[Crate]) -> None:
     for crate in crates:
         for dep in crate.dep_ids:
             crate.add_dependency(dep, by_id.get(dep))
-        crate.deps = sorted(set(crate.deps) - {crate.key})
+        crate.unit.workspace_deps = sorted(set(crate.deps) - {crate.key})

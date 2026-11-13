@@ -10,6 +10,9 @@ from pathlib import Path
 from ..model import Unit, line_at
 from .crates import Crate, crate_root
 
+NOT_MEASURED = ["Cargo: only the [dependencies] table (no dev-, build- or target-specific "
+                "dependencies, no workspace inheritance); one library or binary per manifest"]
+
 
 def from_manifest(repo: Path, manifest: Path) -> Crate | None:
     text = manifest.read_text()
@@ -22,7 +25,7 @@ def from_manifest(repo: Path, manifest: Path) -> Crate | None:
     path, crate_name = manifest.relative_to(repo), name.group(1).replace("-", "_")
     unit = Unit(id=crate_name, kind="rust_crate", package=path.parent.as_posix(),
                 declared_at=f"{path}:{line_at(text, name.start())}", labels=[str(path)])
-    return Crate(key=crate_name, name=crate_name, root=crate_root(files, None), files=files, unit=unit,
+    return Crate(name=crate_name, root=crate_root(files, None), files=files, unit=unit,
                  dep_ids=[d.group(1).replace("-", "_") for d in deps],
                  dep_at={d.group(1).replace("-", "_"): f"{path}:{line_at(text, block.start(1) + d.start())}"
                          for d in deps})

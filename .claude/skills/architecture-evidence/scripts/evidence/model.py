@@ -1,4 +1,5 @@
-"""The evidence format: what was measured, with its provenance and its gaps.
+"""The evidence format: what was measured, with its provenance and its gaps,
+and the few facts every analyzer shares (line numbers, left-out files).
 
 This module owns the format. Language analyzers produce units and
 dependencies; nothing else writes the JSON. The format records observations
@@ -8,7 +9,9 @@ that one unit *uses* another in Parnas's sense.
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass, field
+from pathlib import Path
 
 SCHEMA = "architecture-evidence/1"
 
@@ -26,6 +29,19 @@ def line_at(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
+def readable(repo: Path, files: list[Path], exclude: list[str]) -> tuple[list[Path], list[str]]:
+    """The declared source files to read, and those declared but missing (generated, or
+    absent), relative to `repo`. A file matching an `exclude` glob is neither."""
+    present = [f for f in files if f.exists()]
+    missing = [str(f.relative_to(repo)) for f in files if f not in present]
+    return [f for f in present if not excluded(repo, f, exclude)], missing
+
+
+def excluded(repo: Path, file: Path, patterns: list[str]) -> bool:
+    """True when `file` matches one of the globs the caller left out (e.g. generated code)."""
+    return any(fnmatch.fnmatch(str(file.relative_to(repo)), p) for p in patterns)
+
+
 @dataclass
 class Unit:
     """A unit of code as the build or the language defines it: a build unit
@@ -37,28 +53,36 @@ class Unit:
 
     id: str
     kind: str
-    parent: str | None = None
+    build_unit: str | None = None     # for a source unit: the build unit it belongs to
     package: str = ""                 # the directory that declares a build unit
     declared_at: str = ""             # file:line of its declaration
     labels: list[str] = field(default_factory=list)
     testonly: bool = False
     visibility: list[str] = field(default_factory=list)
     roles: list[str] = field(default_factory=list)
-    external_deps: list[str] = field(default_factory=list)
-    unresolved_deps: list[str] = field(default_factory=list)
+    # Every declared dependency is in exactly one of these three.
+    workspace_deps: list[str] = field(default_factory=list)   # build units of this workspace, by id
+    external_deps: list[str] = field(default_factory=list)    # outside the workspace, as declared
+    unresolved_deps: list[str] = field(default_factory=list)  # found nowhere, as declared
     not_measured: list[str] = field(default_factory=list)
 
     @property
     def is_build_unit(self) -> bool:
-        return self.parent is None
+        return self.build_unit is None
+
+    @property
+    def owner(self) -> str:
+        """The build unit this unit is, or belongs to."""
+        return self.build_unit or self.id
 
     def to_json(self) -> dict:
         if not self.is_build_unit:
-            return {"kind": self.kind, "parent": self.parent}
+            return {"kind": self.kind, "build_unit": self.build_unit}
         return {"kind": self.kind, "roles": self.roles, "labels": self.labels,
                 "declared_at": self.declared_at, "testonly": self.testonly,
-                "visibility": self.visibility, "external_deps": sorted(self.external_deps),
-                "unresolved_deps": sorted(self.unresolved_deps), "not_measured": self.not_measured}
+                "visibility": self.visibility, "workspace_deps": sorted(self.workspace_deps),
+                "external_deps": sorted(self.external_deps), "unresolved_deps": sorted(self.unresolved_deps),
+                "not_measured": self.not_measured}
 
 
 @dataclass(frozen=True)
@@ -104,6 +128,9 @@ class Evidence:
 
     def of_kind(self, kind: str) -> list[Dependency]:
         return [d for d in self.dependencies if d.kind == kind]
+
+    def owner(self, unit_id: str) -> str:
+        return self.units[unit_id].owner
 
     def to_json(self) -> dict:
         return {

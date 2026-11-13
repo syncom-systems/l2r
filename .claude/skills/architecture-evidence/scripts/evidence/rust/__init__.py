@@ -14,30 +14,33 @@ from . import crates as build
 from .source import Observation
 
 NOT_MEASURED = ["test targets, and test modules from the first #[cfg(test)] to the end of a file",
-                "macro bodies and macro expansions"]
+                "macro bodies and macro expansions",
+                "a path resolves to the longest known module, so an item re-exported under its "
+                "module's name lands on that module"]
 
 
 class Workspace:
     """The Rust crates of a repository and their declared dependencies; on
     request, the source of some of them."""
 
-    def __init__(self, repo: Path, crates: list[build.Crate], how: str):
+    def __init__(self, repo: Path, crates: list[build.Crate], how: str, limits: list[str] | None = None):
         build.unique_keys(crates)
         build.resolve_deps(crates)
         self.repo = repo
         self.how = how
+        self.not_measured = NOT_MEASURED + (limits or [])
         self.crates = {c.key: c for c in crates}
 
     @classmethod
     def load(cls, repo: Path) -> Workspace:
         if bazel.is_workspace(repo):
             crates = bazel_rules.from_bazel(repo, bazel.query(repo, bazel_rules.KINDS))
-            how = "bazel query (Bazel workspace; Cargo not consulted)"
+            how, limits = "bazel query (Bazel workspace; Cargo not consulted)", []
         else:
-            crates, how = cargo.from_cargo(repo), "Cargo.toml (no Bazel workspace)"
+            crates, how, limits = cargo.from_cargo(repo), "Cargo.toml (no Bazel workspace)", cargo.NOT_MEASURED
         if not crates:
             raise NoMeasurement(f"no Rust crates found in {repo} by {how}")
-        return cls(repo, crates, how)
+        return cls(repo, crates, how, limits)
 
     def units(self) -> list[Unit]:
         return [c.unit for c in self.crates.values()]
@@ -57,4 +60,4 @@ class Workspace:
         return Measurement(measured_with=self.how,
                            units=[self.crates[k].unit for k in sorted(keys)] + observation.units(),
                            declared=self.declared(), observed=observation.dependencies,
-                           undeclared=observation.undeclared, not_measured=NOT_MEASURED)
+                           undeclared=observation.undeclared, not_measured=self.not_measured)

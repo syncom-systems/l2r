@@ -18,7 +18,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import measure as cli
-from evidence import bazel, graph, rust
+from evidence import bazel, c4, graph, rust
 from evidence.model import DECLARED, OBSERVED, NoMeasurement
 
 
@@ -37,6 +37,8 @@ def manifest(name: str, *deps: str) -> str:
 
 # a declares b and serde; uses b, and c without declaring it.
 # b declares c but never refers to it; b::x and b::y refer to each other.
+# k has an inline module `a` whose child `a::b` is a file. ab's directory shares
+# a prefix with a's. e declares itself.
 CARGO = {
     "Cargo.toml": "[workspace]\nmembers = []\n",
     "crates/a/Cargo.toml": manifest("a", "b", "serde"),
@@ -60,7 +62,13 @@ CARGO = {
     "crates/c/src/lib.rs": "pub fn hidden() {}\n",
     "other/d/Cargo.toml": manifest("d", "a"),
     "other/d/src/main.rs": "fn main() { a::run::go(); }\n",
-    "other/e/Cargo.toml": manifest("e"),
+    "crates/k/Cargo.toml": manifest("k"),
+    "crates/k/src/lib.rs": "mod a { pub mod b; }\nmod c;\n",
+    "crates/k/src/a/b.rs": "use crate::c::Value;\n",
+    "crates/k/src/c.rs": "pub struct Value;\n",
+    "crates/ab/Cargo.toml": manifest("ab"),
+    "crates/ab/src/lib.rs": "\n",
+    "other/e/Cargo.toml": manifest("e", "e"),
     "other/e/src/lib.rs": "\n",
 }
 
@@ -102,6 +110,34 @@ class CargoWorkspace(unittest.TestCase):
         # A module's reference to its own ancestor is containment, not a dependency.
         self.assertNotIn(("a::run", "a"), observed)
 
+    def test_a_module_without_a_file_of_its_own(self):
+        evidence = measure(self.repo, ["crates/k"])
+        self.assertEqual(evidence.units["k::a::b"].build_unit, "k")
+        self.assertIn(("k::a::b", "k::c"), self.pairs(evidence, OBSERVED))
+
+    def test_context_units_keep_all_their_declared_dependencies(self):
+        evidence = measure(self.repo, ["crates/a"])
+        # b is context; its own dependency on c is recorded on b, not listed as a scope dependency.
+        self.assertEqual(evidence.units["b"].workspace_deps, ["c"])
+        self.assertNotIn(("b", "c"), self.pairs(evidence, DECLARED))
+        # Observed dependencies among context units only are not listed either.
+        self.assertNotIn(("b::x", "b::y"), self.pairs(evidence, OBSERVED))
+        self.assertEqual(evidence.loops[OBSERVED], [])
+
+    def test_a_unit_never_depends_on_itself(self):
+        self.assertEqual(measure(self.repo, ["other/e"]).units["e"].workspace_deps, [])
+
+    def test_cargo_limits_travel_with_the_evidence(self):
+        notes = measure(self.repo, ["crates/a"]).not_measured
+        self.assertTrue(any(n.startswith("Cargo: only the [dependencies] table") for n in notes), notes)
+        self.assertTrue(any("re-exported" in n for n in notes), notes)
+
+    def test_the_picture_holds_scope_modules_and_the_context_modules_they_touch(self):
+        model = c4.model(measure(self.repo, ["crates/a"]))
+        self.assertIn("measured.a.a__run -> measured.a.a__helpers", model)
+        self.assertIn("b__x = module 'b::x'", model)
+        self.assertNotIn("b__y = module", model)
+
     def test_test_modules_and_comments_are_not_read(self):
         evidence = measure(self.repo, ["crates"])
         observed = self.pairs(evidence, OBSERVED)
@@ -125,7 +161,7 @@ class CargoWorkspace(unittest.TestCase):
         data = measure(self.repo, ["crates"]).to_json()
         self.assertEqual(data["schema"], "architecture-evidence/1")
         self.assertEqual({d["kind"] for d in data["dependencies"]}, {DECLARED, OBSERVED})
-        self.assertEqual(data["units"]["b::x"], {"kind": "rust_module", "parent": "b"})
+        self.assertEqual(data["units"]["b::x"], {"kind": "rust_module", "build_unit": "b"})
 
     def test_cli_exit_codes(self):
         out = Path(self.tmp.name) / "out"
@@ -152,6 +188,7 @@ QUERY = """\
   </rule>
   <rule class="rust_library" location="{repo}/lib/BUILD.bazel:20:13" name="//lib:core_extra">
     <string name="crate_name" value="core"/>
+    <boolean name="testonly" value="true"/>
     <label name="crate_root" value="//lib:lib.rs"/>
     <list name="srcs"><label value="//lib:lib.rs"/></list>
     <list name="visibility"><label value="//tools:__pkg__"/></list>
@@ -195,6 +232,8 @@ class BazelTargets(unittest.TestCase):
         core = self.ws.crates["core"].unit
         self.assertEqual(core.labels, ["//lib:core", "//lib:core_extra"])
         self.assertEqual(core.visibility, ["//app:__pkg__", "//tools:__pkg__"])
+        # Test-only only when every variant is.
+        self.assertFalse(core.testonly)
 
     def test_every_declared_dependency_lands_in_one_bucket(self):
         core = self.ws.crates["core"].unit

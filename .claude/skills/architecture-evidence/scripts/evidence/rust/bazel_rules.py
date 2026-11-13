@@ -25,7 +25,7 @@ def from_target(repo: Path, t: bazel.Target) -> Crate | None:
                 labels=[t.label], testonly=t.testonly, visibility=t.labels("visibility"))
     if t.configurable:
         unit.not_measured.append("select() in its attributes; the union of the branches is measured")
-    return Crate(key=name, name=name, root=crate_root(files, root and bazel.label_path(repo, root)),
+    return Crate(name=name, root=crate_root(files, root and bazel.label_path(repo, root)),
                  files=files, unit=unit, dep_ids=t.labels("deps") + t.labels("proc_macro_deps"))
 
 

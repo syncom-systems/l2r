@@ -36,7 +36,7 @@ The picture is the measured model plus one view per finding (ruling R4); see [Pi
 
 ### 1. Scope and measurement
 
-Name the scope (crates, packages or a subsystem) and what is outside it. Measure it with the `architecture-evidence` skill, writing to `architecture/audit`:
+Name the scope (crates, packages or a subsystem) and what is outside it. A new audit replaces the previous one: its record, its views and everything in `architecture/audit/` (git keeps the old ones). Remove what the previous audit left there, then measure with the `architecture-evidence` skill, writing to `architecture/audit`:
 
 ```bash
 python3 <skills>/architecture-evidence/scripts/measure.py --repo . --scope <dirs> [--exclude '<generated glob>'] --out architecture/audit

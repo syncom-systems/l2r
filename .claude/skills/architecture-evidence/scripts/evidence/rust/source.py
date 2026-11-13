@@ -10,11 +10,18 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..model import OBSERVED, Dependency, Unit, line_at
+from ..model import OBSERVED, Dependency, Unit, line_at, readable
 from .crates import Crate
 
 USE = re.compile(r"\buse\s+([^;]+);", re.S)
 QUALIFIED = re.compile(r"\b(crate|super|self)((?:::[A-Za-z_][A-Za-z0-9_]*)+)")
+
+
+def keep_readable(repo: Path, crate: Crate, exclude: list[str]) -> None:
+    """Keep the crate's source files to read; record those declared but missing as a gap."""
+    crate.files, missing = readable(repo, crate.files, exclude)
+    if missing:
+        crate.unit.not_measured.append(f"generated or missing sources {missing}")
 
 
 def module_of(crate: Crate, file: Path) -> list[str]:
@@ -86,7 +93,7 @@ def climb(parent: list[str], rest: list[str]) -> list[str]:
     return [*parent, *rest]
 
 
-def longest_module(path: list[str], known: set[str]) -> str | None:
+def longest_module(path: list[str], known: dict[str, str]) -> str | None:
     """The longest known module that prefixes `path`."""
     return next(("::".join(path[:end]) for end in range(len(path), 0, -1) if "::".join(path[:end]) in known), None)
 
@@ -102,19 +109,19 @@ class Observation:
 
     repo: Path
     crates: dict[str, Crate]
-    modules: set[str] = field(default_factory=set)
+    modules: dict[str, str] = field(default_factory=dict)   # module id -> the id of its crate
     dependencies: list[Dependency] = field(default_factory=list)
     undeclared: list[str] = field(default_factory=list)
 
     def units(self) -> list[Unit]:
         """The modules other than crate roots; a crate's root module is the crate's unit."""
-        return [Unit(id=m, kind="rust_module", parent=m.rsplit("::", 1)[0])
-                for m in sorted(self.modules) if "::" in m]
+        return [Unit(id=m, kind="rust_module", build_unit=crate)
+                for m, crate in sorted(self.modules.items()) if m != crate]
 
     def read(self, exclude: list[str]) -> None:
         for crate in self.crates.values():
-            crate.keep_readable(self.repo, exclude)
-        self.modules = {"::".join(module_of(c, f)) for c in self.crates.values() for f in c.files}
+            keep_readable(self.repo, crate, exclude)
+        self.modules = {"::".join(module_of(c, f)): c.key for c in self.crates.values() for f in c.files}
         names: dict[str, list[str]] = defaultdict(list)
         for crate in self.crates.values():
             names[crate.name].append(crate.key)
@@ -138,7 +145,7 @@ class Observation:
                 continue
             snippet = re.sub(r"\s+", " ", text)[:100]
             evidence = f"{file.relative_to(self.repo)}:{line}: {snippet}"
-            if target.split("::")[0] not in [crate.key, *crate.deps]:
+            if self.modules[target] not in [crate.key, *crate.deps]:
                 self.undeclared.append(f"{source} -> {target}: {evidence}")
             found.setdefault(target, Dependency(OBSERVED, source, target, evidence))
         return list(found.values())

@@ -3,8 +3,10 @@
 
 Read-only, standard library. What is measured is the scope plus its context:
 the build units the scope declares directly and the build units that declare
-the scope directly. No declared dependency is dropped without a record: each
-is a measured unit, external, or listed as unresolved.
+the scope directly. The scope is the build units declared in a package at or
+below one of the scope directories. Every declared dependency of a measured
+build unit is recorded on it: a build unit of the workspace, external, or
+unresolved.
 
 Languages: Rust (crates from Bazel, or from Cargo when there is no Bazel
 workspace; modules and references from the source).
@@ -15,13 +17,15 @@ Writes <out>/evidence.json (format: references/format.md) and <out>/measured.c4
 (system `measured`), and prints a summary.
 Exit 0: measured. Exit 1: measured, but the source refers to a build unit its
 build does not declare. Exit 2: no measurement (missing tool, failed query,
-empty scope); nothing is written.
+empty scope); nothing is written. Exit 3: a defect of this tool; nothing is
+written.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import traceback
 from collections import defaultdict
 from pathlib import Path
 
@@ -70,13 +74,18 @@ def main() -> int:
     repo = args.repo.resolve()
     try:
         evidence = measure(repo, args.scope, args.exclude)
+        data, model = json.dumps(evidence.to_json(), indent=2) + "\n", c4.model(evidence)
     except NoMeasurement as err:
         print(f"measure.py: NO MEASUREMENT: {err}")
         return 2
+    except Exception:  # a defect of this tool, not a fact about the code; never exit 1 for it
+        traceback.print_exc()
+        print("measure.py: INTERNAL ERROR: nothing written; this is a defect of the analyzer")
+        return 3
     out = args.out if args.out.is_absolute() else repo / args.out
     out.mkdir(parents=True, exist_ok=True)
-    (out / "evidence.json").write_text(json.dumps(evidence.to_json(), indent=2) + "\n")
-    (out / "measured.c4").write_text(c4.model(evidence))
+    (out / "evidence.json").write_text(data)
+    (out / "measured.c4").write_text(model)
     print("\n".join(summary(evidence)))
     print(f"wrote {out / 'evidence.json'} and {out / 'measured.c4'}")
     if evidence.checks["observed_without_declared"]:

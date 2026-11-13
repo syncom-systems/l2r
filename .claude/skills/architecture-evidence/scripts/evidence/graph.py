@@ -5,7 +5,6 @@ source refers to agrees with what the build declares.
 
 from __future__ import annotations
 
-import fnmatch
 from collections import defaultdict
 from operator import attrgetter
 from pathlib import Path
@@ -14,12 +13,8 @@ from .model import DECLARED, OBSERVED, Dependency, Evidence, Measurement, NoMeas
 
 
 def in_dirs(package: str, dirs: list[str]) -> bool:
+    """True when `package` is one of `dirs` or lies below one."""
     return any((package + "/").startswith(d.strip("/") + "/") for d in dirs)
-
-
-def excluded(repo: Path, file: Path, patterns: list[str]) -> bool:
-    """True when `file` matches one of the globs the caller left out (e.g. generated code)."""
-    return any(fnmatch.fnmatch(str(file.relative_to(repo)), p) for p in patterns)
 
 
 def scope_of(repo: Path, units: list[Unit], dirs: list[str]) -> set[str]:
@@ -80,13 +75,8 @@ class Measured:
         self.units = {u.id: u for u in units}
         self.scope = {u.id for u in units if "scope" in u.roles}
 
-    def build_unit(self, unit_id: str) -> str:
-        while self.units[unit_id].parent is not None:
-            unit_id = self.units[unit_id].parent
-        return unit_id
-
     def build_pair(self, dep: Dependency) -> tuple[str, str]:
-        return self.build_unit(dep.source), self.build_unit(dep.target)
+        return self.units[dep.source].owner, self.units[dep.target].owner
 
     def touches_scope(self, dep: Dependency) -> bool:
         return bool(set(self.build_pair(dep)) & self.scope)
