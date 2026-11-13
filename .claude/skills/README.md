@@ -12,6 +12,15 @@ Schroeder, Ousterhout) and the architect's rulings live in
 skill. Skills refer to those files; they do not restate them. The rulings
 outrank the skills.
 
+## `design-codebase-architecture`: prepare a new design for the architect
+
+Independent of the `arch` family. For something not yet built, it builds a
+decision inventory, proposes modules that each hide one decision, a loop-free
+uses relation and typed interfaces, argued from `/architecture-knowledge`, and
+stops with questions and alternatives for the architect. The design record is
+`architecture/design.md`; `architecture/design.c4` is a LikeC4 picture of it,
+checked against the record by `scripts/c4check.py`.
+
 ## `arch`: code health and architecture together
 
 CodeScene Code Health is the measurement, architectural judgement decides, and

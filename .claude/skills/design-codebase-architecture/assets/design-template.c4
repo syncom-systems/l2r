@@ -1,0 +1,44 @@
+// A picture of architecture/design.md, the design record. The record is the
+// authority: every relation names the record entry it comes from in its
+// `entry` metadata (U1, U2, ...). Element kinds and tags come from
+// architecture/spec.c4. Check after every edit:
+//   python3 <skill>/scripts/c4check.py architecture/ --record architecture/design.md
+
+model {
+  designed = system 'Target system' {
+    bus = module 'bus' {
+      #volatile
+      description 'M1. Hides D1: the physical bus. Moves opaque bytes.'
+    }
+    framing = module 'framing' {
+      description 'M2. Hides D2: frame boundaries, checksums, retransmission.'
+    }
+    application = module 'application' {
+      description 'M3. Hides D3: the domain rules.'
+    }
+
+    framing -> bus 'uses: sends and receives byte slices' {
+      metadata {
+        entry 'U1'
+      }
+    }
+    application -> framing 'uses: sends commands, receives replies' {
+      metadata {
+        entry 'U2'
+      }
+    }
+  }
+}
+
+views {
+  view designed_uses {
+    title 'Uses relation'
+    include *, designed.*
+  }
+  dynamic view designed_command {
+    title 'One command, as a sequence'
+    variant sequence
+    designed.application -> designed.framing 'send(command)'
+    designed.framing -> designed.bus 'write(bytes)'
+  }
+}
