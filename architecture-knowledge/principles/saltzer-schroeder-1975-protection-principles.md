@@ -48,7 +48,7 @@ The paper addresses protection mechanisms. We apply it, as an interpretation, to
 
 **In this repository** (read 2026-11).
 - *Fail-safe defaults.* Overwriting or deleting a file requires the approval record to name the exact path, change and content digest (`crates/l2r_apply/src/approval.rs`, `Approval::authorizes`); anything not named is refused.
-- *Complete mediation on the recovery path.* A journal read back from disk for recovery is validated step by step, including the rule "Only L2R-owned files may ever be replaced or deleted" (`crates/l2r_apply/src/journal.rs`), and `recover` verifies the approval against the plan before doing anything (`crates/l2r_apply/src/transaction.rs`).
+- *Complete mediation on the recovery path.* Generation and recovery pass every step through the same check, `Journal::authorize` (`crates/l2r_apply/src/journal.rs`). It holds the transition table and the approval record's entry for the file content. Generation runs it on its own journal before any write; `recover` runs it on the journal read back from disk before doing anything (`crates/l2r_apply/src/transaction.rs`). One rule, checked on every path.
 
 ## Rulings
 
