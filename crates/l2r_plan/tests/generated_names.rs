@@ -166,3 +166,43 @@ fn composite_v1_emits_exactly_the_declared_names() {
         );
     }
 }
+
+/// The `System` of a `composite/v2` root declares exactly the members
+/// `rust_names::composite_v2` lists: its own (`SYSTEM_MEMBERS`) and those of
+/// every machine and root port. S020 checks conflicts among these lists, so
+/// this ties that rule to the code.
+#[test]
+fn composite_v2_emits_exactly_the_declared_members() {
+    use l2r_model::rust_names::composite_v2::{InPort, Machine, OutPort, SYSTEM_MEMBERS};
+    use l2r_testing::{relay_inventory, relay_model, starter_inventory, starter_model};
+    use l2r_testing::{tank_inventory, tank_model};
+    for (model, inventory) in [
+        (relay_model(), relay_inventory()),
+        (tank_model(), tank_inventory()),
+        (starter_model(), starter_inventory()),
+    ] {
+        let validated = validate(&model, &inventory).expect("valid");
+        let flat = validated.flat().expect("v2");
+        let mut declared: BTreeSet<String> = SYSTEM_MEMBERS.iter().map(|m| m.to_string()).collect();
+        declared.extend(flat.leaves.iter().flat_map(|l| Machine(&l.id).members()));
+        declared.extend(flat.inputs.iter().flat_map(|i| InPort(&i.port).members()));
+        declared.extend(flat.sinks.iter().flat_map(|s| OutPort(&s.port).members()));
+        let plan = planned(&validated);
+        let contract = plan
+            .artifacts
+            .iter()
+            .map(|a| a.content.as_str())
+            .find(|c| c.contains("\npub struct System {\n"))
+            .expect("the root declares System");
+        let mut emitted = names_after(
+            block(contract, "pub struct System {").into_iter(),
+            &["    "],
+        );
+        emitted.extend(names_after(
+            block(contract, "impl System {").into_iter(),
+            &["    pub fn ", "    fn "],
+        ));
+        assert!(emitted.contains("next") && emitted.contains("step_once"));
+        assert_eq!(emitted, declared, "{}", model.system.id);
+    }
+}

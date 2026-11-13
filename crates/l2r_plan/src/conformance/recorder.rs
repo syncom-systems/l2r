@@ -5,6 +5,7 @@
 //! section it is named after.
 
 use l2r_model::Component;
+use l2r_model::rust_names::composite_v2;
 
 use super::{Harness, Op};
 use crate::PlanError;
@@ -77,15 +78,16 @@ fn observe(harness: &Harness) -> String {
     );
     for leaf in &harness.flat.leaves {
         out.push_str(&format!(
-            "    parts.push(format!(\"{{:?}}\", system.{id}_state()));\n    \
-                 parts.push(list(system.{id}_inbox().len(), |i| system.{id}_inbox().get(i)));\n",
-            id = leaf.id
+            "    parts.push(format!(\"{{:?}}\", system.{state}()));\n    \
+                 parts.push(list(system.{inbox}().len(), |i| system.{inbox}().get(i)));\n",
+            state = composite_v2::Machine(&leaf.id).state(),
+            inbox = composite_v2::Machine(&leaf.id).inbox()
         ));
     }
     for sink in &harness.flat.sinks {
         out.push_str(&format!(
-            "    parts.push(list(system.{id}_outbox().len(), |i| system.{id}_outbox().get(i)));\n",
-            id = sink.port
+            "    parts.push(list(system.{outbox}().len(), |i| system.{outbox}().get(i)));\n",
+            outbox = composite_v2::OutPort(&sink.port).outbox()
         ));
     }
     out.push_str("    parts.join(\"|\")\n}\n\n");
@@ -110,16 +112,16 @@ fn apply(harness: &Harness) -> Result<String, PlanError> {
 fn apply_arm(harness: &Harness, i: usize, op: &Op) -> Result<String, PlanError> {
     Ok(match op {
         Op::Send { port, message } => format!(
-            "        {i} => match system.send_{}({}) {{\n            Ok(()) => \"ok\".to_string(),\n            Err(_) => \"rej\".to_string(),\n        }},\n",
-            harness.flat.inputs[*port].port,
+            "        {i} => match system.{}({}) {{\n            Ok(()) => \"ok\".to_string(),\n            Err(_) => \"rej\".to_string(),\n        }},\n",
+            composite_v2::InPort(&harness.flat.inputs[*port].port).send(),
             message.rust_expr(harness.types, &harness.validated.model().system.rust_crate)?
         ),
         Op::Step => format!(
             "        {i} => match system.step_once() {{\n            Progress::Delivered => \"D\".to_string(),\n            Progress::Settled => \"S\".to_string(),\n            Progress::Blocked => \"B\".to_string(),\n        }},\n"
         ),
         Op::Take { sink } => format!(
-            "        {i} => format!(\"T:{{:?}}\", system.take_{}()),\n",
-            harness.flat.sinks[*sink].port
+            "        {i} => format!(\"T:{{:?}}\", system.{}()),\n",
+            composite_v2::OutPort(&harness.flat.sinks[*sink].port).take()
         ),
     })
 }

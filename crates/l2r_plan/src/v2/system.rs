@@ -11,7 +11,7 @@ mod attempt;
 mod buffer;
 mod route;
 
-use l2r_model::rust_names;
+use l2r_model::rust_names::composite_v2;
 use l2r_validate::flat::{Flat, FlatInput, Hop, Leaf, Sink, Target};
 
 use crate::PlanError;
@@ -160,7 +160,7 @@ fn type_aliases(generator: &Gen<'_>) -> Result<String, PlanError> {
 
 /// `<Machine>State`, `<Machine>Input` and `<Machine>Output`.
 fn machine_aliases(generator: &Gen<'_>, leaf: &Leaf) -> String {
-    let ty = rust_names::type_name(&leaf.id);
+    let ty = composite_v2::type_prefix(&leaf.id);
     let module = generator.machine_module(&leaf.id);
     let mut out = String::new();
     for (suffix, what) in [
@@ -196,7 +196,7 @@ fn message_alias(
 ) -> Result<String, PlanError> {
     Ok(format!(
         "/// Messages {carried}; mirrors `{message}`.\npub type {}Message = {};\n\n",
-        rust_names::type_name(port),
+        composite_v2::type_prefix(port),
         generator.type_path(message)?
     ))
 }
@@ -249,16 +249,17 @@ fn system_struct(flat: &Flat) -> String {
         flat,
         |leaf| {
             format!(
-                "    {id}_state: {ty}State,\n    {id}_inbox: {ty}Inbox,\n",
-                id = leaf.id,
-                ty = rust_names::type_name(&leaf.id)
+                "    {state}: {ty}State,\n    {inbox}: {ty}Inbox,\n",
+                state = composite_v2::Machine(&leaf.id).state(),
+                inbox = composite_v2::Machine(&leaf.id).inbox(),
+                ty = composite_v2::type_prefix(&leaf.id)
             )
         },
         |sink| {
             format!(
-                "    {}_outbox: {}Outbox,\n",
-                sink.port,
-                rust_names::type_name(&sink.port)
+                "    {}: {}Outbox,\n",
+                composite_v2::OutPort(&sink.port).outbox(),
+                composite_v2::type_prefix(&sink.port)
             )
         },
     );
@@ -302,17 +303,18 @@ fn constructor(generator: &Gen<'_>) -> String {
         generator.flat,
         |leaf| {
             format!(
-                "            {id}_state: {module}::init(),\n            {id}_inbox: {ty}Inbox::new(),\n",
-                id = leaf.id,
+                "            {state}: {module}::init(),\n            {inbox}: {ty}Inbox::new(),\n",
+                state = composite_v2::Machine(&leaf.id).state(),
+                inbox = composite_v2::Machine(&leaf.id).inbox(),
                 module = generator.machine_module(&leaf.id),
-                ty = rust_names::type_name(&leaf.id)
+                ty = composite_v2::type_prefix(&leaf.id)
             )
         },
         |sink| {
             format!(
-                "            {}_outbox: {}Outbox::new(),\n",
-                sink.port,
-                rust_names::type_name(&sink.port)
+                "            {}: {}Outbox::new(),\n",
+                composite_v2::OutPort(&sink.port).outbox(),
+                composite_v2::type_prefix(&sink.port)
             )
         },
     );
@@ -330,17 +332,20 @@ fn accessors(flat: &Flat) -> String {
         flat,
         |leaf| {
             format!(
-                "    /// Current state of `{id}`. Read-only: only its own `step` changes it.\n    pub fn {id}_state(&self) -> {ty}State {{\n        self.{id}_state\n    }}\n\n\
-                 \x20   /// The mailbox of `{id}`, read-only.\n    pub fn {id}_inbox(&self) -> &{ty}Inbox {{\n        &self.{id}_inbox\n    }}\n\n",
+                "    /// Current state of `{id}`. Read-only: only its own `step` changes it.\n    pub fn {state}(&self) -> {ty}State {{\n        self.{state}\n    }}\n\n\
+                 \x20   /// The mailbox of `{id}`, read-only.\n    pub fn {inbox}(&self) -> &{ty}Inbox {{\n        &self.{inbox}\n    }}\n\n",
                 id = leaf.id,
-                ty = rust_names::type_name(&leaf.id)
+                state = composite_v2::Machine(&leaf.id).state(),
+                inbox = composite_v2::Machine(&leaf.id).inbox(),
+                ty = composite_v2::type_prefix(&leaf.id)
             )
         },
         |sink| {
             format!(
-                "    /// The outbox of port `{id}`, read-only.\n    pub fn {id}_outbox(&self) -> &{ty}Outbox {{\n        &self.{id}_outbox\n    }}\n\n",
+                "    /// The outbox of port `{id}`, read-only.\n    pub fn {outbox}(&self) -> &{ty}Outbox {{\n        &self.{outbox}\n    }}\n\n",
                 id = sink.port,
-                ty = rust_names::type_name(&sink.port)
+                outbox = composite_v2::OutPort(&sink.port).outbox(),
+                ty = composite_v2::type_prefix(&sink.port)
             )
         },
     )
@@ -373,11 +378,13 @@ fn send(generator: &Gen<'_>, input: &FlatInput) -> String {
         })
         .collect();
     format!(
-        "    /// Port `{id}`: offers `message` to `{to}`. Accepted only if its mailbox has room;\n    /// otherwise `Err(Rejected)`, and the caller keeps the message.\n    pub fn send_{id}(&mut self, message: {ty}Message) -> Result<(), Rejected> {{\n\
-         {translations}        if self.{to}_inbox.push(input) {{\n            Ok(())\n        }} else {{\n            Err(Rejected)\n        }}\n    }}\n\n",
+        "    /// Port `{id}`: offers `message` to `{to}`. Accepted only if its mailbox has room;\n    /// otherwise `Err(Rejected)`, and the caller keeps the message.\n    pub fn {send}(&mut self, message: {ty}Message) -> Result<(), Rejected> {{\n\
+         {translations}        if self.{target_inbox}.push(input) {{\n            Ok(())\n        }} else {{\n            Err(Rejected)\n        }}\n    }}\n\n",
         id = input.port,
         to = input.target,
-        ty = rust_names::type_name(&input.port)
+        send = composite_v2::InPort(&input.port).send(),
+        target_inbox = composite_v2::Machine(&input.target).inbox(),
+        ty = composite_v2::type_prefix(&input.port)
     )
 }
 
@@ -387,9 +394,11 @@ fn takes(flat: &Flat) -> String {
         .iter()
         .map(|sink| {
             format!(
-                "    /// Port `{id}`: removes and returns the oldest message the system has emitted\n    /// there, if any. Taking a message makes room: a sender blocked by this outbox\n    /// can then proceed.\n    pub fn take_{id}(&mut self) -> Option<{ty}Message> {{\n        self.{id}_outbox.pop()\n    }}\n\n",
+                "    /// Port `{id}`: removes and returns the oldest message the system has emitted\n    /// there, if any. Taking a message makes room: a sender blocked by this outbox\n    /// can then proceed.\n    pub fn {take}(&mut self) -> Option<{ty}Message> {{\n        self.{outbox}.pop()\n    }}\n\n",
                 id = sink.port,
-                ty = rust_names::type_name(&sink.port)
+                take = composite_v2::OutPort(&sink.port).take(),
+                outbox = composite_v2::OutPort(&sink.port).outbox(),
+                ty = composite_v2::type_prefix(&sink.port)
             )
         })
         .collect()
@@ -400,7 +409,12 @@ fn is_settled(flat: &Flat) -> String {
     let mailboxes: String = flat
         .leaves
         .iter()
-        .map(|leaf| format!("        settled &= self.{}_inbox.is_empty();\n", leaf.id))
+        .map(|leaf| {
+            format!(
+                "        settled &= self.{}.is_empty();\n",
+                composite_v2::Machine(&leaf.id).inbox()
+            )
+        })
         .collect();
     [
         "    /// True when no mailbox holds a message. Outboxes may still hold messages\n    /// for the environment.\n    pub fn is_settled(&self) -> bool {\n        let mut settled = true;\n",

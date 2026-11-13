@@ -17,6 +17,7 @@ use std::fmt;
 
 pub mod composite_v0;
 pub mod composite_v1;
+pub mod composite_v2;
 
 /// `request_latch` → `RequestLatch`: each `_`-separated part with its first
 /// character in upper case. Every profile version's output depends on this

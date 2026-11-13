@@ -1,7 +1,7 @@
 //! The bounded FIFO buffer types of the `System`: one mailbox type per machine
 //! and one outbox type per output port of the root.
 
-use l2r_model::rust_names;
+use l2r_model::rust_names::composite_v2;
 use l2r_validate::flat::{Flat, Leaf, Sink};
 
 use super::{per_holder, upper};
@@ -79,7 +79,7 @@ impl Buffer {
     /// The buffer of `holder`: a machine for a mailbox, a root output port
     /// for an outbox.
     fn of(kind: BufferKind, holder: &str, capacity: usize) -> Self {
-        let ty = rust_names::type_name(holder);
+        let ty = composite_v2::type_prefix(holder);
         let constant = format!("{}_CAPACITY", upper(holder));
         Self {
             ty: format!("{ty}{}", kind.type_suffix()),

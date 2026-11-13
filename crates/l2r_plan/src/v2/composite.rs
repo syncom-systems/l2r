@@ -11,7 +11,7 @@ use l2r_validate::flat::{Hop, HopKind};
 
 use crate::plan::{Artifact, Ownership};
 use crate::text;
-use crate::v2::{Gen, hop_function_name, system};
+use crate::v2::{Gen, system};
 use crate::{PlanError, planned_path};
 
 pub fn artifacts(generator: &Gen<'_>, component: &Component) -> Result<Vec<Artifact>, PlanError> {
@@ -321,7 +321,7 @@ fn edge_doc(edge: &MessageEdge) -> String {
 fn translation_stub(generator: &Gen<'_>, hop: &Hop) -> Result<String, PlanError> {
     let source = generator.type_path(&hop_source(generator, hop)?)?;
     let result = generator.type_path(&hop.result)?;
-    let name = hop_function_name(hop);
+    let name = hop.function();
     let (what, returns) = match hop.kind {
         HopKind::Edge => (format!("edge `{}`", hop.id), format!("Option<{result}>")),
         HopKind::Port => (format!("port `{}`", hop.id), result),

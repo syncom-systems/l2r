@@ -1,11 +1,10 @@
 //! `l2r packet`: the work packet for implementing one component.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use l2r_model::{Behavior, Component, MessageEdge, Model, Port, Schema};
 use l2r_plan::{Artifact, Ownership};
-use l2r_validate::flat::{Flat, Hop, HopKind};
+use l2r_validate::flat::Flat;
 
 use crate::commands::Outcome;
 use crate::session::{Session, SessionError};
@@ -64,14 +63,6 @@ struct Translation {
     function: String,
     lean: String,
     lean_type: String,
-}
-
-/// The `routes.rs` function that implements a hop.
-fn hop_function(hop: &Hop) -> String {
-    match hop.kind {
-        HopKind::Edge => hop.id.clone(),
-        HopKind::Port => format!("port_{}", hop.id),
-    }
 }
 
 /// The work packet of one component of a planned model, as Markdown.
@@ -236,18 +227,9 @@ impl WorkPacket<'_> {
     /// The translations on the flattened routes that this component's
     /// `routes.rs` implements, each function once.
     fn routed_translations(&self, flat: &Flat) -> Vec<Translation> {
-        let mut seen = BTreeSet::new();
-        let leaf_hops = flat
-            .leaves
-            .iter()
-            .flat_map(|l| l.routes.iter().flat_map(|r| r.hops.iter()));
-        let input_hops = flat.inputs.iter().flat_map(|i| i.hops.iter());
-        leaf_hops
-            .chain(input_hops)
-            .filter(|hop| hop.owner == self.component.id)
-            .map(|hop| (hop_function(hop), hop))
-            .filter(|(function, _)| seen.insert(function.clone()))
-            .map(|(function, hop)| self.translation(function, &hop.translation))
+        flat.hops_owned_by(&self.component.id)
+            .into_iter()
+            .map(|hop| self.translation(hop.function(), &hop.translation))
             .collect()
     }
 
