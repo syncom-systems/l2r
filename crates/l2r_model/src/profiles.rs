@@ -209,17 +209,33 @@ impl crate::architecture::Model {
     /// Every schema-gated feature the document uses: its own, its
     /// components' and its ports'.
     ///
-    /// Each model struct is destructured without `..`: a field added to the
-    /// format is a compile error here until someone decides whether a schema
-    /// gates it (audit F10).
+    /// Every struct of the model format (`Model`, `System`, `Component`,
+    /// `Behavior`, `MessageEdge`, `Port`) is destructured without `..`: a field
+    /// added to any of them is a compile error here until someone decides
+    /// whether a schema gates it (audit F10).
     pub fn features(&self) -> Vec<Feature> {
         let crate::architecture::Model {
             schema: _,
-            system: _,
+            system,
             components,
-            messages: _,
+            messages,
             ports,
         } = self;
+        // No field of these is gated by any schema today.
+        let crate::architecture::System {
+            id: _,
+            name: _,
+            rust_crate: _,
+            lean_inventory: _,
+            output_dir: _,
+        } = system;
+        for crate::architecture::MessageEdge {
+            id: _,
+            from: _,
+            to: _,
+            translation: _,
+        } in messages
+        {}
         let own = (!ports.is_empty()).then_some(Feature::Ports);
         let of_components = components
             .iter()
@@ -244,9 +260,19 @@ impl crate::architecture::Component {
             rust_module: _,
             notes: _,
             implementation_budget_lines: _,
-            behavior: _,
+            behavior,
             mailbox_capacity,
         } = self;
+        // No field of a behaviour is gated by any schema today.
+        if let Some(crate::architecture::Behavior {
+            owned_state: _,
+            input: _,
+            output: _,
+            init: _,
+            step: _,
+            invariants: _,
+        }) = behavior
+        {}
         mailbox_capacity
             .is_some()
             .then_some(Feature::MailboxCapacity)
