@@ -25,7 +25,7 @@ related: parnas-1972-information-hiding, liskov-zilles-1974-abstract-data-types
 
 The paper addresses protection mechanisms. We apply it, as an interpretation, to any part of a design that decides what may happen: what may be written, overwritten or deleted, which component may send to which, what a caller may do with a value. Those decisions are authority, whether or not anyone thinks of them as security.
 
-1. **Every authority decision has one mechanism, small enough to inspect** (a, c). If the rule for "may this be changed?" is checked in several places, or scattered through the code that does the change, it cannot be inspected and it will drift. This is information hiding (Parnas 1972) applied to authority.
+1. **Every authority decision has one mechanism, small enough to inspect** (a, c). If the rule for *may this be changed?* is checked in several places, or scattered through the code that does the change, it cannot be inspected and it will drift. This is information hiding (Parnas 1972) applied to authority.
 2. **Grant by explicit permission; deny by default** (b). A list of what is allowed fails safe when it is incomplete; a list of what is forbidden fails open.
 3. **Check on every path, including the unusual ones** (c). Recovery, resumption, migration and maintenance paths are where checks are forgotten. A check remembered from an earlier step is a cache of authority and must be invalidated when the authority changes.
 4. **Give each part only the authority its job needs** (f), and keep shared mechanisms that everyone depends on few and small (g).
@@ -43,7 +43,7 @@ The paper addresses protection mechanisms. We apply it, as an interpretation, to
 **How a breach shows in code**
 - Permission logic duplicated across call sites, or written as a growing list of exclusions.
 - A recovery or retry path that skips the checks of the normal path.
-- A stored "already authorized" marker with no rule for when it stops being valid.
+- A stored *already authorized* marker with no rule for when it stops being valid.
 - A shared helper or global state that every component depends on and that decides authority for all of them.
 
 **In this repository** (read 2026-11).

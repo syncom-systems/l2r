@@ -28,12 +28,13 @@ Quote only the [notes] claims as Ousterhout's words. Treat [book] claims as unch
 2. **A layer that adds no abstraction is cost without benefit.** Forwarding methods and wrappers with the same shape as what they wrap widen the system without hiding anything.
 3. **Complexity a module could absorb, it should absorb.** Configuration the module could decide, and error cases it could handle, are complexity pushed onto every caller.
 4. **Splitting is justified by independence, not by length.** Two parts that share knowledge belong together; dividing them creates leakage.
+5. **Depth is judged at the interface callers use.** Splitting a deep module into many shallow ones makes each piece easy to test and the whole harder to use and change; the inside may be fine-grained without exposing it.
 
 ## Application
 
 **Questions for a design**
 - What must a caller know to use this module correctly, including order, preconditions and errors? Is that much less than what the module does?
-- What would every caller do if this module did not exist? If "almost nothing", it is shallow.
+- What would every caller do if this module did not exist? If almost nothing, it is shallow.
 - Does this layer offer a different abstraction from the one below it?
 - What does this module push to its callers (parameters, ordering rules, error cases) that it could settle itself?
 - Is this split along independent parts, or along the order in which things happen?
@@ -48,11 +49,6 @@ Quote only the [notes] claims as Ousterhout's words. Treat [book] claims as unch
 **Not a breach**
 - A small module with a tiny interface that hides a real decision: deep relative to its interface.
 - A thin adapter at a deliberate boundary, such as one per external system, whose job is translation.
-
-## Tensions
-
-- **Small testable units.** Splitting a deep module into many shallow ones makes each piece easy to test and the whole harder to use and change. Depth is judged at the interface callers use; the inside may be fine-grained without exposing it.
-- **Overlap.** The vocabulary in `.claude/skills/codebase-design` (depth, leverage, locality) is adapted from this line of thinking. Where they differ, this file and the sources it cites win.
 
 ## Rulings
 

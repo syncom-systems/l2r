@@ -45,7 +45,7 @@ related: parnas-1972-information-hiding, liskov-zilles-1974-abstract-data-types
 - A lower-level module that imports a higher one or names its types.
 - A module that is correct only because another ran first, with nothing in the design or the types recording that edge.
 - Several "independent" parts that each implement the same lower service themselves.
-- No usable subset: removing any feature means "filling the hole" with conversion code.
+- No usable subset: removing a part leaves what Parnas calls a need to "fill the hole" with conversion programs (*Summation, "Advantages of the Virtual Machine Approach"*).
 
 **Not a breach**
 - A call from a lower level to an upper one through a callback whose correctness the lower level does not depend on: an invocation, not a use (source).

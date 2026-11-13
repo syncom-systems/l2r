@@ -50,7 +50,9 @@ related: parnas-1979-uses-hierarchy, liskov-zilles-1974-abstract-data-types, ous
 - A system-level decision made deliberately and defined once, which every module imports (a protocol constant, for example).
 - A small module with a narrow interface: size is not the criterion; what it hides is.
 
-**Example from this repository** (measured 2026-11). Mailbox capacity is decided in several modules: the 1..64 limit is checked in three validator modules, and the fallback for an unstated capacity is written in several planner modules, two of which disagree (1 in the v1 scheduler planner, 0 in the derived Lean network). No module was given the capacity decision, so each one that needed it made it again.
+**Examples from this repository** (read 2026-11).
+- *One decision, three owners.* What happens when a child of a `composite/v1` does not state `mailbox_capacity` is decided three times: the validator rejects the model (`crates/l2r_validate/src/structure.rs`, L2R-S017), the v1 scheduler planner falls back to 1 (`crates/l2r_plan/src/profiles/composite_v1.rs:95`), and the derived Lean network falls back to 0 (`crates/l2r_plan/src/lean_composition.rs:261`). For a validated model the fallbacks never run, so no output is wrong today. But the three answers disagree, and the planners' `Option<u32>` does not carry the validator's guarantee, so a change to the validator rule would silently reach two different defaults.
+- *A deliberately shared decision.* The upper limit is defined once, as `MAX_MAILBOX_CAPACITY` in `crates/l2r_validate/src/structure.rs`, and imported by the v1 and v2 checks: the "not a breach" case above.
 
 ## Rulings
 
