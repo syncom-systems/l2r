@@ -3,9 +3,10 @@
 
 use l2r_model::{Component, Model, Schema, profiles};
 
+use super::MAX_CAPACITY;
 use super::{RESERVED_IDS, is_machine, root};
 use crate::diagnostic::Findings;
-use crate::structure::{MAX_MAILBOX_CAPACITY, subject};
+use crate::structure::subject;
 
 pub(super) fn check(model: &Model, findings: &mut Findings) {
     for component in &model.components {
@@ -78,8 +79,8 @@ fn mailbox_capacity_problem(capacity: Option<u32>) -> Option<String> {
     match capacity {
         None => Some("a machine must state `mailbox_capacity`".to_string()),
         Some(0) => Some("`mailbox_capacity` must be at least 1".to_string()),
-        Some(n) if n > MAX_MAILBOX_CAPACITY => Some(format!(
-            "`mailbox_capacity` {n} exceeds the supported maximum {MAX_MAILBOX_CAPACITY}"
+        Some(n) if n > MAX_CAPACITY => Some(format!(
+            "`mailbox_capacity` {n} exceeds the supported maximum {MAX_CAPACITY}"
         )),
         Some(_) => None,
     }

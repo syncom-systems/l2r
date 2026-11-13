@@ -7,7 +7,6 @@
 //! give byte-identical plans and the same plan digest.
 
 mod conformance;
-mod layout;
 mod lean_composition;
 mod lean_composition_v2;
 mod plan;
@@ -75,7 +74,7 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
 /// Plans every file of a `v0` or `v1` model and names the profiles used.
 fn v0_v1_artifacts(validated: &Validated) -> Result<(Vec<Artifact>, BTreeSet<String>), PlanError> {
     let model = validated.model();
-    let dirs = layout::component_dirs(model);
+    let dirs = profiles::layout::component_dirs(model);
     let root = model
         .components
         .iter()

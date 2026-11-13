@@ -4,4 +4,5 @@
 pub mod composite;
 pub mod composite_v1;
 pub mod crate_root;
+pub mod layout;
 pub mod transition_core;

@@ -264,6 +264,20 @@ As implemented (step 2b):
   - `routes.rs` hop functions, through `Hop::function`.
 - **Which hops a composite's `routes.rs` implements** has one definition, `Flat::hops_owned_by`, which the planner and packets share.
 
+## Q4: version-dependent output, frozen per version
+
+The audit's Q4 decision is: "Freeze version-dependent output semantics. Sharing truly stable infrastructure/helpers is fine". Each helper the frozen profiles share was classified on that basis (PROPOSED):
+
+| Helper | Classification | Treatment |
+|---|---|---|
+| `layout::component_dirs` (which directory each component's files go to) | Version-dependent: a profile fixes "the exact files generated" (`l2r_model::profiles` docs) | Split. `profiles::layout` belongs to `v0`/`v1` and `v2::layout` to `v2`. Each is frozen with its versions and starts as an identical copy |
+| `MAX_MAILBOX_CAPACITY` (shared by the `v1` and `v2` validators) | Version-dependent: part of what each schema accepts | Split. `v1` keeps `MAX_MAILBOX_CAPACITY`, and `v2` gets its own `MAX_CAPACITY`. Both are 64, so the messages are unchanged |
+| `text::generated_marker`, `declares_generated` | System-level: the marker G13 relies on, shared by every version by design (`parnas-1972-information-hiding`, Not a breach) | Kept shared, declared frozen, output pinned by tests |
+| `text::inner_doc` | Stable infrastructure: a formatting primitive | Kept shared, declared frozen, output pinned by edge-case tests |
+| `rust_names::type_name`, `rust_type_name`, `lean_last_segment` | Stable infrastructure (D5) | Kept shared; already declared frozen |
+
+The per-version naming modules (`composite_v0`, `composite_v1`, `composite_v2`) and the per-version planner modules were already separate. The tests pin the shared helpers, but the guarantee is the split itself: a later version changes its own copy.
+
 ## Questions for the architect
 
 In the order they must be decided. Each is PROPOSED under the delegation and is implemented that way unless the architect overrules it.

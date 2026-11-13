@@ -12,6 +12,7 @@
 
 mod composite;
 mod crate_root;
+mod layout;
 mod machine;
 mod system;
 mod types;
@@ -22,8 +23,8 @@ use l2r_model::{Component, Model, Profile};
 use l2r_validate::Validated;
 use l2r_validate::flat::{Flat, Hop};
 
+use crate::PlanError;
 use crate::plan::Artifact;
-use crate::{PlanError, layout};
 
 /// Everything the `v2` profiles need to know about one validated model.
 pub(crate) struct Gen<'a> {

@@ -29,6 +29,12 @@ use crate::structure;
 /// Identifiers the generated `System` uses as prefixes of its own methods.
 const RESERVED_IDS: &[&str] = &["attempt", "send", "take"];
 
+/// Largest mailbox or outbox a `v2` model may state: the generator emits each
+/// as a fixed-size array. Part of what schema `v2` accepts. It equals the `v1`
+/// limit today but is a separate decision, so changing one cannot change what
+/// the other schema accepts (audit Q4).
+const MAX_CAPACITY: u32 = 64;
+
 /// Validates a canonical `v2` model against its inventory.
 pub fn validate(model: Model, inventory: Inventory) -> Result<Validated, Vec<Diagnostic>> {
     let mut findings = Findings::default();
