@@ -1,0 +1,64 @@
+// Shared specification for every model in this architecture/ workspace.
+// LikeC4 allows one definition of each element kind and tag per workspace, so
+// model files (audit/baseline.c4, audit.c4, design.c4) declare none of their own.
+// The audit and design skills ship this same file.
+
+specification {
+  element system
+  element layer {
+    style {
+      shape rectangle
+    }
+  }
+  element crate {
+    style {
+      shape rectangle
+    }
+  }
+  element module {
+    style {
+      shape component
+    }
+  }
+  element external {
+    style {
+      shape rectangle
+      color muted
+    }
+  }
+
+  // Evidence
+  tag measured
+  tag cycle {
+    color red
+  }
+
+  // Findings (audit)
+  tag violation {
+    color red
+  }
+  tag shallow {
+    color muted
+  }
+  tag vocabulary_bleed {
+    color red
+  }
+  tag hidden_coupling {
+    color amber
+  }
+  tag unstated_precondition {
+    color amber
+  }
+
+  // Design properties
+  tag volatile {
+    color amber
+  }
+  tag state_owner {
+    color blue
+  }
+  tag deep {
+    color green
+  }
+  tag infrastructure
+}
