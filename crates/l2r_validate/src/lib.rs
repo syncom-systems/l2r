@@ -21,7 +21,7 @@ pub use resolved::{ResolvedEnum, ResolvedMachine, Validated, Variant};
 
 use resolved::Resolution;
 
-use l2r_model::{Inventory, MODEL_SCHEMA_V2, Model};
+use l2r_model::{Inventory, Model, Schema};
 
 /// Validates `model` against `inventory`.
 ///
@@ -30,7 +30,7 @@ use l2r_model::{Inventory, MODEL_SCHEMA_V2, Model};
 pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<Diagnostic>> {
     let model = model.canonical();
     let inventory = inventory.canonical();
-    if model.schema == MODEL_SCHEMA_V2 {
+    if model.parsed_schema() == Some(Schema::V2) {
         return v2::validate(model, inventory);
     }
     let mut findings = diagnostic::Findings::default();

@@ -18,7 +18,7 @@ mod types;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use l2r_model::{Component, Model, profiles as profile_ids};
+use l2r_model::{Component, Model, Profile};
 use l2r_validate::Validated;
 use l2r_validate::flat::{Flat, Hop, HopKind};
 
@@ -136,11 +136,11 @@ fn component_artifacts(
     generator: &Gen<'_>,
     component: &Component,
 ) -> Result<Vec<Artifact>, PlanError> {
-    match component.profile.as_str() {
-        profile_ids::TRANSITION_CORE_V1 => machine::artifacts(generator, component),
-        profile_ids::COMPOSITE_V2 => composite::artifacts(generator, component),
-        other => Err(PlanError(format!(
-            "profile `{other}` has no v2 implementation"
-        ))),
+    match generator.validated.profile(&component.id) {
+        Profile::TransitionCoreV1 => machine::artifacts(generator, component),
+        Profile::CompositeV2 => composite::artifacts(generator, component),
+        other @ (Profile::TransitionCoreV0 | Profile::CompositeV0 | Profile::CompositeV1) => Err(
+            PlanError(format!("profile `{}` has no v2 implementation", other.id())),
+        ),
     }
 }

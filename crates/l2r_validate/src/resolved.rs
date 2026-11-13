@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use l2r_model::rust_names::{composite_v0, composite_v1};
-use l2r_model::{Inventory, Model};
+use l2r_model::{Inventory, Model, Profile, Schema};
 
 use crate::data::DataType;
 use crate::flat::Flat;
@@ -16,6 +16,8 @@ use crate::generated_names::CompositeNames;
 /// reference resolved.
 #[derive(Debug, Clone)]
 pub struct Validated {
+    schema: Schema,
+    profiles: BTreeMap<String, Profile>,
     model: Model,
     inventory: Inventory,
     machines: BTreeMap<String, ResolvedMachine>,
@@ -72,7 +74,10 @@ impl Validated {
             port_messages,
             composite_names,
         } = resolution;
+        let (schema, profiles) = typed(&model);
         Self {
+            schema,
+            profiles,
             model,
             inventory,
             machines,
@@ -89,7 +94,10 @@ impl Validated {
         types: BTreeMap<String, DataType>,
         flat: Flat,
     ) -> Self {
+        let (schema, profiles) = typed(&model);
         Self {
+            schema,
+            profiles,
             model,
             inventory,
             machines: BTreeMap::new(),
@@ -98,6 +106,23 @@ impl Validated {
             types,
             flat: Some(flat),
         }
+    }
+
+    /// The model's schema.
+    pub fn schema(&self) -> Schema {
+        self.schema
+    }
+
+    /// The profile of component `component_id`.
+    ///
+    /// # Panics
+    ///
+    /// If the model has no such component.
+    pub fn profile(&self, component_id: &str) -> Profile {
+        *self
+            .profiles
+            .get(component_id)
+            .unwrap_or_else(|| panic!("`{component_id}` is not a component of the model"))
     }
 
     /// The flat network of a `v2` model: its machines, the routes their
@@ -153,4 +178,23 @@ impl Validated {
     pub fn machine(&self, component_id: &str) -> Option<&ResolvedMachine> {
         self.machines.get(component_id)
     }
+}
+
+/// The schema and each component's profile of a model that passed validation,
+/// which has rejected any it does not know (S001, S007, S019).
+fn typed(model: &Model) -> (Schema, BTreeMap<String, Profile>) {
+    let schema = model
+        .parsed_schema()
+        .expect("validation accepts only known schemas");
+    let profiles = model
+        .components
+        .iter()
+        .map(|c| {
+            let profile = c
+                .parsed_profile()
+                .expect("validation accepts only known profiles");
+            (c.id.clone(), profile)
+        })
+        .collect();
+    (schema, profiles)
 }

@@ -13,7 +13,7 @@
 //! the digests of the model and inventory it was derived from, and is not part
 //! of any generation plan, so deriving it never changes a plan digest.
 
-use l2r_model::{Component, Model, digest, profiles as profile_ids};
+use l2r_model::{Component, Kind, Model, Profile, Schema, digest};
 use l2r_validate::Validated;
 
 use crate::PlanError;
@@ -65,14 +65,20 @@ pub fn lean_composition_path(model: &Model) -> String {
 /// `L2R.Async1.Network` with capacities and ports (`l2r.lean-composition/v1`).
 /// A model uses one or the other: a `composite/v1` is always the root.
 pub fn lean_composition(validated: &Validated) -> Result<String, PlanError> {
-    if let Some(flat) = validated.flat() {
-        return crate::lean_composition_v2::lean_composition_v2(validated, flat);
+    match validated.schema() {
+        Schema::V0 | Schema::V1 => {}
+        Schema::V2 => {
+            let flat = validated
+                .flat()
+                .ok_or_else(|| PlanError("a v2 model has no flat network".into()))?;
+            return crate::lean_composition_v2::lean_composition_v2(validated, flat);
+        }
     }
     let model = validated.model();
     let v1 = model
         .components
         .iter()
-        .any(|c| c.profile == profile_ids::COMPOSITE_V1);
+        .any(|c| validated.profile(&c.id) == Profile::CompositeV1);
     let (format, semantics, semantics_digest, import) = if v1 {
         (
             LEAN_COMPOSITION_FORMAT_V1,
@@ -107,9 +113,7 @@ pub fn lean_composition(validated: &Validated) -> Result<String, PlanError> {
     let mut composites: Vec<&Component> = model
         .components
         .iter()
-        .filter(|c| {
-            c.profile == profile_ids::COMPOSITE_V0 || c.profile == profile_ids::COMPOSITE_V1
-        })
+        .filter(|c| validated.profile(&c.id).kind() == Kind::Composite)
         .collect();
     composites.sort_by(|a, b| a.id.cmp(&b.id));
     if composites.is_empty() {
@@ -232,7 +236,7 @@ fn network(model: &Model, composite: &Component, format: &str) -> Result<String,
         &format!("def route : (c : Fin {n}) → Output c → List ((d : Fin {n}) × Input d)"),
         &|i| routes[i].clone(),
     ));
-    if composite.profile == profile_ids::COMPOSITE_V1 {
+    if composite.parsed_profile() == Some(Profile::CompositeV1) {
         out.push_str(&v1_tail(model, composite, &children, n));
     } else {
         out.push_str(&format!(

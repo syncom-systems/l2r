@@ -1,9 +1,9 @@
 //! Component rules of schema `v2`: every component is a machine or a
 //! composite and has the shape of its kind, and the root is a composite.
 
-use l2r_model::{Component, Model, profiles};
+use l2r_model::{Component, Model, Schema, profiles};
 
-use super::{RESERVED_IDS, is_composite, is_machine, root};
+use super::{RESERVED_IDS, is_machine, root};
 use crate::diagnostic::Findings;
 use crate::structure::{MAX_MAILBOX_CAPACITY, subject};
 
@@ -17,7 +17,10 @@ pub(super) fn check(model: &Model, findings: &mut Findings) {
 /// A component is a machine or a composite, and has the shape of its kind.
 fn check_component(model: &Model, component: &Component, findings: &mut Findings) {
     let subject = subject(component);
-    if !is_machine(component) && !is_composite(component) {
+    if !component
+        .parsed_profile()
+        .is_some_and(|p| Schema::V2.admits(p))
+    {
         findings.error(
             "L2R-S019",
             &subject,

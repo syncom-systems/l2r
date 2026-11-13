@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 
 use l2r_apply::{ActionKind, Assessment};
-use l2r_model::{Component, Model, Port, profiles};
+use l2r_model::{Component, Kind, Model, Port, Profile, Schema};
 use l2r_plan::{Ownership, Plan};
 
 use crate::diff::line_diff;
@@ -123,7 +123,7 @@ fn quoted(text: &str) -> String {
 /// A Mermaid view of the architecture: containment as nested subgraphs, state
 /// ownership on each machine, approved message edges as arrows.
 pub fn mermaid(model: &Model) -> String {
-    if model.schema == l2r_model::MODEL_SCHEMA_V2 {
+    if model.parsed_schema() == Some(Schema::V2) {
         return mermaid_v2(model);
     }
     let mut out = String::from("flowchart TB\n");
@@ -200,13 +200,10 @@ fn render_node(model: &Model, id: &str, depth: usize, out: &mut String) {
     }
 }
 
+/// `render` also draws invalid models: a component whose profile is unknown
+/// is drawn as a machine.
 fn is_composite(component: &Component) -> bool {
-    [
-        profiles::COMPOSITE_V0,
-        profiles::COMPOSITE_V1,
-        profiles::COMPOSITE_V2,
-    ]
-    .contains(&component.profile.as_str())
+    component.kind() == Some(Kind::Composite)
 }
 
 /// A composite: a subgraph holding its boundary ports (schema `v2`) and its
@@ -220,7 +217,7 @@ fn render_composite(model: &Model, component: &Component, depth: usize, out: &mu
         quoted(&component.name),
         component.profile
     );
-    if component.profile == profiles::COMPOSITE_V2 {
+    if component.parsed_profile() == Some(Profile::CompositeV2) {
         for port in model.ports.iter().filter(|p| p.composite == component.id) {
             let _ = writeln!(out, "{indent}  {}", port_node(port));
         }
