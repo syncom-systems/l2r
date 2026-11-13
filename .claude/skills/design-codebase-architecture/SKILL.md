@@ -81,7 +81,7 @@ For each module, write its interface as code signatures in the project's languag
 
 Stop and present the design. Do not continue into implementation.
 
-- The questions, in the order they must be decided. Earlier answers constrain later ones.
+- The questions, in the order they must be decided. Earlier answers constrain later ones. There is no minimum or fixed number. Ask only where the answer changes the modules, the uses relation or an interface; settle the rest as PROPOSED with its reason. Fold questions that depend on one answer into that question, as its alternatives.
 - For each question, the alternatives and their consequences, with your recommendation and the principle or evidence behind it.
 - What each answer would unblock.
 
