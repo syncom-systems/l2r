@@ -33,8 +33,9 @@ use l2r_validate::flat::Flat;
 
 use self::value::{Value, data_samples};
 use crate::PlanError;
-use crate::lean_composition::{SEMANTICS_VERSION_V1, semantics_digest_v1};
-use crate::lean_composition_v2::{PORTS_SCHEDULER_VERSION, ports_scheduler_digest};
+use crate::lean_identity::{
+    PORTS_SCHEDULER_VERSION, SEMANTICS_VERSION_V1, ports_scheduler_digest, semantics_digest_v1,
+};
 use crate::plan::GeneratorIdentity;
 
 /// Format identifier of both derived programs.

@@ -9,18 +9,18 @@
 mod conformance;
 mod lean_composition;
 mod lean_composition_v2;
+mod lean_identity;
 mod plan;
 mod profiles;
 mod text;
 mod v2;
 
 pub use conformance::{CONFORMANCE_FORMAT, ConformanceSide, conformance};
-pub use lean_composition::{
-    LEAN_COMPOSITION_FORMAT, LEAN_COMPOSITION_FORMAT_V1, SEMANTICS_VERSION, SEMANTICS_VERSION_V1,
-    lean_composition, lean_composition_path, semantics_digest, semantics_digest_v1,
-};
-pub use lean_composition_v2::{
-    LEAN_COMPOSITION_FORMAT_V2, PORTS_SCHEDULER_VERSION, ports_scheduler_digest,
+pub use lean_composition::{lean_composition, lean_composition_path};
+pub use lean_identity::{
+    LEAN_COMPOSITION_FORMAT, LEAN_COMPOSITION_FORMAT_V1, LEAN_COMPOSITION_FORMAT_V2,
+    PORTS_SCHEDULER_VERSION, SEMANTICS_VERSION, SEMANTICS_VERSION_V1, ports_scheduler_digest,
+    semantics_digest, semantics_digest_v1,
 };
 pub use text::declares_generated;
 
