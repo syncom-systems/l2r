@@ -3,7 +3,7 @@ id: liskov-zilles-1974-abstract-data-types
 title: A type is defined by its operations; its representation is reachable only through them
 source: B. Liskov and S. Zilles, "Programming with Abstract Data Types", Proceedings of the ACM SIGPLAN Symposium on Very High Level Languages, April 1974, pp. 50–59, DOI 10.1145/800233.807045 (also published in ACM SIGPLAN Notices 9(4), DOI 10.1145/942572.807045). Copy used https://ics.uci.edu/~jajones/INF102-S18/readings/13_liskov_adt.pdf
 checked: every quote against the copy used, read sentence by sentence (the text extraction interleaves the two columns)
-status: draft
+status: approved
 related: parnas-1972-information-hiding, parnas-1979-uses-hierarchy, ousterhout-deep-modules
 ---
 
