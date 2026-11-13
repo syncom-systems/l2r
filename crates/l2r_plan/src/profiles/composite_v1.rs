@@ -16,6 +16,7 @@
 //! Generates `mod.rs` (generated) and `routes.rs` (implementation, holding one
 //! translation per edge and per port).
 
+use l2r_model::rust_names::composite_v1::SystemNames;
 use l2r_model::{Component, MessageEdge, Port, profiles};
 use l2r_validate::Validated;
 
@@ -47,8 +48,12 @@ pub fn artifacts(
     lean.dedup();
     let mut sources = vec![component.id.clone()];
     sources.extend(children.iter().map(|c| c.id.clone()));
+    let names = validated
+        .composite_v1_names(&component.id)
+        .ok_or_else(|| PlanError(format!("composite `{}` has no checked names", component.id)))?;
     let gen_ctx = Ctx {
         validated,
+        names,
         component,
         children: &children,
         edges: &edges,
@@ -79,23 +84,16 @@ pub fn artifacts(
 
 struct Ctx<'a> {
     validated: &'a Validated,
+    names: &'a SystemNames,
     component: &'a Component,
     children: &'a [&'a Component],
     edges: &'a [&'a MessageEdge],
     ports: &'a [&'a Port],
 }
 
-fn upper(module: &str) -> String {
-    module.to_ascii_uppercase()
-}
-
 impl Ctx<'_> {
     fn capacity(&self, child: &Component) -> u32 {
         child.mailbox_capacity.unwrap_or(1)
-    }
-
-    fn inbox_type(child: &Component) -> String {
-        format!("{}Inbox", text::type_name(&child.id))
     }
 
     fn module_of(&self, id: &str) -> &str {
@@ -105,14 +103,6 @@ impl Ctx<'_> {
             .component(id)
             .expect("validated reference")
             .rust_module
-    }
-
-    fn message_type(&self, port: &Port) -> String {
-        port.message
-            .rsplit('.')
-            .next()
-            .map(text::type_name)
-            .unwrap_or_default()
     }
 
     fn contract(&self) -> String {
@@ -133,9 +123,9 @@ impl Ctx<'_> {
         out.push('\n');
         for child in self.children {
             out.push_str(&format!(
-                "/// Capacity of `{}`'s mailbox, from the architecture model.\npub const {}_CAPACITY: usize = {};\n",
+                "/// Capacity of `{}`'s mailbox, from the architecture model.\npub const {}: usize = {};\n",
                 child.id,
-                upper(&child.rust_module),
+                self.names.capacity_const(&child.id),
                 self.capacity(child)
             ));
         }
@@ -212,7 +202,7 @@ impl Ctx<'_> {
         let mut out = String::new();
         let mut done: Vec<String> = Vec::new();
         for port in self.ports {
-            let ty = self.message_type(port);
+            let ty = self.names.message_type(&port.id).to_string();
             if done.contains(&ty) {
                 continue;
             }
@@ -237,9 +227,9 @@ impl Ctx<'_> {
 
     fn inbox(&self, child: &Component) -> String {
         let m = &child.rust_module;
-        let ty = Self::inbox_type(child);
+        let ty = self.names.inbox_type(&child.id);
         let n = self.capacity(child) as usize;
-        let cap = format!("{}_CAPACITY", upper(m));
+        let cap = self.names.capacity_const(&child.id);
         let nones = vec!["None"; n].join(", ");
         let mut shift = String::new();
         for i in 0..n.saturating_sub(1) {
@@ -285,56 +275,21 @@ impl Ctx<'_> {
              /// The composed system: one owned state and one bounded mailbox per child.\n\
              #[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct System {\n",
         );
-        for child in self.children {
-            let m = &child.rust_module;
-            out.push_str(&format!(
-                "    {m}: {m}::State,\n    {m}_inbox: {},\n",
-                Self::inbox_type(child)
-            ));
-        }
+        out.push_str(&self.system_fields());
         out.push_str("    next: usize,\n}\n\n");
         out.push_str(&format!(
             "impl System {{\n    const CHILDREN: usize = {n};\n\n"
         ));
-        // constructor
-        out.push_str(
-            "    /// Every child in its initial state, with empty mailboxes.\n    pub fn new() -> Self {\n        Self {\n",
-        );
-        for child in self.children {
-            let m = &child.rust_module;
-            out.push_str(&format!(
-                "            {m}: {m}::init(),\n            {m}_inbox: {}::new(),\n",
-                Self::inbox_type(child)
-            ));
-        }
-        out.push_str("            next: 0,\n        }\n    }\n\n");
-        // accessors
-        for child in self.children {
-            let m = &child.rust_module;
-            out.push_str(&format!(
-                "    /// Current state of `{id}`. Read-only: only `{m}::step` changes it.\n    pub fn {m}(&self) -> {m}::State {{\n        self.{m}\n    }}\n\n\
-                 \x20   /// The mailbox of `{id}`, read-only.\n    pub fn {m}_inbox(&self) -> &{ib} {{\n        &self.{m}_inbox\n    }}\n\n",
-                id = child.id,
-                ib = Self::inbox_type(child)
-            ));
-        }
-        // ports
-        for port in self.ports {
-            let target = self.module_of(port.target());
-            out.push_str(&format!(
-                "    /// Port `{id}`: offers `message` to `{to}`. Accepted only if its mailbox has room;\n    /// otherwise `Err(Rejected)`, and the caller keeps the message.\n    pub fn send_{id}(&mut self, message: {ty}) -> Result<(), Rejected> {{\n        let input = routes::port_{id}(message);\n        if self.{target}_inbox.push(input) {{\n            Ok(())\n        }} else {{\n            Err(Rejected)\n        }}\n    }}\n\n",
-                id = port.id,
-                to = port.target(),
-                ty = self.message_type(port),
-            ));
-        }
+        out.push_str(&self.constructor());
+        out.push_str(&self.accessors());
+        out.push_str(&self.sends());
         out.push_str(
             "    /// True when no mailbox holds a message.\n    pub fn is_settled(&self) -> bool {\n        let mut settled = true;\n",
         );
         for child in self.children {
             out.push_str(&format!(
-                "        settled &= self.{}_inbox.is_empty();\n",
-                child.rust_module
+                "        settled &= self.{}.is_empty();\n",
+                self.names.inbox(&child.id)
             ));
         }
         out.push_str("        settled\n    }\n\n");
@@ -364,8 +319,8 @@ impl Ctx<'_> {
         );
         for (index, child) in self.children.iter().enumerate() {
             out.push_str(&format!(
-                "            {index} => self.attempt_{}(),\n",
-                child.rust_module
+                "            {index} => self.{}(),\n",
+                self.names.attempt(&child.id)
             ));
         }
         out.push_str("            _ => Attempt::Idle,\n        }\n    }\n\n");
@@ -377,34 +332,106 @@ impl Ctx<'_> {
         out
     }
 
+    /// The fields of `System` for the children.
+    fn system_fields(&self) -> String {
+        let mut out = String::new();
+        for child in self.children {
+            let m = &child.rust_module;
+            out.push_str(&format!(
+                "    {}: {m}::State,\n    {}: {},\n",
+                self.names.field(&child.id),
+                self.names.inbox(&child.id),
+                self.names.inbox_type(&child.id)
+            ));
+        }
+        out
+    }
+
+    /// `System::new`.
+    fn constructor(&self) -> String {
+        let mut out = String::new();
+        out.push_str(
+            "    /// Every child in its initial state, with empty mailboxes.\n    pub fn new() -> Self {\n        Self {\n",
+        );
+        for child in self.children {
+            let m = &child.rust_module;
+            out.push_str(&format!(
+                "            {}: {m}::init(),\n            {}: {}::new(),\n",
+                self.names.field(&child.id),
+                self.names.inbox(&child.id),
+                self.names.inbox_type(&child.id)
+            ));
+        }
+        out.push_str("            next: 0,\n        }\n    }\n\n");
+        out
+    }
+
+    /// The read accessors of each child's state and mailbox.
+    fn accessors(&self) -> String {
+        let mut out = String::new();
+        for child in self.children {
+            let m = &child.rust_module;
+            out.push_str(&format!(
+                "    /// Current state of `{id}`. Read-only: only `{m}::step` changes it.\n    pub fn {field}(&self) -> {m}::State {{\n        self.{field}\n    }}\n\n\
+                 \x20   /// The mailbox of `{id}`, read-only.\n    pub fn {inbox}(&self) -> &{ib} {{\n        &self.{inbox}\n    }}\n\n",
+                id = child.id,
+                field = self.names.field(&child.id),
+                inbox = self.names.inbox(&child.id),
+                ib = self.names.inbox_type(&child.id)
+            ));
+        }
+        out
+    }
+
+    /// One `send_<port>` per port.
+    fn sends(&self) -> String {
+        let mut out = String::new();
+        for port in self.ports {
+            out.push_str(&format!(
+                "    /// Port `{id}`: offers `message` to `{to}`. Accepted only if its mailbox has room;\n    /// otherwise `Err(Rejected)`, and the caller keeps the message.\n    pub fn {send}(&mut self, message: {ty}) -> Result<(), Rejected> {{\n        let input = routes::{function}(message);\n        if self.{target_inbox}.push(input) {{\n            Ok(())\n        }} else {{\n            Err(Rejected)\n        }}\n    }}\n\n",
+                id = port.id,
+                to = port.target(),
+                send = self.names.send(&port.id),
+                function = self.names.port_function(&port.id),
+                target_inbox = self.names.inbox(port.target()),
+                ty = self.names.message_type(&port.id),
+            ));
+        }
+        out
+    }
+
     fn attempt_fn(&self, child: &Component) -> String {
         let m = &child.rust_module;
+        let attempt = self.names.attempt(&child.id);
+        let field = self.names.field(&child.id);
+        let inbox = self.names.inbox(&child.id);
         let outgoing: Vec<&&MessageEdge> =
             self.edges.iter().filter(|e| e.from == child.id).collect();
         let mut out = format!(
-            "    fn attempt_{m}(&mut self) -> Attempt {{\n        let input = match self.{m}_inbox.peek() {{\n            Some(input) => input,\n            None => return Attempt::Idle,\n        }};\n        let (state, output) = {m}::step(self.{m}, input);\n"
+            "    fn {attempt}(&mut self) -> Attempt {{\n        let input = match self.{inbox}.peek() {{\n            Some(input) => input,\n            None => return Attempt::Idle,\n        }};\n        let (state, output) = {m}::step(self.{field}, input);\n"
         );
         for edge in &outgoing {
             out.push_str(&format!(
-                "        let to_{id} = match output {{\n            Some(output) => routes::{id}(output),\n            None => None,\n        }};\n",
-                id = edge.id
+                "        let to_{id} = match output {{\n            Some(output) => routes::{function}(output),\n            None => None,\n        }};\n",
+                id = edge.id,
+                function = self.names.edge_function(&edge.id)
             ));
         }
         for edge in &outgoing {
-            let target = self.module_of(&edge.to);
             out.push_str(&format!(
-                "        if to_{id}.is_some() && self.{target}_inbox.is_full() {{\n            return Attempt::Blocked;\n        }}\n",
-                id = edge.id
+                "        if to_{id}.is_some() && self.{target_inbox}.is_full() {{\n            return Attempt::Blocked;\n        }}\n",
+                id = edge.id,
+                target_inbox = self.names.inbox(&edge.to)
             ));
         }
         out.push_str(&format!(
-            "        let _ = self.{m}_inbox.pop();\n        self.{m} = state;\n"
+            "        let _ = self.{inbox}.pop();\n        self.{field} = state;\n"
         ));
         for edge in &outgoing {
-            let target = self.module_of(&edge.to);
             out.push_str(&format!(
-                "        if let Some(message) = to_{id} {{\n            let _ = self.{target}_inbox.push(message);\n        }}\n",
-                id = edge.id
+                "        if let Some(message) = to_{id} {{\n            let _ = self.{target_inbox}.push(message);\n        }}\n",
+                id = edge.id,
+                target_inbox = self.names.inbox(&edge.to)
             ));
         }
         out.push_str("        Attempt::Delivered\n    }\n\n");
@@ -439,7 +466,11 @@ impl Ctx<'_> {
         modules.sort();
         modules.dedup();
         let mut imports = modules;
-        let mut types: Vec<String> = self.ports.iter().map(|p| self.message_type(p)).collect();
+        let mut types: Vec<String> = self
+            .ports
+            .iter()
+            .map(|p| self.names.message_type(&p.id).to_string())
+            .collect();
         types.sort();
         types.dedup();
         imports.extend(types);
@@ -450,11 +481,12 @@ impl Ctx<'_> {
             let to = self.module_of(&edge.to);
             out.push_str(&format!(
                 "\n/// Implements `{t}` (edge `{id}`). `None` means the output means nothing to `{to_id}`.\n\
-                 pub(super) fn {id}(output: {from}::Output) -> Option<{to}::Input> {{\n    \
+                 pub(super) fn {function}(output: {from}::Output) -> Option<{to}::Input> {{\n    \
                      let _ = output;\n    \
                      todo!(\"implement {t}\")\n}}\n",
                 t = edge.translation,
                 id = edge.id,
+                function = self.names.edge_function(&edge.id),
                 to_id = edge.to
             ));
         }
@@ -462,12 +494,13 @@ impl Ctx<'_> {
             let to = self.module_of(port.target());
             out.push_str(&format!(
                 "\n/// Implements `{t}` (port `{id}`).\n\
-                 pub(super) fn port_{id}(message: {ty}) -> {to}::Input {{\n    \
+                 pub(super) fn {function}(message: {ty}) -> {to}::Input {{\n    \
                      let _ = message;\n    \
                      todo!(\"implement {t}\")\n}}\n",
                 t = port.translation_name(),
                 id = port.id,
-                ty = self.message_type(port),
+                function = self.names.port_function(&port.id),
+                ty = self.names.message_type(&port.id),
             ));
         }
         out

@@ -19,6 +19,8 @@ pub use diagnostic::Diagnostic;
 pub use lean_refs::{port_translation_type, step_type, translation_type};
 pub use resolved::{ResolvedEnum, ResolvedMachine, Validated, Variant};
 
+use resolved::Resolution;
+
 use l2r_model::{Inventory, MODEL_SCHEMA_V2, Model};
 
 /// Validates `model` against `inventory`.
@@ -50,13 +52,12 @@ pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<D
     };
 
     if findings.is_empty() {
-        Ok(Validated::new(
-            model,
-            inventory,
+        let resolution = Resolution {
             machines,
             port_messages,
             composite_names,
-        ))
+        };
+        Ok(Validated::new(model, inventory, resolution))
     } else {
         Err(findings.into_sorted())
     }

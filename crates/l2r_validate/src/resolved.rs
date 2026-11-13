@@ -25,6 +25,17 @@ pub struct Validated {
     flat: Option<Flat>,
 }
 
+/// What validation resolves for a `v0` or `v1` model besides the model itself.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Resolution {
+    /// Each machine's Lean types, by component id.
+    pub(crate) machines: BTreeMap<String, ResolvedMachine>,
+    /// Each port's message type, by port id.
+    pub(crate) port_messages: BTreeMap<String, ResolvedEnum>,
+    /// Each composite's generated names, by component id.
+    pub(crate) composite_names: BTreeMap<String, CompositeNames>,
+}
+
 /// A state machine component with its Lean types resolved to enumerations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedMachine {
@@ -55,13 +66,12 @@ pub struct Variant {
 }
 
 impl Validated {
-    pub(crate) fn new(
-        model: Model,
-        inventory: Inventory,
-        machines: BTreeMap<String, ResolvedMachine>,
-        port_messages: BTreeMap<String, ResolvedEnum>,
-        composite_names: BTreeMap<String, CompositeNames>,
-    ) -> Self {
+    pub(crate) fn new(model: Model, inventory: Inventory, resolution: Resolution) -> Self {
+        let Resolution {
+            machines,
+            port_messages,
+            composite_names,
+        } = resolution;
         Self {
             model,
             inventory,

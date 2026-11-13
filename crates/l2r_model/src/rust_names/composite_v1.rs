@@ -55,6 +55,7 @@ struct ChildNames {
     inbox: String,
     inbox_type: String,
     attempt: String,
+    capacity: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,36 +81,17 @@ impl SystemNames {
         claims.claim_fixed(Namespace::Type, TYPES);
         let mut named_children = BTreeMap::new();
         for child in children {
-            let owner = Owner::Component(child.id.to_string());
             let names = ChildNames::of(child);
-            for name in [&names.field, &names.inbox] {
-                claims.claim(Namespace::Field, name, &owner);
-                claims.claim(Namespace::Method, name, &owner);
-            }
-            claims.claim(Namespace::Method, &names.attempt, &owner);
-            claims.claim(Namespace::Type, &names.inbox_type, &owner);
+            names.claim(child.id, &mut claims);
             named_children.insert(child.id.to_string(), names);
         }
         let mut named_ports = BTreeMap::new();
         for port in ports {
-            let owner = Owner::Port(port.id.to_string());
             let names = PortNames::of(port);
-            claims.claim(Namespace::Method, &names.send, &owner);
-            claims.claim(Namespace::RouteFunction, &names.function, &owner);
-            let lean = Owner::LeanType(port.message.to_string());
-            match rust_type_name(lean_last_segment(port.message)) {
-                Some(ty) => claims.claim(Namespace::Type, &ty, &lean),
-                None => claims.reject(Namespace::Type, &names.message_type, &lean),
-            }
+            names.claim(port, &mut claims);
             named_ports.insert(port.id.to_string(), names);
         }
-        for edge in edges {
-            claims.claim(
-                Namespace::RouteFunction,
-                edge,
-                &Owner::Edge(edge.to_string()),
-            );
-        }
+        claims.claim_edges(edges);
         let fields = claims.names(Namespace::Field);
         let methods = claims.names(Namespace::Method);
         let types = claims.names(Namespace::Type);
@@ -171,6 +153,17 @@ impl SystemNames {
         &self.port(id).message_type
     }
 
+    /// The function of `routes.rs` implementing message edge `id`: the
+    /// edge's own id.
+    pub fn edge_function<'a>(&self, id: &'a str) -> &'a str {
+        id
+    }
+
+    /// The constant holding child `id`'s mailbox capacity.
+    pub fn capacity_const(&self, id: &str) -> &str {
+        &self.child(id).capacity
+    }
+
     /// Every field of `System`, in order.
     pub fn fields(&self) -> &[String] {
         &self.fields
@@ -193,6 +186,18 @@ impl SystemNames {
 }
 
 impl ChildNames {
+    /// Claims the names of child `id`: its state and mailbox are each a field
+    /// and the accessor of the same name.
+    fn claim(&self, id: &str, claims: &mut Claims) {
+        let owner = Owner::Component(id.to_string());
+        for name in [&self.field, &self.inbox] {
+            claims.claim(Namespace::Field, name, &owner);
+            claims.claim(Namespace::Method, name, &owner);
+        }
+        claims.claim(Namespace::Method, &self.attempt, &owner);
+        claims.claim(Namespace::Type, &self.inbox_type, &owner);
+    }
+
     fn of(child: &Child<'_>) -> ChildNames {
         let m = child.module;
         ChildNames {
@@ -200,11 +205,25 @@ impl ChildNames {
             inbox: format!("{m}_inbox"),
             inbox_type: format!("{}Inbox", type_name(child.id)),
             attempt: format!("attempt_{m}"),
+            capacity: format!("{}_CAPACITY", m.to_ascii_uppercase()),
         }
     }
 }
 
 impl PortNames {
+    /// Claims the names of port `port`. Its message type is claimed for the
+    /// Lean type, so ports carrying one Lean type share it.
+    fn claim(&self, port: &Port<'_>, claims: &mut Claims) {
+        let owner = Owner::Port(port.id.to_string());
+        claims.claim(Namespace::Method, &self.send, &owner);
+        claims.claim(Namespace::RouteFunction, &self.function, &owner);
+        let lean = Owner::LeanType(port.message.to_string());
+        match rust_type_name(lean_last_segment(port.message)) {
+            Some(ty) => claims.claim(Namespace::Type, &ty, &lean),
+            None => claims.reject(Namespace::Type, &self.message_type, &lean),
+        }
+    }
+
     fn of(port: &Port<'_>) -> PortNames {
         let id = port.id;
         PortNames {

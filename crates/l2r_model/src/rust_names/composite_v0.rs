@@ -39,6 +39,7 @@ pub struct SystemNames {
     fields: Vec<String>,
     methods: Vec<String>,
     types: Vec<String>,
+    route_functions: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,37 +61,21 @@ impl SystemNames {
         claims.claim_fixed(Namespace::Type, TYPES);
         let mut named = BTreeMap::new();
         for child in children {
-            let owner = Owner::Component(child.id.to_string());
             let names = ChildNames::of(child);
-            claims.claim(Namespace::Field, &names.field, &owner);
-            claims.claim(Namespace::Method, &names.field, &owner);
-            if let Some(inbox) = &names.inbox {
-                claims.claim(Namespace::Field, inbox, &owner);
-            }
-            if let Some(route_from) = &names.route_from {
-                claims.claim(Namespace::Method, route_from, &owner);
-            }
-            match rust_type_name(child.id) {
-                Some(variant) => claims.claim(Namespace::Variant, &variant, &owner),
-                None => claims.reject(Namespace::Variant, &names.variant, &owner),
-            }
+            names.claim(child.id, &mut claims);
             named.insert(child.id.to_string(), names);
         }
-        for edge in edges {
-            claims.claim(
-                Namespace::RouteFunction,
-                edge,
-                &Owner::Edge(edge.to_string()),
-            );
-        }
+        claims.claim_edges(edges);
         let fields = claims.names(Namespace::Field);
         let methods = claims.names(Namespace::Method);
         let types = claims.names(Namespace::Type);
+        let route_functions = claims.names(Namespace::RouteFunction);
         claims.finish(SystemNames {
             children: named,
             fields,
             methods,
             types,
+            route_functions,
         })
     }
 
@@ -127,6 +112,12 @@ impl SystemNames {
         &self.child(id).variant
     }
 
+    /// The function of `routes.rs` implementing message edge `id`: the
+    /// edge's own id.
+    pub fn edge_function<'a>(&self, id: &'a str) -> &'a str {
+        id
+    }
+
     /// Every field of `System`, in order.
     pub fn fields(&self) -> &[String] {
         &self.fields
@@ -141,9 +132,32 @@ impl SystemNames {
     pub fn types(&self) -> &[String] {
         &self.types
     }
+
+    /// Every function of `routes.rs`, in order.
+    pub fn route_functions(&self) -> &[String] {
+        &self.route_functions
+    }
 }
 
 impl ChildNames {
+    /// Claims the names of child `id`. Its field and accessor share a name;
+    /// its `Envelope` variant must be a Rust type name.
+    fn claim(&self, id: &str, claims: &mut Claims) {
+        let owner = Owner::Component(id.to_string());
+        claims.claim(Namespace::Field, &self.field, &owner);
+        claims.claim(Namespace::Method, &self.field, &owner);
+        if let Some(inbox) = &self.inbox {
+            claims.claim(Namespace::Field, inbox, &owner);
+        }
+        if let Some(route_from) = &self.route_from {
+            claims.claim(Namespace::Method, route_from, &owner);
+        }
+        match rust_type_name(id) {
+            Some(variant) => claims.claim(Namespace::Variant, &variant, &owner),
+            None => claims.reject(Namespace::Variant, &self.variant, &owner),
+        }
+    }
+
     fn of(child: &Child<'_>) -> ChildNames {
         let m = child.module;
         ChildNames {

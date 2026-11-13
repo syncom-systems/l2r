@@ -6,16 +6,19 @@
 //! also plans `routes.rs` (implementation), holding one translation function per
 //! edge for the implementer to write.
 
+use l2r_model::rust_names::composite_v0::SystemNames;
 use l2r_model::{Component, MessageEdge, Model, profiles};
 
 use crate::plan::{Artifact, Ownership};
 use crate::text;
 use crate::{PlanError, planned_path};
 
-/// Plans the files for one composite component in directory `dir`.
+/// Plans the files for one composite component in directory `dir`, with the
+/// generated names validation checked for it.
 pub fn artifacts(
     model: &Model,
     component: &Component,
+    names: &SystemNames,
     dir: &str,
 ) -> Result<Vec<Artifact>, PlanError> {
     let children = model.children(&component.id);
@@ -31,7 +34,7 @@ pub fn artifacts(
         purpose: "Composite contract: children, mailboxes and deterministic scheduler".into(),
         components: sources.clone(),
         lean: lean.clone(),
-        content: contract(model, component, &children, &edges),
+        content: contract(component, names, &children, &edges),
     }];
     if !edges.is_empty() {
         artifacts.push(Artifact {
@@ -41,20 +44,19 @@ pub fn artifacts(
             purpose: "Message translations, owned by the implementer".into(),
             components: sources,
             lean,
-            content: routes(model, component, &edges),
+            content: routes(model, component, names, &edges),
         });
     }
     Ok(artifacts)
 }
 
-/// Edges between children of `component`, in canonical order.
 pub(crate) fn is_machine(c: &Component) -> bool {
     c.profile == profiles::TRANSITION_CORE_V0
 }
 
 fn contract(
-    model: &Model,
     component: &Component,
+    names: &SystemNames,
     children: &[&Component],
     edges: &[&MessageEdge],
 ) -> String {
@@ -75,10 +77,10 @@ fn contract(
         out.push_str(&format!("{visibility}mod {module};\n"));
     }
     out.push_str("\nuse std::collections::VecDeque;\n\n");
-    out.push_str(&envelope(children));
-    out.push_str(&system_struct(children));
+    out.push_str(&envelope(names, children));
+    out.push_str(&system_struct(names, children));
     out.push_str(&unsettled());
-    out.push_str(&system_impl(model, children, edges));
+    out.push_str(&system_impl(names, children, edges));
     out.push_str(
         "impl Default for System {\n    fn default() -> Self {\n        Self::new()\n    }\n}\n",
     );
@@ -122,7 +124,7 @@ fn module_doc(component: &Component, children: &[&Component], edges: &[&MessageE
     doc
 }
 
-fn envelope(children: &[&Component]) -> String {
+fn envelope(names: &SystemNames, children: &[&Component]) -> String {
     let mut out = String::from(
         "/// A message addressed to one child.\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub enum Envelope {\n",
     );
@@ -135,7 +137,7 @@ fn envelope(children: &[&Component]) -> String {
         out.push_str(&format!(
             "    /// For `{}`.\n    {}({}::{payload}),\n",
             child.id,
-            text::type_name(&child.id),
+            names.variant(&child.id),
             child.rust_module
         ));
     }
@@ -143,7 +145,7 @@ fn envelope(children: &[&Component]) -> String {
     out
 }
 
-fn system_struct(children: &[&Component]) -> String {
+fn system_struct(names: &SystemNames, children: &[&Component]) -> String {
     let mut out = String::from(
         "/// The composed system: one owned state and mailbox per machine child, and the\n\
          /// nested system of each composite child.\n\
@@ -151,12 +153,14 @@ fn system_struct(children: &[&Component]) -> String {
     );
     for child in children {
         let m = &child.rust_module;
+        let field = names.field(&child.id);
         if is_machine(child) {
+            let inbox = names.inbox(&child.id);
             out.push_str(&format!(
-                "    {m}: {m}::State,\n    {m}_inbox: VecDeque<{m}::Input>,\n"
+                "    {field}: {m}::State,\n    {inbox}: VecDeque<{m}::Input>,\n"
             ));
         } else {
-            out.push_str(&format!("    {m}: {m}::System,\n"));
+            out.push_str(&format!("    {field}: {m}::System,\n"));
         }
     }
     out.push_str("    next: usize,\n}\n\n");
@@ -170,19 +174,19 @@ fn unsettled() -> String {
         .into()
 }
 
-fn system_impl(model: &Model, children: &[&Component], edges: &[&MessageEdge]) -> String {
+fn system_impl(names: &SystemNames, children: &[&Component], edges: &[&MessageEdge]) -> String {
     let mut out = format!(
         "impl System {{\n    const CHILDREN: usize = {};\n\n",
         children.len()
     );
-    out.push_str(&constructor(children));
-    out.push_str(&accessors(children));
-    out.push_str(&send(children));
-    out.push_str(&is_settled(children));
+    out.push_str(&constructor(names, children));
+    out.push_str(&accessors(names, children));
+    out.push_str(&send(names, children));
+    out.push_str(&is_settled(names, children));
     out.push_str(STEP_ONCE_AND_RUN);
-    out.push_str(&deliver(children));
+    out.push_str(&deliver(names, children));
     for child in children.iter().filter(|c| is_machine(c)) {
-        out.push_str(&route_from(model, child, edges));
+        out.push_str(&route_from(names, child, edges));
     }
     // Every method above ends with a blank line; the last one must not.
     out.truncate(out.trim_end().len());
@@ -190,36 +194,39 @@ fn system_impl(model: &Model, children: &[&Component], edges: &[&MessageEdge]) -
     out
 }
 
-fn constructor(children: &[&Component]) -> String {
+fn constructor(names: &SystemNames, children: &[&Component]) -> String {
     let mut out = String::from(
         "    /// Every child in its initial state, with empty mailboxes.\n    pub fn new() -> Self {\n        Self {\n",
     );
     for child in children {
         let m = &child.rust_module;
+        let field = names.field(&child.id);
         if is_machine(child) {
+            let inbox = names.inbox(&child.id);
             out.push_str(&format!(
-                "            {m}: {m}::init(),\n            {m}_inbox: VecDeque::new(),\n"
+                "            {field}: {m}::init(),\n            {inbox}: VecDeque::new(),\n"
             ));
         } else {
-            out.push_str(&format!("            {m}: {m}::System::new(),\n"));
+            out.push_str(&format!("            {field}: {m}::System::new(),\n"));
         }
     }
     out.push_str("            next: 0,\n        }\n    }\n\n");
     out
 }
 
-fn accessors(children: &[&Component]) -> String {
+fn accessors(names: &SystemNames, children: &[&Component]) -> String {
     let mut out = String::new();
     for child in children {
         let m = &child.rust_module;
+        let field = names.field(&child.id);
         if is_machine(child) {
             out.push_str(&format!(
-                "    /// Current state of `{}`. Read-only: only `{m}::step` changes it.\n    pub fn {m}(&self) -> {m}::State {{\n        self.{m}\n    }}\n\n",
+                "    /// Current state of `{}`. Read-only: only `{m}::step` changes it.\n    pub fn {field}(&self) -> {m}::State {{\n        self.{field}\n    }}\n\n",
                 child.id
             ));
         } else {
             out.push_str(&format!(
-                "    /// The nested system `{}`. Read-only.\n    pub fn {m}(&self) -> &{m}::System {{\n        &self.{m}\n    }}\n\n",
+                "    /// The nested system `{}`. Read-only.\n    pub fn {field}(&self) -> &{m}::System {{\n        &self.{field}\n    }}\n\n",
                 child.id
             ));
         }
@@ -227,20 +234,21 @@ fn accessors(children: &[&Component]) -> String {
     out
 }
 
-fn send(children: &[&Component]) -> String {
+fn send(names: &SystemNames, children: &[&Component]) -> String {
     let mut out = String::from(
         "    /// Queues a message for its addressee.\n    pub fn send(&mut self, envelope: Envelope) {\n        match envelope {\n",
     );
     for child in children {
-        let m = &child.rust_module;
-        let variant = text::type_name(&child.id);
+        let variant = names.variant(&child.id);
         if is_machine(child) {
+            let inbox = names.inbox(&child.id);
             out.push_str(&format!(
-                "            Envelope::{variant}(input) => self.{m}_inbox.push_back(input),\n"
+                "            Envelope::{variant}(input) => self.{inbox}.push_back(input),\n"
             ));
         } else {
+            let field = names.field(&child.id);
             out.push_str(&format!(
-                "            Envelope::{variant}(inner) => self.{m}.send(inner),\n"
+                "            Envelope::{variant}(inner) => self.{field}.send(inner),\n"
             ));
         }
     }
@@ -248,15 +256,14 @@ fn send(children: &[&Component]) -> String {
     out
 }
 
-fn is_settled(children: &[&Component]) -> String {
+fn is_settled(names: &SystemNames, children: &[&Component]) -> String {
     let checks: Vec<String> = children
         .iter()
         .map(|c| {
-            let m = &c.rust_module;
             if is_machine(c) {
-                format!("self.{m}_inbox.is_empty()")
+                format!("self.{}.is_empty()", names.inbox(&c.id))
             } else {
-                format!("self.{m}.is_settled()")
+                format!("self.{}.is_settled()", names.field(&c.id))
             }
         })
         .collect();
@@ -296,57 +303,65 @@ const STEP_ONCE_AND_RUN: &str = "    /// Serves the next child, in round-robin o
      \x20       }\n\
      \x20   }\n\n";
 
-fn deliver(children: &[&Component]) -> String {
+fn deliver(names: &SystemNames, children: &[&Component]) -> String {
     let mut out =
         String::from("    fn deliver(&mut self, child: usize) -> bool {\n        match child {\n");
     for (index, child) in children.iter().enumerate() {
         let m = &child.rust_module;
+        let field = names.field(&child.id);
         if is_machine(child) {
+            let inbox = names.inbox(&child.id);
+            let route_from = names.route_from(&child.id);
             out.push_str(&format!(
                 "            {index} => {{\n\
-                 \x20               let Some(input) = self.{m}_inbox.pop_front() else {{\n\
+                 \x20               let Some(input) = self.{inbox}.pop_front() else {{\n\
                  \x20                   return false;\n\
                  \x20               }};\n\
-                 \x20               let (state, output) = {m}::step(self.{m}, input);\n\
-                 \x20               self.{m} = state;\n\
+                 \x20               let (state, output) = {m}::step(self.{field}, input);\n\
+                 \x20               self.{field} = state;\n\
                  \x20               if let Some(output) = output {{\n\
-                 \x20                   self.route_from_{m}(output);\n\
+                 \x20                   self.{route_from}(output);\n\
                  \x20               }}\n\
                  \x20               true\n\
                  \x20           }}\n"
             ));
         } else {
-            out.push_str(&format!("            {index} => self.{m}.step_once(),\n"));
+            out.push_str(&format!(
+                "            {index} => self.{field}.step_once(),\n"
+            ));
         }
     }
     out.push_str("            _ => false,\n        }\n    }\n\n");
     out
 }
 
-fn route_from(model: &Model, child: &Component, edges: &[&MessageEdge]) -> String {
+fn route_from(names: &SystemNames, child: &Component, edges: &[&MessageEdge]) -> String {
     let m = &child.rust_module;
     let outgoing: Vec<&&MessageEdge> = edges.iter().filter(|e| e.from == child.id).collect();
-    let mut out = format!("    fn route_from_{m}(&mut self, output: {m}::Output) {{\n");
+    let route_from = names.route_from(&child.id);
+    let mut out = format!("    fn {route_from}(&mut self, output: {m}::Output) {{\n");
     if outgoing.is_empty() {
         out.push_str(
             "        // No approved edge consumes these outputs.\n        let _ = output;\n",
         );
     }
     for edge in outgoing {
-        let target = &model
-            .component(&edge.to)
-            .expect("validated edge target")
-            .rust_module;
         out.push_str(&format!(
-            "        if let Some(input) = routes::{}(output) {{\n            self.{target}_inbox.push_back(input);\n        }}\n",
-            edge.id
+            "        if let Some(input) = routes::{}(output) {{\n            self.{}.push_back(input);\n        }}\n",
+            names.edge_function(&edge.id),
+            names.inbox(&edge.to)
         ));
     }
     out.push_str("    }\n\n");
     out
 }
 
-fn routes(model: &Model, component: &Component, edges: &[&MessageEdge]) -> String {
+fn routes(
+    model: &Model,
+    component: &Component,
+    names: &SystemNames,
+    edges: &[&MessageEdge],
+) -> String {
     let mut out = text::inner_doc(&format!(
         "Message translations for {} (`{}`).\n\
          \n\
@@ -367,11 +382,12 @@ fn routes(model: &Model, component: &Component, edges: &[&MessageEdge]) -> Strin
         let to = &model.component(&edge.to).expect("validated").rust_module;
         out.push_str(&format!(
             "\n/// Implements `{t}` (edge `{id}`).\n\
-             pub(super) fn {id}(output: {from}::Output) -> Option<{to}::Input> {{\n    \
+             pub(super) fn {function}(output: {from}::Output) -> Option<{to}::Input> {{\n    \
                  let _ = output;\n    \
                  todo!(\"implement {t}\")\n}}\n",
             t = edge.translation,
-            id = edge.id
+            id = edge.id,
+            function = names.edge_function(&edge.id)
         ));
     }
     out

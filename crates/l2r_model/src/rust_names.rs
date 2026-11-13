@@ -207,6 +207,17 @@ impl Claims {
         }
     }
 
+    /// Claims the route function of each message edge: the edge's own id.
+    fn claim_edges(&mut self, edges: &[&str]) {
+        for edge in edges {
+            self.claim(
+                Namespace::RouteFunction,
+                edge,
+                &Owner::Edge(edge.to_string()),
+            );
+        }
+    }
+
     fn reject(&mut self, namespace: Namespace, name: &str, owner: &Owner) {
         self.problems.push(Problem::NotARustName {
             namespace,

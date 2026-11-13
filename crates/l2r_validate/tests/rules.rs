@@ -489,46 +489,30 @@ fn finding(code: &str, subject: &str, message: &str) -> (String, String, String)
 }
 
 #[test]
-fn a_v0_child_module_named_like_the_scheduler_field_is_rejected() {
-    let mut model = example_model();
-    component(&mut model, "signal").rust_module = "next".into();
-    assert_eq!(
-        diagnostics(&model, &example_inventory()),
-        vec![finding(
-            "L2R-S021",
-            "component `signal`",
-            "generates the `System` field `next`, which the profile also generates"
-        )]
-    );
-}
-
-#[test]
-fn a_v0_child_module_named_like_another_childs_mailbox_is_rejected() {
-    let mut model = example_model();
-    component(&mut model, "signal").rust_module = "request_latch_inbox".into();
-    assert_eq!(
-        diagnostics(&model, &example_inventory()),
-        vec![finding(
-            "L2R-S021",
-            "component `signal`",
-            "generates the `System` field `request_latch_inbox`, which component `request_latch` also generates"
-        )]
-    );
-}
-
-#[test]
-fn a_v1_child_module_named_like_the_scheduler_field_is_rejected() {
-    // The reproduced defect: `System` got two fields `next` (rustc E0124).
-    let mut model = example_v1_model();
-    component(&mut model, "signal").rust_module = "next".into();
-    assert_eq!(
-        diagnostics(&model, &example_v1_inventory()),
-        vec![finding(
-            "L2R-S021",
-            "component `signal`",
-            "generates the `System` field `next`, which the profile also generates"
-        )]
-    );
+fn a_child_module_named_like_a_generated_member_is_rejected() {
+    // The reproduced defect: a module `next` gave `System` two fields `next`
+    // (rustc E0124), in v0 and in v1 alike.
+    let next = "generates the `System` field `next`, which the profile also generates";
+    let latch_inbox = "generates the `System` field `request_latch_inbox`, which component `request_latch` also generates";
+    for (model, inventory, module, message) in [
+        (example_model(), example_inventory(), "next", next),
+        (
+            example_model(),
+            example_inventory(),
+            "request_latch_inbox",
+            latch_inbox,
+        ),
+        (example_v1_model(), example_v1_inventory(), "next", next),
+    ] {
+        let mut model = model;
+        component(&mut model, "signal").rust_module = module.into();
+        assert_eq!(
+            diagnostics(&model, &inventory),
+            vec![finding("L2R-S021", "component `signal`", message)],
+            "{} with module `{module}`",
+            model.schema
+        );
+    }
 }
 
 /// The v1 example inventory with one more port message type, `name`, a copy of
