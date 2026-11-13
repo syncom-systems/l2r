@@ -36,20 +36,27 @@ The picture is the measured model plus one view per finding (ruling R4); see [Pi
 
 ### 1. Scope and measurement
 
-Name the scope (crates, packages or a subsystem) and what is outside it. Measure the scope together with the crates it uses and the crates that use it. They are context, not audited, but cross-crate findings need them in the graph and in the views. For Rust, run:
+Name the scope (crates, packages or a subsystem) and what is outside it. For Rust, run:
 
 ```bash
 python3 <skill>/scripts/deps.py --repo . --scope <dirs> [--exclude '<generated glob>'] --out architecture/audit
 ```
 
-It writes:
-- `architecture/audit/edges.json`: crate edges from the build, module edges from `use` and qualified paths, each with `file:line`, and the loops among them;
+It reads every Rust target of the workspace from the build, then measures the scope together with its context: the crates the scope depends on directly (`used_by_scope`) and the crates that depend on it directly (`uses_scope`). Context crates are not audited, but their edges into and out of the scope are measured. It writes:
+- `architecture/audit/edges.json`:
+  - each crate with its roles, its declared dependencies and its external and unresolved ones;
+  - crate edges, citing the `file:line` where the depending target is declared (its `deps` list holds the label) or the manifest line;
+  - module edges from `use` and qualified paths, each with `file:line`;
+  - the loops among them;
+  - `checks` and `not_measured`.
 - `architecture/audit/measured.c4`: the same graph as a LikeC4 model (system `measured`), rewritten on every run.
 
-Its limits are in its header:
-- test modules and macros are not read;
-- a path is resolved to the longest known module, so a function re-exported under its module's name lands on that module;
-- testonly targets count unless excluded.
+Read the exit code before anything else:
+- **2, no measurement.** Bazel is missing or its query failed, a scope directory does not exist, or the scope has no Rust crates. Nothing is written. In a Bazel workspace it never falls back to Cargo. Do not audit without the measurement; report what failed.
+- **1, inconsistent.** Code refers to a crate its build does not declare (`checks.references_to_undeclared_crates`). That is a measurement error, since the code could not compile. Resolve it before you rely on the edges.
+- **0, measured.** Still read `unresolved_deps`, `declared_deps_without_reference` and `not_measured`, and name in the record what they leave out.
+
+What it does not read is listed in `not_measured` and in its header: test targets and test modules, macro bodies and expansions, generated sources and `select()` branches. A path resolves to the longest known module, so a function re-exported under its module's name lands on that module.
 
 Every edge is a compile-time dependency. Whether it is a *use* in Parnas's sense (A's correctness depends on B) is your judgement. A dependency on a type alone usually is one, but a weak one; say which.
 
@@ -63,6 +70,7 @@ This is the finding that metrics rarely show and that matters most (`parnas-1972
 2. For each decision, find every module that knows it. Search for the constant, the message, the expression or the rule, and read each hit.
 3. More than one owner is a finding, unless the decision is deliberately system-level and defined once (Not a breach). If the copies can disagree, say whether they do, and whether that difference can ever be reached.
 4. Several *checks* of one rule are not several owners. Checking a rule on every path is what complete mediation asks for (`saltzer-schroeder-1975-protection-principles`). The breach is the rule *written* several times, so that the checks can drift apart. Report which of the two you found.
+5. Before recording a duplication, look for an existing single implementation of the rule and check whether every path calls it. Then name one concrete, likely change to the decision and list every edit it forces. For each edit, say whether the compiler forces it (an exhaustive `match`, a type that no longer fits) or whether it can be missed silently. Only edits that can be missed silently, and that would make two paths disagree, support the finding.
 
 Include the decisions about **authority**: what may be written, overwritten, deleted or sent. For each, find every path that reaches the protected action, including recovery and retries, and check that each one passes the same check (`saltzer-schroeder-1975-protection-principles`).
 

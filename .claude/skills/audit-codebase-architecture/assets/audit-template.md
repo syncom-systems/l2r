@@ -10,7 +10,8 @@ Marks: PROPOSED · DECIDED (architect, date) · OPEN.
 - In scope: …
 - Out of scope, and why: … (generated code, other subsystems)
 - Binding decisions read: … (AGENTS.md, ADRs)
-- Measurement: `deps.py --scope …` → N crates, M modules, crate loops …, module loops … Limits: …
+- Measurement: `deps.py --scope …` → exit code, crates found by …; scope …; context (used by scope …, uses scope …); M modules, crate loops …, module loops …
+- Not measured: … (`not_measured`, unresolved deps, declared deps without a reference)
 
 ## Findings
 
