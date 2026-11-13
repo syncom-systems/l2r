@@ -296,9 +296,7 @@ fn check_capacity(model: &Model, component: &Component, findings: &mut Findings)
     }
 }
 
-/// Largest mailbox a `composite/v1` child may state: the generator emits it as
-/// a fixed-size array. Part of what schema `v1` accepts, so frozen with it
-/// (audit Q4); schema `v2` has its own limit, `v2::MAX_CAPACITY`.
+/// Largest mailbox the generator emits as a fixed-size array.
 pub const MAX_MAILBOX_CAPACITY: u32 = 64;
 
 fn check_parents(model: &Model, findings: &mut Findings) {
