@@ -2,7 +2,7 @@
 
 Architect: <name>. Date: <date>. Knowledge base: `architecture-knowledge/` (rulings first).
 
-Evidence labels: MEASURED (deps.py, compiler, build), READ (`file:line`), INFERRED (chain stated), ARCHITECT (answer, date).
+Evidence labels: MEASURED (architecture-evidence, compiler, build), READ (`file:line`), INFERRED (chain stated), ARCHITECT (answer, date).
 Marks: PROPOSED · DECIDED (architect, date) · OPEN.
 
 ## Scope and evidence
@@ -10,8 +10,8 @@ Marks: PROPOSED · DECIDED (architect, date) · OPEN.
 - In scope: …
 - Out of scope, and why: … (generated code, other subsystems)
 - Binding decisions read: … (AGENTS.md, ADRs)
-- Measurement: `deps.py --scope …` → exit code, crates found by …; scope …; context (used by scope …, uses scope …); M modules, crate loops …, module loops …
-- Not measured: … (`not_measured`, unresolved deps, declared deps without a reference)
+- Measurement: `measure.py --scope …` → exit code, build units found by …; scope …; context (used by scope …, uses scope …); N source units, declared loops …, observed loops …
+- Not measured: … (`not_measured`, unresolved deps, `checks.declared_without_observed`)
 
 ## Findings
 
