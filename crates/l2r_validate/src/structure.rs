@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use l2r_model::{Component, MODEL_SCHEMA, Model, SUPPORTED_SCHEMAS, profiles};
+use l2r_model::{Component, MODEL_SCHEMA, Model, SUPPORTED_SCHEMAS, System, profiles};
 
 use crate::diagnostic::Findings;
 use crate::names;
@@ -88,6 +88,15 @@ fn check_system(model: &Model, findings: &mut Findings) {
             format!("`{}` is not a valid Rust crate name", system.rust_crate),
         );
     }
+    check_paths(system, findings);
+    check_text(&system.name, "system.name", findings);
+}
+
+/// Rule S013: every path in `[system]` is relative and cannot escape the
+/// model's directory. The CLI applies it alone, through
+/// [`crate::validate_system_paths`], before it opens the inventory these paths
+/// name.
+pub(crate) fn check_paths(system: &System, findings: &mut Findings) {
     for (field, path) in [
         ("system.lean_inventory", &system.lean_inventory),
         ("system.output_dir", &system.output_dir),
@@ -100,7 +109,6 @@ fn check_system(model: &Model, findings: &mut Findings) {
             );
         }
     }
-    check_text(&system.name, "system.name", findings);
 }
 
 fn check_component_ids(model: &Model, findings: &mut Findings) {
