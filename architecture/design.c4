@@ -1,0 +1,64 @@
+// A picture of architecture/design.md, the design record. The record is the
+// authority: every relation names the record entry it comes from in its
+// `entry` metadata. Element kinds and tags come from architecture/spec.c4.
+//   python3 .claude/skills/design-codebase-architecture/scripts/c4check.py architecture/ --record architecture/design.md
+
+model {
+  designed = system 'L2R: profile semantics and generated names' {
+    profile = module 'l2r_model::profile' {
+      #volatile
+      description 'M1. Hides D1-D3: which schemas and profiles exist, their kinds and permitted combinations. Step 2.'
+    }
+    rust_names = module 'l2r_model::rust_names' {
+      #volatile
+      description 'M2. Hides D4-D5: the Rust names each composite profile version generates; one frozen sub-module per version.'
+    }
+    validate = module 'l2r_validate' {
+      description 'M3. Establishes Validated, which carries each composite name set (and, in step 2, the typed schema and profiles).'
+    }
+    plan = module 'l2r_plan' {
+      description 'M4. Hides the text of generated files and D6, the planner per schema.'
+    }
+    cli = module 'l2r (packet, report)' {
+      description 'M5. Presentation.'
+    }
+
+    validate -> profile 'uses: parses schema and profile, asks kind and combinations' {
+      metadata {
+        entry 'U1'
+      }
+    }
+    validate -> rust_names 'uses: builds each composite name set, reports its problems' {
+      metadata {
+        entry 'U2'
+      }
+    }
+    plan -> validate 'uses: relies on Validated, including its name sets' {
+      metadata {
+        entry 'U3'
+      }
+    }
+    plan -> rust_names 'uses: takes every generated name from a checked name set' {
+      metadata {
+        entry 'U4'
+      }
+    }
+    plan -> profile 'uses: matches on Profile and Schema' {
+      metadata {
+        entry 'U5'
+      }
+    }
+    cli -> plan 'uses: plans, packets name generated members' {
+      metadata {
+        entry 'U6'
+      }
+    }
+  }
+}
+
+views {
+  view designed_uses {
+    title 'Uses relation: one owner for profile semantics and generated names'
+    include designed.*
+  }
+}
