@@ -7,6 +7,7 @@ pub mod lean;
 pub mod load;
 pub mod path;
 pub mod profiles;
+pub mod rust_names;
 
 pub use architecture::{
     Behavior, Component, MODEL_SCHEMA, MODEL_SCHEMA_V1, MODEL_SCHEMA_V2, MessageEdge, Model, Port,

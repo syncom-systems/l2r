@@ -18,7 +18,7 @@ use l2r_validate::Validated;
 
 use crate::PlanError;
 use crate::plan::GeneratorIdentity;
-use crate::profiles::composite::{edges_within, is_machine};
+use crate::profiles::composite::is_machine;
 
 /// Format identifier of the derived file for `composite/v0` composites.
 pub const LEAN_COMPOSITION_FORMAT: &str = "l2r.lean-composition/v0";
@@ -139,7 +139,7 @@ fn network(model: &Model, composite: &Component, format: &str) -> Result<String,
     }
     let n = children.len();
     let index = |id: &str| children.iter().position(|c| c.id == id);
-    let edges = edges_within(model, composite);
+    let edges = model.edges_within(&composite.id);
 
     let mut out = format!(
         "/-!\n# Composite `{id}` ({name})\n\n\

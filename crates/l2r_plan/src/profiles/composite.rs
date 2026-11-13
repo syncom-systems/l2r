@@ -19,7 +19,7 @@ pub fn artifacts(
     dir: &str,
 ) -> Result<Vec<Artifact>, PlanError> {
     let children = model.children(&component.id);
-    let edges = edges_within(model, component);
+    let edges = model.edges_within(&component.id);
     let mut lean: Vec<String> = edges.iter().map(|e| e.translation.clone()).collect();
     lean.sort();
     let mut sources = vec![component.id.clone()];
@@ -48,15 +48,6 @@ pub fn artifacts(
 }
 
 /// Edges between children of `component`, in canonical order.
-pub(crate) fn edges_within<'a>(model: &'a Model, component: &Component) -> Vec<&'a MessageEdge> {
-    let parent_of = |id: &str| model.component(id).and_then(|c| c.parent.clone());
-    model
-        .messages
-        .iter()
-        .filter(|e| parent_of(&e.from).as_deref() == Some(component.id.as_str()))
-        .collect()
-}
-
 pub(crate) fn is_machine(c: &Component) -> bool {
     c.profile == profiles::TRANSITION_CORE_V0
 }

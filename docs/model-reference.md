@@ -137,6 +137,7 @@ and never repairs the model.
 | L2R-S018 | `mailbox_capacity` outside the children of a `composite/v1` |
 | L2R-S019 | A `v2` profile in a `v0`/`v1` model, or an older profile in a `v2` model |
 | L2R-S020 | Two identifiers that generate the same Rust name (`a_1` and `a1`; edge `port_x` and port `x`; port `q_state` and machine `send_q`) |
+| L2R-S021 | A `composite/v0` or `composite/v1` whose generated code would not compile because two names meet: a child module named like a `System` field or method the profile generates (`next`, `run`, …), a module named like another child's derived member (`a_inbox`, `route_from_a`), two ids giving one `Envelope` variant (`a_1` and `a1`), or an edge named like a port function (`port_x`). Added 2026-11-13 as a correction of the frozen schemas: it rejects only models whose output could not compile (ADR-0005 D9 clarification) |
 | L2R-O001 | A Lean state type owned by more than one component |
 | L2R-L001 | Unsupported inventory schema; a `v2` model with an inventory that lacks constructor fields |
 | L2R-L002 | Malformed Lean name |
@@ -160,6 +161,7 @@ and never repairs the model.
 | L2R-P002 | A port's composite does not exist or is not a `composite/v1` |
 | L2R-P003 | A port's target is not a machine inside its composite |
 | L2R-P004 | A `composite/v1` has no port; a `v2` root has no `in` port |
+| L2R-P005 | A `composite/v1` port whose Lean message type cannot get its own Rust type: distinct Lean types with one last segment (`A.Command` and `B.Command`), a segment that is not a usable Rust type name (`Timer'`, `Self`), or one named like a type the module generates (`System`, `<Child>Inbox`, …). Added 2026-11-13 as a correction of the frozen schemas (ADR-0005 D9 clarification) |
 | L2R-P006 | A port and a component share an identifier (schema `v2`) |
 | L2R-P007 | A `v2` port without `direction = "in"` or `"out"` |
 | L2R-P008 | `capacity` missing on a root `out` port, out of range, or used on any other port |

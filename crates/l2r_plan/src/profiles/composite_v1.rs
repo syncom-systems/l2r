@@ -20,7 +20,6 @@ use l2r_model::{Component, MessageEdge, Port, profiles};
 use l2r_validate::Validated;
 
 use crate::plan::{Artifact, Ownership};
-use crate::profiles::composite::edges_within;
 use crate::text;
 use crate::{PlanError, planned_path};
 
@@ -32,7 +31,7 @@ pub fn artifacts(
 ) -> Result<Vec<Artifact>, PlanError> {
     let model = validated.model();
     let children = model.children(&component.id);
-    let edges = edges_within(model, component);
+    let edges = model.edges_within(&component.id);
     let ports: Vec<&Port> = model
         .ports
         .iter()

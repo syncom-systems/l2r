@@ -6,6 +6,7 @@
 pub mod data;
 mod diagnostic;
 pub mod flat;
+mod generated_names;
 mod lean_refs;
 mod messages;
 pub mod names;
@@ -38,6 +39,7 @@ pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<D
     let usable_inventory = inventory_ok.then_some(&inventory);
     messages::check(&model, usable_inventory, &mut findings);
     ports::check(&model, &mut findings);
+    let composite_names = generated_names::check(&model, &mut findings);
     let machines = match usable_inventory {
         Some(inventory) => lean_refs::resolve_machines(&model, inventory, &mut findings),
         None => Default::default(),
@@ -48,7 +50,13 @@ pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<D
     };
 
     if findings.is_empty() {
-        Ok(Validated::new(model, inventory, machines, port_messages))
+        Ok(Validated::new(
+            model,
+            inventory,
+            machines,
+            port_messages,
+            composite_names,
+        ))
     } else {
         Err(findings.into_sorted())
     }

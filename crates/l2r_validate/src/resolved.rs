@@ -5,10 +5,12 @@
 
 use std::collections::BTreeMap;
 
+use l2r_model::rust_names::{composite_v0, composite_v1};
 use l2r_model::{Inventory, Model};
 
 use crate::data::DataType;
 use crate::flat::Flat;
+use crate::generated_names::CompositeNames;
 
 /// A canonical model and inventory that passed validation, with every Lean
 /// reference resolved.
@@ -18,6 +20,7 @@ pub struct Validated {
     inventory: Inventory,
     machines: BTreeMap<String, ResolvedMachine>,
     port_messages: BTreeMap<String, ResolvedEnum>,
+    composite_names: BTreeMap<String, CompositeNames>,
     types: BTreeMap<String, DataType>,
     flat: Option<Flat>,
 }
@@ -57,12 +60,14 @@ impl Validated {
         inventory: Inventory,
         machines: BTreeMap<String, ResolvedMachine>,
         port_messages: BTreeMap<String, ResolvedEnum>,
+        composite_names: BTreeMap<String, CompositeNames>,
     ) -> Self {
         Self {
             model,
             inventory,
             machines,
             port_messages,
+            composite_names,
             types: BTreeMap::new(),
             flat: None,
         }
@@ -79,6 +84,7 @@ impl Validated {
             inventory,
             machines: BTreeMap::new(),
             port_messages: BTreeMap::new(),
+            composite_names: BTreeMap::new(),
             types,
             flat: Some(flat),
         }
@@ -113,6 +119,24 @@ impl Validated {
     /// The resolved message type of a port id.
     pub fn port_message(&self, port_id: &str) -> Option<&ResolvedEnum> {
         self.port_messages.get(port_id)
+    }
+
+    /// The generated names of `composite/v0` `composite_id`, checked free of
+    /// conflicts. `None` if it is not a `composite/v0`.
+    pub fn composite_v0_names(&self, composite_id: &str) -> Option<&composite_v0::SystemNames> {
+        match self.composite_names.get(composite_id) {
+            Some(CompositeNames::V0(names)) => Some(names),
+            _ => None,
+        }
+    }
+
+    /// The generated names of `composite/v1` `composite_id`, checked free of
+    /// conflicts. `None` if it is not a `composite/v1`.
+    pub fn composite_v1_names(&self, composite_id: &str) -> Option<&composite_v1::SystemNames> {
+        match self.composite_names.get(composite_id) {
+            Some(CompositeNames::V1(names)) => Some(names),
+            _ => None,
+        }
     }
 
     /// The resolved machine for a component id, if it is a machine.
