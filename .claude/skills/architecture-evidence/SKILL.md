@@ -25,7 +25,7 @@ It writes:
 
 ## Read the exit code first
 
-- **2, no measurement.** The build tool is missing or failed, a scope directory does not exist, or the scope holds no build units. Nothing is written. In a Bazel workspace it never falls back to another build system. Report what failed; do not substitute reading for measuring.
+- **2, no measurement.** The build tool is missing or failed, a scope directory does not exist, the scope holds no build units, or the output cannot be written. Nothing is written. In a Bazel workspace it never falls back to another build system. Report what failed; do not substitute reading for measuring.
 - **1, inconsistent.** The source refers to a build unit its build does not declare (`checks.observed_without_declared`). The code could not build that way, so the measurement is wrong somewhere. Resolve it before relying on the dependencies.
 - **0, measured.** Still read the gaps below.
 - **3, a defect of the analyzer.** Nothing is written. Report it with the traceback; it says nothing about the code.

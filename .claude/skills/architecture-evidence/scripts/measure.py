@@ -17,7 +17,7 @@ Writes <out>/evidence.json (format: references/format.md) and <out>/measured.c4
 (system `measured`), and prints a summary.
 Exit 0: measured. Exit 1: measured, but the source refers to a build unit its
 build does not declare. Exit 2: no measurement (missing tool, failed query,
-empty scope); nothing is written. Exit 3: a defect of this tool; nothing is
+empty scope, output not writable). Exit 3: a defect of this tool; nothing is
 written.
 """
 
@@ -83,9 +83,13 @@ def main() -> int:
         print("measure.py: INTERNAL ERROR: nothing written; this is a defect of the analyzer")
         return 3
     out = args.out if args.out.is_absolute() else repo / args.out
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "evidence.json").write_text(data)
-    (out / "measured.c4").write_text(model)
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "evidence.json").write_text(data)
+        (out / "measured.c4").write_text(model)
+    except OSError as err:
+        print(f"measure.py: NO MEASUREMENT: could not write {out}: {err}")
+        return 2
     print("\n".join(summary(evidence)))
     print(f"wrote {out / 'evidence.json'} and {out / 'measured.c4'}")
     if evidence.checks["observed_without_declared"]:

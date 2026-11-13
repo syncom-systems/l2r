@@ -67,7 +67,8 @@ CARGO = {
     "crates/k/src/a/b.rs": "use crate::c::Value;\n",
     "crates/k/src/c.rs": "pub struct Value;\n",
     "crates/ab/Cargo.toml": manifest("ab"),
-    "crates/ab/src/lib.rs": "\n",
+    "crates/ab/src/lib.rs": "pub mod m;\n",
+    "crates/ab/src/m.rs": "\n",
     "other/e/Cargo.toml": manifest("e", "e"),
     "other/e/src/lib.rs": "\n",
 }
@@ -138,6 +139,10 @@ class CargoWorkspace(unittest.TestCase):
         self.assertIn("b__x = module 'b::x'", model)
         self.assertNotIn("b__y = module", model)
 
+    def test_each_module_is_drawn_once_inside_its_own_crate(self):
+        model = c4.model(measure(self.repo, ["crates"]))
+        self.assertEqual(model.count("ab__m = module 'ab::m'"), 1)
+
     def test_test_modules_and_comments_are_not_read(self):
         evidence = measure(self.repo, ["crates"])
         observed = self.pairs(evidence, OBSERVED)
@@ -175,6 +180,17 @@ class CargoWorkspace(unittest.TestCase):
         missing = subprocess.run(run + ["--scope", "nowhere"], capture_output=True, text=True)
         self.assertEqual(missing.returncode, 2)
         self.assertIn("NO MEASUREMENT", missing.stdout)
+        unwritable = [sys.executable, str(SCRIPTS / "measure.py"), "--repo", str(self.repo),
+                      "--out", str(self.repo / "Cargo.toml" / "out"), "--scope", "other/e"]
+        self.assertEqual(subprocess.run(unwritable, capture_output=True, text=True).returncode, 2)
+
+    def test_a_defect_of_the_analyzer_is_not_reported_as_inconsistent(self):
+        (self.repo / "crates/c/src/odd.rs").mkdir()   # a directory where a source file is expected
+        run = [sys.executable, str(SCRIPTS / "measure.py"), "--repo", str(self.repo),
+               "--out", str(Path(self.tmp.name) / "out"), "--scope", "crates/c"]
+        crashed = subprocess.run(run, capture_output=True, text=True)
+        self.assertEqual(crashed.returncode, 3, crashed.stdout + crashed.stderr)
+        self.assertIn("INTERNAL ERROR", crashed.stdout)
 
 
 QUERY = """\
@@ -184,11 +200,11 @@ QUERY = """\
     <list name="srcs"><label value="//lib:lib.rs"/><label value="//lib:gen.rs"/></list>
     <list name="deps"><label value="@crates//:serde"/><label value="//missing:thing"/></list>
     <list name="visibility"><label value="//app:__pkg__"/></list>
-    <boolean name="testonly" value="false"/>
+    <boolean name="testonly" value="true"/>
   </rule>
   <rule class="rust_library" location="{repo}/lib/BUILD.bazel:20:13" name="//lib:core_extra">
     <string name="crate_name" value="core"/>
-    <boolean name="testonly" value="true"/>
+    <boolean name="testonly" value="false"/>
     <label name="crate_root" value="//lib:lib.rs"/>
     <list name="srcs"><label value="//lib:lib.rs"/></list>
     <list name="visibility"><label value="//tools:__pkg__"/></list>
@@ -224,7 +240,7 @@ class BazelTargets(unittest.TestCase):
         core = targets[0]
         self.assertEqual((core.label, core.kind, core.declared_at, core.package),
                          ("//lib:core", "rust_library", "lib/BUILD.bazel:3", "lib"))
-        self.assertFalse(core.testonly)
+        self.assertTrue(core.testonly)
         self.assertTrue(targets[2].testonly and targets[2].configurable)
 
     def test_variants_of_one_crate_are_one_unit(self):
