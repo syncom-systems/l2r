@@ -1,7 +1,7 @@
 // Shared specification for every model in this architecture/ workspace.
 // LikeC4 allows one definition of each element kind and tag per workspace, so
-// model files (audit/baseline.c4, audit.c4, design.c4) declare none of their own.
-// The audit and design skills ship this same file.
+// model files (such as design.c4) declare none of their own. Keep this file
+// identical in every skill that ships it.
 
 specification {
   element system
