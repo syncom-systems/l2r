@@ -87,7 +87,7 @@ fn observe(harness: &Harness) -> String {
     for sink in &harness.flat.sinks {
         out.push_str(&format!(
             "    parts.push(list(system.{outbox}().len(), |i| system.{outbox}().get(i)));\n",
-            outbox = composite_v2::Port(&sink.port).outbox()
+            outbox = composite_v2::OutPort(&sink.port).outbox()
         ));
     }
     out.push_str("    parts.join(\"|\")\n}\n\n");
@@ -113,7 +113,7 @@ fn apply_arm(harness: &Harness, i: usize, op: &Op) -> Result<String, PlanError> 
     Ok(match op {
         Op::Send { port, message } => format!(
             "        {i} => match system.{}({}) {{\n            Ok(()) => \"ok\".to_string(),\n            Err(_) => \"rej\".to_string(),\n        }},\n",
-            composite_v2::Port(&harness.flat.inputs[*port].port).send(),
+            composite_v2::InPort(&harness.flat.inputs[*port].port).send(),
             message.rust_expr(harness.types, &harness.validated.model().system.rust_crate)?
         ),
         Op::Step => format!(
@@ -121,7 +121,7 @@ fn apply_arm(harness: &Harness, i: usize, op: &Op) -> Result<String, PlanError> 
         ),
         Op::Take { sink } => format!(
             "        {i} => format!(\"T:{{:?}}\", system.{}()),\n",
-            composite_v2::Port(&harness.flat.sinks[*sink].port).take()
+            composite_v2::OutPort(&harness.flat.sinks[*sink].port).take()
         ),
     })
 }

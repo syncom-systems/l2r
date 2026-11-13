@@ -68,7 +68,12 @@ fn system_members<'a>(
         members.map(move |name| (name, subject.as_str()))
     });
     let of_root_ports = root_ports.iter().flat_map(|(subject, id, is_out)| {
-        let members = composite_v2::Port(id).members(*is_out).into_iter();
+        let members = if *is_out {
+            composite_v2::OutPort(id).members()
+        } else {
+            composite_v2::InPort(id).members()
+        }
+        .into_iter();
         members.map(move |name| (name, subject.as_str()))
     });
     let own = composite_v2::SYSTEM_MEMBERS
@@ -103,7 +108,7 @@ fn check_route_functions(model: &Model, findings: &mut Findings) {
         let port = model
             .ports
             .iter()
-            .find(|p| composite_v2::Port(&p.id).function() == function);
+            .find(|p| composite_v2::InPort(&p.id).function() == function);
         if let Some(port) = port.map(|p| &p.id) {
             findings.error(
                 "L2R-S020",

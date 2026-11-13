@@ -258,7 +258,7 @@ fn system_struct(flat: &Flat) -> String {
         |sink| {
             format!(
                 "    {}: {}Outbox,\n",
-                composite_v2::Port(&sink.port).outbox(),
+                composite_v2::OutPort(&sink.port).outbox(),
                 composite_v2::type_prefix(&sink.port)
             )
         },
@@ -313,7 +313,7 @@ fn constructor(generator: &Gen<'_>) -> String {
         |sink| {
             format!(
                 "            {}: {}Outbox::new(),\n",
-                composite_v2::Port(&sink.port).outbox(),
+                composite_v2::OutPort(&sink.port).outbox(),
                 composite_v2::type_prefix(&sink.port)
             )
         },
@@ -344,7 +344,7 @@ fn accessors(flat: &Flat) -> String {
             format!(
                 "    /// The outbox of port `{id}`, read-only.\n    pub fn {outbox}(&self) -> &{ty}Outbox {{\n        &self.{outbox}\n    }}\n\n",
                 id = sink.port,
-                outbox = composite_v2::Port(&sink.port).outbox(),
+                outbox = composite_v2::OutPort(&sink.port).outbox(),
                 ty = composite_v2::type_prefix(&sink.port)
             )
         },
@@ -382,7 +382,7 @@ fn send(generator: &Gen<'_>, input: &FlatInput) -> String {
          {translations}        if self.{target_inbox}.push(input) {{\n            Ok(())\n        }} else {{\n            Err(Rejected)\n        }}\n    }}\n\n",
         id = input.port,
         to = input.target,
-        send = composite_v2::Port(&input.port).send(),
+        send = composite_v2::InPort(&input.port).send(),
         target_inbox = composite_v2::Machine(&input.target).inbox(),
         ty = composite_v2::type_prefix(&input.port)
     )
@@ -396,8 +396,8 @@ fn takes(flat: &Flat) -> String {
             format!(
                 "    /// Port `{id}`: removes and returns the oldest message the system has emitted\n    /// there, if any. Taking a message makes room: a sender blocked by this outbox\n    /// can then proceed.\n    pub fn {take}(&mut self) -> Option<{ty}Message> {{\n        self.{outbox}.pop()\n    }}\n\n",
                 id = sink.port,
-                take = composite_v2::Port(&sink.port).take(),
-                outbox = composite_v2::Port(&sink.port).outbox(),
+                take = composite_v2::OutPort(&sink.port).take(),
+                outbox = composite_v2::OutPort(&sink.port).outbox(),
                 ty = composite_v2::type_prefix(&sink.port)
             )
         })

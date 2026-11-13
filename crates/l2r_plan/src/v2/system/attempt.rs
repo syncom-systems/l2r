@@ -149,7 +149,7 @@ fn commit(leaf: &Leaf) -> String {
 fn buffer(target: &Target) -> String {
     match target {
         Target::Leaf(id) => composite_v2::Machine(id).inbox(),
-        Target::Sink(port) => composite_v2::Port(port).outbox(),
+        Target::Sink(port) => composite_v2::OutPort(port).outbox(),
     }
 }
 

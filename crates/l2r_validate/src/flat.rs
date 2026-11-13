@@ -97,7 +97,7 @@ impl Hop {
     pub fn function(&self) -> String {
         match self.kind {
             HopKind::Edge => composite_v2::Edge(&self.id).function(),
-            HopKind::Port => composite_v2::Port(&self.id).function(),
+            HopKind::Port => composite_v2::InPort(&self.id).function(),
         }
     }
 }

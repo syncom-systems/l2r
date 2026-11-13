@@ -1,8 +1,8 @@
 //! The names of the `composite/v2` scheduler (`System` in the root's module)
 //! and of every `routes.rs`. Frozen with the profile.
 //!
-//! Names are derived from a [`Machine`], a [`Port`] or an [`Edge`], so a
-//! port's id cannot be passed where a machine's is meant. They are not a
+//! Names are derived from a [`Machine`], an [`InPort`], an [`OutPort`] or an
+//! [`Edge`], so an id cannot be passed where another kind is meant. They are not a
 //! checked name set as for `composite/v0` and `composite/v1`: rule S020,
 //! which rejects their conflicts, is a published rule of schema `v2` whose
 //! diagnostics are frozen, and it asks these types for the names instead of
@@ -18,9 +18,14 @@ pub const SYSTEM_MEMBERS: &[&str] = &["attempt", "is_settled", "new", "next", "r
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Machine<'a>(pub &'a str);
 
-/// A port, by port id.
+/// An input port, by port id: the environment, or the composite above, sends
+/// through it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Port<'a>(pub &'a str);
+pub struct InPort<'a>(pub &'a str);
+
+/// An output port of the root, by port id: the environment takes from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutPort<'a>(pub &'a str);
 
 /// A message edge, by edge id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,34 +53,37 @@ impl Machine<'_> {
     }
 }
 
-impl Port<'_> {
-    /// The field and accessor holding a root output port's outbox.
-    pub fn outbox(self) -> String {
-        format!("{}_outbox", self.0)
-    }
-
+impl InPort<'_> {
     /// The method through which the environment sends to a root input port.
     pub fn send(self) -> String {
         format!("send_{}", self.0)
     }
 
-    /// The method through which the environment takes from a root output port.
-    pub fn take(self) -> String {
-        format!("take_{}", self.0)
-    }
-
-    /// The `routes.rs` function implementing an input port.
+    /// The `routes.rs` function implementing the port's translation.
     pub fn function(self) -> String {
         format!("port_{}", self.0)
     }
 
-    /// The `System` members generated for a root port.
-    pub fn members(self, is_out: bool) -> Vec<String> {
-        if is_out {
-            vec![self.outbox(), self.take()]
-        } else {
-            vec![self.send()]
-        }
+    /// The `System` members generated for a root input port.
+    pub fn members(self) -> Vec<String> {
+        vec![self.send()]
+    }
+}
+
+impl OutPort<'_> {
+    /// The field and accessor holding the port's outbox.
+    pub fn outbox(self) -> String {
+        format!("{}_outbox", self.0)
+    }
+
+    /// The method through which the environment takes from the port.
+    pub fn take(self) -> String {
+        format!("take_{}", self.0)
+    }
+
+    /// The `System` members generated for a root output port.
+    pub fn members(self) -> Vec<String> {
+        vec![self.outbox(), self.take()]
     }
 }
 
@@ -102,9 +110,9 @@ mod tests {
             Machine("pump").members(),
             ["pump_state", "pump_inbox", "attempt_pump"]
         );
-        assert_eq!(Port("alarm").members(true), ["alarm_outbox", "take_alarm"]);
-        assert_eq!(Port("start").members(false), ["send_start"]);
-        assert_eq!(Port("start").function(), "port_start");
+        assert_eq!(OutPort("alarm").members(), ["alarm_outbox", "take_alarm"]);
+        assert_eq!(InPort("start").members(), ["send_start"]);
+        assert_eq!(InPort("start").function(), "port_start");
         assert_eq!(Edge("to_valve").function(), "to_valve");
         assert_eq!(type_prefix("tank_level"), "TankLevel");
     }
