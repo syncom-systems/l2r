@@ -10,7 +10,7 @@ Marks: PROPOSED · DECIDED (architect, date) · OPEN.
 **The crate structure is appropriate. Its one structural weakness is that the concept along which L2R evolves, the versioned profile and schema, has no owning type.**
 
 What holds:
-- **Crate layering.** The crates form a loop-free uses relation with five levels: `l2r_model` < `l2r_validate` < `l2r_plan` < `l2r_apply` < `l2r` (the CLI). `l2r_testing` is test-only and uses `l2r_model` alone (MEASURED). This is the layering `README.md:121-127` describes.
+- **Crate layering.** The crates form a loop-free uses relation with five levels: `l2r_model` < `l2r_validate` < `l2r_plan` < `l2r_apply` < `l2r` (the CLI). `l2r_testing` is test-only and uses `l2r_model` alone (MEASURED). Those are the five crates `README.md:121-127` lists, in the same order. The README states no dependencies and does not list `l2r_testing`.
 - **The validation boundary.** `Validated` can be constructed only by `l2r_validate`, and `plan()` accepts nothing else (READ `l2r_validate/src/resolved.rs:16-23,55,71`; `l2r_plan/src/lib.rs:58`).
 - **Authority in `l2r_apply`.** It does not rely on validation. Paths are `RelPath`, approvals are matched by the single `Approval::authorizes`, and deletion is checked against the generated-file marker on the actual bytes (findings F1–F7; ARCHITECT 2026-11-13 on F1).
 - **Decomposition in `l2r_plan`.** The crate is split by profile version, which fits the binding rule that published profiles are immutable (AGENTS.md).
@@ -21,6 +21,43 @@ What does not hold:
 - **The cost has already been paid once.** Commit 05e855e records a gate that had been missed (READ).
 - **Two reachable defects come from the same cause.** In each, a validated model plans Rust that is wrong (F9).
 
+## Architecture as built
+
+This is what each module hides, as read. The README's crate table is the only other description of the design. Weak seams point to their findings.
+
+| Crate (level) | Module | Hides |
+|---|---|---|
+| `l2r_model` (0) | `architecture` | The TOML model and its canonical order. One type serves every schema (F10), and a profile is a `String` (F8). |
+| | `lean` | The inventory types and schema identifiers. |
+| | `load` | Parsing of TOML and JSON. |
+| | `digest` | The `sha256:<hex>` text and canonical JSON. |
+| | `path` | `RelPath`, the one abstract type with a private representation: the path-safety rule, plus the reserved state-file names (F2). |
+| | `profiles` | The profile identifiers and `SUPPORTED`. It does not hide what a profile is (F8). |
+| `l2r_validate` (1) | `lib` | The schema dispatch. |
+| | `structure`, `messages`, `ports`, `lean_refs` | The v0/v1 rules. `lean_refs` also holds the Lean type-print contract (ADR-0003 D2). |
+| | `v2/*` | The v2 rules. `generated_names` restates the planner's names (F9). |
+| | `data` | The Lean data subset and its Rust mirrors. |
+| | `flat` | The flat network of ADR-0005 D1, D4. |
+| | `resolved` | `Validated`, the only input the planner accepts (F14). |
+| | `names`, `diagnostic` | The identifier syntax, and the findings with their stable codes. |
+| `l2r_plan` (2) | `profiles/*` | One module per frozen v0/v1 profile, each owning its output text. |
+| | `v2/*` | One module per v2 profile. `system/{buffer,route,attempt}` hides the scheduler code's shape. |
+| | `text`, `layout` | The generated-file marker (one owner, shared with `l2r_apply`). The output helpers and directory layout are shared across versions (F11). |
+| | `lean_composition`, `lean_composition_v2` | The derived Lean networks, plus the identities of the semantics sources (F15). |
+| | `conformance/*` | The trace protocol. `value` and `renderers` are single owners. |
+| | `lib`, `plan` | The schema choice, made by proxy (F8). `Plan` is a record with public fields, whose invariants `lib` establishes. |
+| `l2r_apply` (3) | `tree`, `transaction`, `journal`, `lock`, `assess`, `approval`, `check`, `fault` | Descriptor-relative tree access; roll-forward writing; the transition table; authorization by the approval record (F1–F7). |
+| `l2r` (4) | `main`, `commands`, `session`, `report`, `packet`, `diff`, `init`, `inventory` | The command syntax and messages. It also decides the project layout (F13), the render's own profile classification (F8), the packet's copy of the route naming (F9), and its own file writers (F12). |
+| `l2r_testing` (test-only) | `lib` | Where the committed example inputs live, and the scratch-directory policy. |
+
+**Is this an appropriate design?**
+- **The crate level is.** Each crate hides one stage, and every edge points down (MEASURED).
+- **Inside the crates it is mostly by decision, not by processing step:**
+  - per profile version in `l2r_plan`;
+  - per rule family in `l2r_validate`;
+  - per mechanism in `l2r_apply`.
+- **The exception is the versioned profile and schema** (F8–F11). That is where the next change will land.
+
 ## Scope and evidence
 
 - **In scope:** `crates/*/src`: `l2r_model`, `l2r_validate`, `l2r_plan`, `l2r_apply` (with its `l2r_crash_after` test binary), `l2r` (`crates/l2r_cli`) and `l2r_testing`.
@@ -28,7 +65,14 @@ What does not hold:
   - generated and derived files (`examples/*/scaffold/**`, `conformance/**`, `composition/**`), which are judged through their generator;
   - Lean (`lean/`), which owns behaviour;
   - `tools/`, `verification/` and `bazel/`, which were read only where cited.
-- **Binding decisions read:** `AGENTS.md`; `README.md`; ADR-0001 to ADR-0005 (Discussions #2, #4, #5, #9, #16, read through `gh`); `docs/generation-boundary.md`, `docs/composite-v2.md` and `docs/model-reference.md` where cited. The PRD (Discussion #1) was not read.
+- **Binding decisions read:**
+  - `AGENTS.md` and `README.md`.
+  - ADRs, fetched through `gh`:
+    - read in full: ADR-0003 D1–D6 and ADR-0005 D1–D9;
+    - only their decision headings read: ADR-0001, ADR-0002 and ADR-0004.
+  - `docs/generation-boundary.md`, `docs/composite-v2.md` and `docs/model-reference.md` where cited.
+  - Not read: the PRD (Discussion #1).
+- **The immutability rule** is stated in `AGENTS.md`, in ADR-0001 D5 and in ADR-0005 D9 ("`v0` and `v1` are unchanged"). ADR-0005 D9 cites "ADR-0003 D8" for it, but ADR-0003's body ends at D7 (READ). That is a citation for the owner to check.
 - **Measurement:** `deps.py --repo . --scope crates --out architecture/audit` exits 0. Crates come from `bazel query`; Cargo was not consulted.
   - Size: 7 crates, 67 modules, 14 crate edges, 219 module edges.
   - Loops: no crate loops. Three module loops: approval→assess→journal (F4), fault↔tree (F6), and lean_composition↔lean_composition_v2 (F15).
@@ -66,19 +110,18 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
     - Inline comparisons: `l2r_validate/src/structure.rs:16-17, 187-256` (ends `_ => {}`), `messages.rs:64`, `ports.rs:43,60,76`, `v2/components.rs:27-28`; `l2r_plan/src/lean_composition.rs:75,111`.
   - READ: the planner does not read `Model.schema`. It infers the schema from `validated.flat().is_some()` (`l2r_plan/src/lib.rs:65`, `lean_composition.rs:68`, `conformance.rs:78`).
 - **Single implementation searched for:** none. `SUPPORTED` answers membership only.
-- **Change scenario:** a new machine profile for schema v2 (for example, lifting ADR-0005 D7's closed data subset). The edits it forces:
+- **Change scenario:** schema v3, built on v2's hierarchy (so its validator also produces a `Flat`), with a new composite profile. The edits it forces:
 
   | Edit | Kind |
   |---|---|
-  | `SUPPORTED` | TESTED (rule S007) |
-  | `v2/components.rs:27` and `v2.rs:95` | TESTED (S019) |
-  | `flat.rs:154` | TESTED (missed: the machine's edges are reported dead, M010) |
-  | `l2r_plan/src/v2/mod.rs:139-145` | loud `PlanError` at plan time |
-  | `structure.rs:16-17` | SILENT. A v0/v1 model naming the new profile passes validation with no shape rule and then fails in the planner with "has no implementation". `lib.rs:44-45` calls a `PlanError` after validation a generator defect |
-  | `report.rs:203` | SILENT, for a new *composite* profile. It is drawn as a machine and its subtree disappears from `l2r render` |
+  | `SUPPORTED`, `SUPPORTED_SCHEMAS`, the validate dispatch (`l2r_validate/src/lib.rs:30`) | TESTED (S001, S007) |
+  | The planner's profile dispatch (`l2r_plan/src/v2/mod.rs:139-145`) | loud `PlanError` at plan time |
+  | The schema choice in `l2r lean-composition` (`lean_composition.rs:68-70`: any `Flat` goes to the v2 deriver) and in conformance (`conformance.rs:78-80`) | SILENT at derivation. Neither deriver reads a profile or the schema (READ), so a v3 model is derived under the identifiers `l2r.lean-composition/v2` and `l2r.conformance/v1`. That touches the derived Lean network, the behaviour side. It is caught later only if an example uses v3 and the `--config=verify` lane runs (READ `verification/composition_v2/BUILD.bazel:6`) |
+  | `l2r/src/report.rs:203-210, 223` | SILENT. A v3 composite is drawn as a machine and its subtree disappears from `l2r render` |
+  | `l2r_validate/src/structure.rs:16-17` (v2 profiles barred from v0/v1 models) | Loud, but late. A v0/v1 model naming the new profile passes validation and then fails in the planner with "has no implementation", which `lib.rs:44-45` calls a generator defect |
 
 - **Reachable today?** No. The current lists match the current profiles (READ `structure.rs:16-17`, `report.rs:205-207`).
-- **Cost:** every new profile or schema version, the change this repository makes most often. Each copy is a place for the next version to be missed.
+- **Cost:** every new profile or schema version, the change this repository makes most often (MEASURED `git log` on `l2r_model/src/profiles.rs` and `architecture.rs`: 64c9a17 on 2026-11-02, a4ab4c5 on 11-03, 219dffa on 11-10). The worst silent edit gives a derived Lean network under the wrong format identifier.
 - **View:** `audit_F8`
 - **Mark:** PROPOSED
 
@@ -97,7 +140,8 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
     - `l2r_plan/src/conformance/recorder.rs:80-121`, which restates the accessor, send and take names.
   - READ: the copies have already drifted once. Commit 05e855e: "S020: collisions … are computed from the full set of names, not from three reserved identifiers."
   - Reachable defect 1:
-    - MEASURED: copy `examples/crossing_v1` and rename one child's `rust_module` to `next`. `l2r validate` reports "model `crossing_v1` is valid", and `l2r preview` plans `pub struct System` with two fields named `next` (`next: next::State` and `next: usize`). That Rust does not compile.
+    - MEASURED, with `l2r` built from this commit (`bazel build //crates/l2r_cli:l2r`): copy `examples/crossing_v1` to a scratch directory, and in its `architecture.toml` change `rust_module = "signal"` to `rust_module = "next"`. `l2r validate architecture.toml` reports "model `crossing_v1` is valid" (exit 0). `l2r preview architecture.toml` then plans a `System` struct with two fields named `next` (`next: next::State` and `next: usize`).
+    - INFERRED: Rust rejects a struct with two fields of the same name (E0124). The generated crate was not compiled.
     - READ: v0/v1 validation reserves only `contract_tests`, `imp` and `routes` (`l2r_validate/src/names.rs:4`). S020 exists only for v2.
   - Reachable defect 2 (INFERRED, not run): `composite/v1` names a port's message type by the last segment of its Lean name (READ `l2r_plan/src/profiles/composite_v1.rs:111-117`). It emits one enum per Rust name and skips repeats (`:212-220`). Two ports carrying `A.Command` and `B.Command` would share one `Command` enum mirroring `A.Command`. The derived Lean uses full names (`lean_composition.rs:283-285`), so the Rust and the Lean would disagree. READ: no v0/v1 rule rejects this (`l2r_validate/src/ports.rs`, codes P001–P004 and M007).
 - **Single implementation searched for:** `hop_function_name` exists but is crate-private. Nothing shared defines the `System` members. The member lists of the planner and S020 agree today (READ).
@@ -187,7 +231,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 
 The full record is the audit posted on PR #20 (issuecomment-6850881232) and its correction. In summary:
 
-- **F1:** the ownership half of the transition rule is restated in `Step::validate`, which runs on recovery only. `Approval::authorizes` and `Step::authorize` are single implementations used on both paths. **ARCHITECT (2026-11-13):** keep it as a proposed finding; no refactor is authorized. Independent checks on the normal and recovery paths must be preserved, without multiple definitions of one rule. Mark: PROPOSED.
+- **F1:** the ownership half of the transition rule is restated in `Step::validate`, which runs on recovery only. `Approval::authorizes` and `Step::authorize` are single implementations used on both paths. **ARCHITECT (2026-11-13):** "My decision is to retain this as a proposed architectural finding, not authorize a refactor yet. We must preserve independent checks on normal and recovery paths while avoiding multiple definitions of the same rule." Mark: PROPOSED.
 - **F2:** the state-file names have two owners: `l2r_model/src/path.rs:13` and `l2r_apply/src/lock.rs:20`, `journal.rs:31`. PROPOSED.
 - **F3:** `commit` is correct only because `Journal::authorize` ran first; no type carries that. PROPOSED.
 - **F4:** module loop approval → assess → journal. PROPOSED.
@@ -234,13 +278,13 @@ Each question changes the modules, the uses relation or an interface. Q1 constra
 
 | Id | Finding | Question | Alternatives and consequences | Recommendation, and why |
 |---|---|---|---|---|
-| Q1 | F8, F10 | Will profiles and schemas keep arriving as new versions, and should one module own what each version *is*? | (a) A profile type in `l2r_model` (an enum, or a descriptor with its kind, schema and allowed children) that validate, plan and the CLI ask. A `match` on it makes every site an edit the compiler forces. (b) Keep strings, and add a test that enumerates each profile through every classifier. That is TESTED, not FORCED. (c) Leave it; every version pays the silent edits. | (a). The decision changes with every version, and one owner hides it (`parnas-1972-information-hiding`, Interpretation 2). A type carries it to the callers (`liskov-zilles-1974-abstract-data-types`, Interpretation 1). |
-| Q2 | F9 | The two reachable defects are in frozen v0/v1 profiles. Fix them in place, add new versions, or document them as limitations? | (a) A validation rule in place. That changes what published schemas accept, but only models that produce non-compiling or wrong Rust are newly rejected. (b) New versions (`composite/v3`, …). The schemas stay pure, at the cost of more versions. (c) Document only. | Yours: it is a reading of the immutability rule. A rule that rejects only models whose output cannot be correct does not change any accepted model's generated bytes. |
+| Q1 | F8, F10 | Will profiles and schemas keep arriving as new versions, and should one module own what each version *is*? | (a) A profile type in `l2r_model` (an enum, or a descriptor with its kind, schema and allowed children) that validate, plan and the CLI ask. A `match` on it makes every site an edit the compiler forces. **Constraint:** `Model` is digested as canonical JSON, and that digest is part of every plan digest (ADR-0003 D1, D6). The type must serialize to the same bytes as today's strings, or every existing approval goes stale. (b) Keep strings, and add a test that enumerates each profile through every classifier. That is TESTED, not FORCED. (c) Leave it; every version pays the silent edits. | (a). The decision changes with every version, and one owner hides it (`parnas-1972-information-hiding`, Interpretation 2). A type carries it to the callers (`liskov-zilles-1974-abstract-data-types`, Interpretation 1). |
+| Q2 | F9 | The two reachable defects are in frozen v0/v1 profiles. Fix them in place, add new versions, or document them as limitations? | (a) A validation rule in place. **This reopens a binding decision:** ADR-0005 D9 says "`v0` and `v1` are unchanged". It would newly reject only models whose output does not compile or mirrors the wrong type. (b) New versions (`composite/v3`, …). The schemas stay pure, at the cost of more versions. (c) Document only. | No recommendation. Whether (a) is allowed is a reading of ADR-0005 D9, and that reading is yours. The argument for (a): it changes no generated byte of any model whose output is correct. |
 | Q3 | F9 | Should the generated names have one owner that validate (S020), the CLI packet and conformance ask, instead of restating them? | (a) A naming module the planner uses and exports, which validate cannot import while it sits below the planner. It needs either a lower crate for "the names a profile generates", or moving S020 into the planner as a plan-time check. (b) A test that compares the S020 lists with the planner's output for each example. | (a) with the lower crate. It hides the naming scheme once and keeps validation before planning. This is the case where the design skill should lay out the alternatives (hand-over). |
 | Q4 | F11 | Should a frozen profile own all the text it emits, including helpers, or are shared helpers guarded by pins enough? | (a) Freeze helpers per version. This means copies, but no frozen output can move. (b) Pins over a corpus of models that exercises every branch of every frozen profile. | (b), unless you want (a)'s certainty. Copies trade one risk for another. |
 | Q5 | F12 | Should every file L2R writes outside the output tree go through one writer with the approval record's guarantees? | (a) One writer, which fixes the inventory symlink. (b) Fix `inventory.rs` alone. | (a). One mechanism per authority decision (`saltzer-schroeder-1975-protection-principles`, economy of mechanism). |
 | Q6 | F13 | Should the project layout (where the approval record and inventory live) and the full meaning of `check` belong to a library rather than the CLI? | (a) Move them into `l2r_apply` or a small project-layout module. (b) Keep them in the CLI and state that it is the only supported front end. | (a), if a second front end is planned. Otherwise (b), stated in the docs. |
-| Q7 | F16 | Should Bazel `visibility` enforce the crate layering? | (a) Restrict each crate's visibility to the crates above it. (b) Keep public. | (a). It costs little and turns the convention into a build fact. |
+| Q7 | F16 | Should Bazel `visibility` enforce the crate layering? | (a) Restrict each library's visibility to the crates above it. The CLI binary stays public: downstream projects run `@l2r//crates/l2r_cli:l2r` (READ `bazel/l2r.bzl:35`, `l2r/src/init.rs:174`, `tools/e2e/new_project.sh:44`). (b) Keep public. | (a). Outside `crates/`, only the CLI binary is a direct dependency (MEASURED `bazel query 'rdeps(//..., //crates/...) except //crates/...'`: the five examples' drift tests and `composition_v2_test`, all through `//crates/l2r_cli:l2r`), so restricting the libraries breaks no known user. |
 
 F14 and F15 need no question before Q1 is answered: their remedy depends on how Q1 shapes the types that cross from validate to plan.
 
@@ -248,7 +292,7 @@ F14 and F15 need no question before Q1 is answered: their remedy depends on how 
 
 | Finding | Decision | Architect, date | Hand-over to design? |
 |---|---|---|---|
-| F1 | Kept as a proposed architectural finding; no refactor authorized. Independent checks on the normal and recovery paths are preserved, without multiple definitions of one rule. | owner, 2026-11-13 | no |
+| F1 | "My decision is to retain this as a proposed architectural finding, not authorize a refactor yet. We must preserve independent checks on normal and recovery paths while avoiding multiple definitions of the same rule." | owner, 2026-11-13 | no |
 
 ## Knowledge base
 
