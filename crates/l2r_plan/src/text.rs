@@ -43,21 +43,6 @@ fn prefixed(prefix: &str, text: &str) -> String {
     out
 }
 
-/// `request_latch` → `RequestLatch`.
-pub fn type_name(identifier: &str) -> String {
-    identifier
-        .split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            chars
-                .next()
-                .map(|c| c.to_ascii_uppercase().to_string() + chars.as_str())
-                .unwrap_or_default()
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -65,11 +50,5 @@ mod tests {
     #[test]
     fn doc_lines_keep_blank_lines_without_trailing_spaces() {
         assert_eq!(inner_doc("a\n\nb"), "//! a\n//!\n//! b\n");
-    }
-
-    #[test]
-    fn type_names() {
-        assert_eq!(type_name("request_latch"), "RequestLatch");
-        assert_eq!(type_name("signal"), "Signal");
     }
 }

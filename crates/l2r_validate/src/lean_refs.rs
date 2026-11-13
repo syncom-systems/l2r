@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use l2r_model::rust_names;
 use l2r_model::{Behavior, Component, DeclKind, Declaration, INVENTORY_SCHEMA, Inventory, Model};
 
 use crate::diagnostic::Findings;
@@ -180,12 +181,12 @@ impl Refs<'_> {
             );
             return None;
         }
-        let mut rust_names = BTreeSet::new();
+        let mut taken = BTreeSet::new();
         let mut variants = Vec::new();
         for ctor in &decl.constructors {
-            let segment = names::lean_last_segment(&ctor.name);
+            let segment = rust_names::lean_last_segment(&ctor.name);
             let Some(rust_name) =
-                names::upper_camel(segment).filter(|n| rust_names.insert(n.clone()))
+                rust_names::rust_type_name(segment).filter(|n| taken.insert(n.clone()))
             else {
                 findings.error(
                     "L2R-L007",

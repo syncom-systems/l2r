@@ -11,6 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
+use l2r_model::rust_names;
 use l2r_model::{Constructor, DeclKind, Declaration, Field, Inventory};
 
 use crate::diagnostic::Findings;
@@ -371,8 +372,9 @@ fn enum_shape(wanted: &Wanted, constructors: &[Constructor]) -> Result<Shape, Re
     let mut rust_names = BTreeSet::new();
     let mut variants = Vec::new();
     for (constructor, fields) in constructors.iter().zip(types) {
-        let Some(rust_name) = names::upper_camel(names::lean_last_segment(&constructor.name))
-            .filter(|n| rust_names.insert(n.clone()))
+        let Some(rust_name) =
+            rust_names::rust_type_name(rust_names::lean_last_segment(&constructor.name))
+                .filter(|n| rust_names.insert(n.clone()))
         else {
             return Err(Rejection {
                 code: "L2R-L007",
@@ -400,7 +402,8 @@ fn rust_location(wanted: &Wanted) -> Result<(Vec<String>, String), Rejection> {
     };
     let modules: Option<Vec<String>> = path.into_iter().map(rust_identifier).collect();
     // Names the generated code and every implementation file use unqualified.
-    let rust_name = names::upper_camel(last).filter(|n| !PRELUDE_TYPES.contains(&n.as_str()));
+    let rust_name =
+        rust_names::rust_type_name(last).filter(|n| !PRELUDE_TYPES.contains(&n.as_str()));
     modules.zip(rust_name).ok_or_else(|| {
         wanted.rejected(
             "L2R-L007",

@@ -5,10 +5,12 @@
 
 use std::collections::BTreeMap;
 
+use l2r_model::rust_names::{composite_v0, composite_v1};
 use l2r_model::{Inventory, Model};
 
 use crate::data::DataType;
 use crate::flat::Flat;
+use crate::generated_names::CompositeNames;
 
 /// A canonical model and inventory that passed validation, with every Lean
 /// reference resolved.
@@ -18,8 +20,20 @@ pub struct Validated {
     inventory: Inventory,
     machines: BTreeMap<String, ResolvedMachine>,
     port_messages: BTreeMap<String, ResolvedEnum>,
+    composite_names: BTreeMap<String, CompositeNames>,
     types: BTreeMap<String, DataType>,
     flat: Option<Flat>,
+}
+
+/// What validation resolves for a `v0` or `v1` model besides the model itself.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Resolution {
+    /// Each machine's Lean types, by component id.
+    pub(crate) machines: BTreeMap<String, ResolvedMachine>,
+    /// Each port's message type, by port id.
+    pub(crate) port_messages: BTreeMap<String, ResolvedEnum>,
+    /// Each composite's generated names, by component id.
+    pub(crate) composite_names: BTreeMap<String, CompositeNames>,
 }
 
 /// A state machine component with its Lean types resolved to enumerations.
@@ -52,17 +66,18 @@ pub struct Variant {
 }
 
 impl Validated {
-    pub(crate) fn new(
-        model: Model,
-        inventory: Inventory,
-        machines: BTreeMap<String, ResolvedMachine>,
-        port_messages: BTreeMap<String, ResolvedEnum>,
-    ) -> Self {
+    pub(crate) fn new(model: Model, inventory: Inventory, resolution: Resolution) -> Self {
+        let Resolution {
+            machines,
+            port_messages,
+            composite_names,
+        } = resolution;
         Self {
             model,
             inventory,
             machines,
             port_messages,
+            composite_names,
             types: BTreeMap::new(),
             flat: None,
         }
@@ -79,6 +94,7 @@ impl Validated {
             inventory,
             machines: BTreeMap::new(),
             port_messages: BTreeMap::new(),
+            composite_names: BTreeMap::new(),
             types,
             flat: Some(flat),
         }
@@ -113,6 +129,24 @@ impl Validated {
     /// The resolved message type of a port id.
     pub fn port_message(&self, port_id: &str) -> Option<&ResolvedEnum> {
         self.port_messages.get(port_id)
+    }
+
+    /// The generated names of `composite/v0` `composite_id`, checked free of
+    /// conflicts. `None` if it is not a `composite/v0`.
+    pub fn composite_v0_names(&self, composite_id: &str) -> Option<&composite_v0::SystemNames> {
+        match self.composite_names.get(composite_id) {
+            Some(CompositeNames::V0(names)) => Some(names),
+            _ => None,
+        }
+    }
+
+    /// The generated names of `composite/v1` `composite_id`, checked free of
+    /// conflicts. `None` if it is not a `composite/v1`.
+    pub fn composite_v1_names(&self, composite_id: &str) -> Option<&composite_v1::SystemNames> {
+        match self.composite_names.get(composite_id) {
+            Some(CompositeNames::V1(names)) => Some(names),
+            _ => None,
+        }
     }
 
     /// The resolved machine for a component id, if it is a machine.

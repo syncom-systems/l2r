@@ -210,4 +210,14 @@ impl Model {
         children.sort_by(|a, b| a.id.cmp(&b.id));
         children
     }
+
+    /// The message edges inside composite `id`: those sent by its children.
+    /// Edges join siblings, so they belong to the parent of their sender.
+    pub fn edges_within(&self, id: &str) -> Vec<&MessageEdge> {
+        let parent_of = |c: &str| self.component(c).and_then(|c| c.parent.as_deref());
+        self.messages
+            .iter()
+            .filter(|e| parent_of(&e.from) == Some(id))
+            .collect()
+    }
 }

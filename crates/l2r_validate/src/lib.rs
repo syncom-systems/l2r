@@ -6,6 +6,7 @@
 pub mod data;
 mod diagnostic;
 pub mod flat;
+mod generated_names;
 mod lean_refs;
 mod messages;
 pub mod names;
@@ -17,6 +18,8 @@ mod v2;
 pub use diagnostic::Diagnostic;
 pub use lean_refs::{port_translation_type, step_type, translation_type};
 pub use resolved::{ResolvedEnum, ResolvedMachine, Validated, Variant};
+
+use resolved::Resolution;
 
 use l2r_model::{Inventory, MODEL_SCHEMA_V2, Model};
 
@@ -51,6 +54,7 @@ pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<D
     let usable_inventory = inventory_ok.then_some(&inventory);
     messages::check(&model, usable_inventory, &mut findings);
     ports::check(&model, &mut findings);
+    let composite_names = generated_names::check(&model, &mut findings);
     let machines = match usable_inventory {
         Some(inventory) => lean_refs::resolve_machines(&model, inventory, &mut findings),
         None => Default::default(),
@@ -61,7 +65,12 @@ pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<D
     };
 
     if findings.is_empty() {
-        Ok(Validated::new(model, inventory, machines, port_messages))
+        let resolution = Resolution {
+            machines,
+            port_messages,
+            composite_names,
+        };
+        Ok(Validated::new(model, inventory, resolution))
     } else {
         Err(findings.into_sorted())
     }

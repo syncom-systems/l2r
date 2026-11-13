@@ -91,7 +91,12 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
                 )?);
             }
             profile_ids::COMPOSITE_V0 => {
-                artifacts.extend(profiles::composite::artifacts(model, component, dir)?)
+                let names = validated.composite_v0_names(&component.id).ok_or_else(|| {
+                    PlanError(format!("composite `{}` has no checked names", component.id))
+                })?;
+                artifacts.extend(profiles::composite::artifacts(
+                    model, component, names, dir,
+                )?)
             }
             profile_ids::COMPOSITE_V1 => artifacts.extend(profiles::composite_v1::artifacts(
                 validated, component, dir,
