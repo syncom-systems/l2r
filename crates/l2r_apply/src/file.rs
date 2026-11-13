@@ -85,7 +85,8 @@ impl PrivateDir {
     /// Creates the file `name` in the directory with `bytes`, and returns its
     /// path. `name` must be a single, plain file name.
     pub fn create_file(&self, name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
-        if name.is_empty() || name.contains('/') || name == "." || name == ".." {
+        // A plain name is its own last component: not empty, `.`, `..` or a path.
+        if Path::new(name).file_name() != Some(std::ffi::OsStr::new(name)) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("`{name}` is not a plain file name"),
