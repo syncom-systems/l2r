@@ -3,7 +3,7 @@ id: saltzer-schroeder-1975-protection-principles
 title: Design principles for mechanisms that guard authority
 source: J. H. Saltzer and M. D. Schroeder, "The Protection of Information in Computer Systems", Proceedings of the IEEE 63(9):1278–1308, September 1975, DOI 10.1109/PROC.1975.9939. Copy used https://web.mit.edu/Saltzer/www/publications/protection/ (the authors' HTML edition; section I.A.3 "Design Principles")
 checked: every quote against the copy used
-status: draft
+status: approved
 related: parnas-1972-information-hiding, liskov-zilles-1974-abstract-data-types
 ---
 
