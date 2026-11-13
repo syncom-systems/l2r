@@ -1,0 +1,44 @@
+// One view per finding of architecture/audit.md. Views only; the elements come
+// from audit/measured.c4, which deps.py generates.
+views {
+  view audit_overview {
+    title 'Crates and their measured dependencies'
+    include measured.l2r, measured.l2r_apply, measured.l2r_crash_after, measured.l2r_model, measured.l2r_plan, measured.l2r_testing, measured.l2r_validate
+  }
+  view audit_F8 {
+    title 'F8: what a profile is (kind, schema) is decided in each module that needs it'
+    include measured.l2r_model.l2r_model__profiles, measured.l2r_validate.l2r_validate__structure, measured.l2r_validate.l2r_validate__messages, measured.l2r_validate.l2r_validate__ports, measured.l2r_validate.l2r_validate__v2, measured.l2r_validate.l2r_validate__flat, measured.l2r_validate.l2r_validate__v2__components, measured.l2r_plan, measured.l2r_plan.l2r_plan__v2, measured.l2r_plan.l2r_plan__lean_composition, measured.l2r_plan.l2r_plan__profiles__composite, measured.l2r.l2r__report
+  }
+  view audit_F9 {
+    title 'F9: the generated Rust naming scheme is written in the planner and again in validate, cli and conformance'
+    include measured.l2r_plan.l2r_plan__v2, measured.l2r_plan.l2r_plan__v2__system, measured.l2r_plan.l2r_plan__v2__system__attempt, measured.l2r_plan.l2r_plan__text, measured.l2r_plan.l2r_plan__conformance__recorder, measured.l2r_plan.l2r_plan__profiles__composite_v1, measured.l2r_validate.l2r_validate__v2__generated_names, measured.l2r.l2r__packet
+  }
+  view audit_F10 {
+    title 'F10: one Model type for every schema; per-version field gates written by hand'
+    include measured.l2r_model.l2r_model__architecture, measured.l2r_validate.l2r_validate__structure, measured.l2r_validate.l2r_validate__ports, measured.l2r_validate.l2r_validate__v2__components
+  }
+  view audit_F11 {
+    title 'F11: frozen profiles share output helpers with the versions still changing'
+    include measured.l2r_plan.l2r_plan__text, measured.l2r_plan.l2r_plan__layout, measured.l2r_plan.l2r_plan__profiles__composite, measured.l2r_plan.l2r_plan__profiles__composite_v1, measured.l2r_plan.l2r_plan__profiles__transition_core, measured.l2r_plan.l2r_plan__profiles__crate_root, measured.l2r_plan.l2r_plan__v2__composite, measured.l2r_plan.l2r_plan__v2__machine, measured.l2r_plan.l2r_plan__v2__types
+  }
+  view audit_F12 {
+    title 'F12: three mechanisms write files beside the model'
+    include measured.l2r_apply.l2r_apply__approval, measured.l2r.l2r__init, measured.l2r.l2r__inventory
+  }
+  view audit_F13 {
+    title 'F13: the project layout and the meaning of check are decided in the CLI'
+    include measured.l2r.l2r__session, measured.l2r.l2r__commands, measured.l2r_apply.l2r_apply__check, measured.l2r_apply.l2r_apply__approval, measured.l2r_validate.l2r_validate__structure
+  }
+  view audit_F14 {
+    title 'F14: guarantees carried by Validated are dropped inside the planner'
+    include measured.l2r_validate.l2r_validate__resolved, measured.l2r_validate.l2r_validate__flat, measured.l2r_plan, measured.l2r_plan.l2r_plan__layout, measured.l2r_plan.l2r_plan__lean_composition, measured.l2r_plan.l2r_plan__profiles__composite_v1, measured.l2r_plan.l2r_plan__v2__system__buffer
+  }
+  view audit_F15 {
+    title 'F15: module loop lean_composition <-> lean_composition_v2'
+    include measured.l2r_plan.l2r_plan__lean_composition, measured.l2r_plan.l2r_plan__lean_composition_v2, measured.l2r_plan.l2r_plan__conformance
+  }
+  view audit_F1_F7 {
+    title 'F1-F7 (l2r_apply audit, carried over)'
+    include measured.l2r_apply.*
+  }
+}

@@ -1,0 +1,1392 @@
+{
+  "crates_from": "bazel query (Bazel workspace; Cargo not consulted)",
+  "crates": {
+    "l2r": {
+      "roles": [
+        "scope"
+      ],
+      "labels": [
+        "//crates/l2r_cli:l2r"
+      ],
+      "declared_at": "crates/l2r_cli/BUILD.bazel:3",
+      "testonly": false,
+      "deps": [
+        "l2r_apply",
+        "l2r_model",
+        "l2r_plan",
+        "l2r_validate"
+      ],
+      "external_deps": [
+        "@crates//:serde_json"
+      ],
+      "unresolved_deps": []
+    },
+    "l2r_apply": {
+      "roles": [
+        "scope"
+      ],
+      "labels": [
+        "//crates/l2r_apply:l2r_apply",
+        "//crates/l2r_apply:l2r_apply_fault"
+      ],
+      "declared_at": "crates/l2r_apply/BUILD.bazel:11",
+      "testonly": false,
+      "deps": [
+        "l2r_model",
+        "l2r_plan"
+      ],
+      "external_deps": [
+        "@crates//:rustix",
+        "@crates//:serde",
+        "@crates//:serde_json"
+      ],
+      "unresolved_deps": []
+    },
+    "l2r_crash_after": {
+      "roles": [
+        "scope"
+      ],
+      "labels": [
+        "//crates/l2r_apply:l2r_crash_after"
+      ],
+      "declared_at": "crates/l2r_apply/BUILD.bazel:69",
+      "testonly": true,
+      "deps": [
+        "l2r_apply",
+        "l2r_model",
+        "l2r_plan",
+        "l2r_validate"
+      ],
+      "external_deps": [],
+      "unresolved_deps": []
+    },
+    "l2r_model": {
+      "roles": [
+        "scope"
+      ],
+      "labels": [
+        "//crates/l2r_model:l2r_model"
+      ],
+      "declared_at": "crates/l2r_model/BUILD.bazel:3",
+      "testonly": false,
+      "deps": [],
+      "external_deps": [
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+        "@crates//:toml"
+      ],
+      "unresolved_deps": []
+    },
+    "l2r_plan": {
+      "roles": [
+        "scope"
+      ],
+      "labels": [
+        "//crates/l2r_plan:l2r_plan"
+      ],
+      "declared_at": "crates/l2r_plan/BUILD.bazel:3",
+      "testonly": false,
+      "deps": [
+        "l2r_model",
+        "l2r_validate"
+      ],
+      "external_deps": [
+        "@crates//:serde"
+      ],
+      "unresolved_deps": []
+    },
+    "l2r_testing": {
+      "roles": [
+        "scope"
+      ],
+      "labels": [
+        "//crates/l2r_testing:l2r_testing"
+      ],
+      "declared_at": "crates/l2r_testing/BUILD.bazel:3",
+      "testonly": true,
+      "deps": [
+        "l2r_model"
+      ],
+      "external_deps": [],
+      "unresolved_deps": []
+    },
+    "l2r_validate": {
+      "roles": [
+        "scope"
+      ],
+      "labels": [
+        "//crates/l2r_validate:l2r_validate"
+      ],
+      "declared_at": "crates/l2r_validate/BUILD.bazel:3",
+      "testonly": false,
+      "deps": [
+        "l2r_model"
+      ],
+      "external_deps": [],
+      "unresolved_deps": []
+    }
+  },
+  "modules": [
+    "l2r",
+    "l2r::commands",
+    "l2r::diff",
+    "l2r::init",
+    "l2r::inventory",
+    "l2r::packet",
+    "l2r::report",
+    "l2r::session",
+    "l2r_apply",
+    "l2r_apply::approval",
+    "l2r_apply::assess",
+    "l2r_apply::check",
+    "l2r_apply::fault",
+    "l2r_apply::journal",
+    "l2r_apply::lock",
+    "l2r_apply::transaction",
+    "l2r_apply::tree",
+    "l2r_crash_after",
+    "l2r_model",
+    "l2r_model::architecture",
+    "l2r_model::digest",
+    "l2r_model::lean",
+    "l2r_model::load",
+    "l2r_model::path",
+    "l2r_model::profiles",
+    "l2r_plan",
+    "l2r_plan::conformance",
+    "l2r_plan::conformance::recorder",
+    "l2r_plan::conformance::renderers",
+    "l2r_plan::conformance::replayer",
+    "l2r_plan::conformance::value",
+    "l2r_plan::layout",
+    "l2r_plan::lean_composition",
+    "l2r_plan::lean_composition_v2",
+    "l2r_plan::plan",
+    "l2r_plan::profiles",
+    "l2r_plan::profiles::composite",
+    "l2r_plan::profiles::composite_v1",
+    "l2r_plan::profiles::crate_root",
+    "l2r_plan::profiles::transition_core",
+    "l2r_plan::text",
+    "l2r_plan::v2",
+    "l2r_plan::v2::composite",
+    "l2r_plan::v2::crate_root",
+    "l2r_plan::v2::machine",
+    "l2r_plan::v2::system",
+    "l2r_plan::v2::system::attempt",
+    "l2r_plan::v2::system::buffer",
+    "l2r_plan::v2::system::route",
+    "l2r_plan::v2::types",
+    "l2r_testing",
+    "l2r_validate",
+    "l2r_validate::data",
+    "l2r_validate::diagnostic",
+    "l2r_validate::flat",
+    "l2r_validate::lean_refs",
+    "l2r_validate::messages",
+    "l2r_validate::names",
+    "l2r_validate::ports",
+    "l2r_validate::resolved",
+    "l2r_validate::structure",
+    "l2r_validate::v2",
+    "l2r_validate::v2::components",
+    "l2r_validate::v2::edges",
+    "l2r_validate::v2::generated_names",
+    "l2r_validate::v2::lean",
+    "l2r_validate::v2::ports"
+  ],
+  "crate_edges": [
+    {
+      "source": "l2r",
+      "target": "l2r_apply",
+      "evidence": "crates/l2r_cli/BUILD.bazel:3: //crates/l2r_cli:l2r deps //crates/l2r_apply:l2r_apply"
+    },
+    {
+      "source": "l2r",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_cli/BUILD.bazel:3: //crates/l2r_cli:l2r deps //crates/l2r_model:l2r_model"
+    },
+    {
+      "source": "l2r",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_cli/BUILD.bazel:3: //crates/l2r_cli:l2r deps //crates/l2r_plan:l2r_plan"
+    },
+    {
+      "source": "l2r",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_cli/BUILD.bazel:3: //crates/l2r_cli:l2r deps //crates/l2r_validate:l2r_validate"
+    },
+    {
+      "source": "l2r_apply",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/BUILD.bazel:11: //crates/l2r_apply:l2r_apply deps //crates/l2r_model:l2r_model"
+    },
+    {
+      "source": "l2r_apply",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/BUILD.bazel:11: //crates/l2r_apply:l2r_apply deps //crates/l2r_plan:l2r_plan"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_apply",
+      "evidence": "crates/l2r_apply/BUILD.bazel:69: //crates/l2r_apply:l2r_crash_after deps //crates/l2r_apply:l2r_apply_fault"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/BUILD.bazel:69: //crates/l2r_apply:l2r_crash_after deps //crates/l2r_model:l2r_model"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/BUILD.bazel:69: //crates/l2r_apply:l2r_crash_after deps //crates/l2r_plan:l2r_plan"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_apply/BUILD.bazel:69: //crates/l2r_apply:l2r_crash_after deps //crates/l2r_validate:l2r_validate"
+    },
+    {
+      "source": "l2r_plan",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/BUILD.bazel:3: //crates/l2r_plan:l2r_plan deps //crates/l2r_model:l2r_model"
+    },
+    {
+      "source": "l2r_plan",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/BUILD.bazel:3: //crates/l2r_plan:l2r_plan deps //crates/l2r_validate:l2r_validate"
+    },
+    {
+      "source": "l2r_testing",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_testing/BUILD.bazel:3: //crates/l2r_testing:l2r_testing deps //crates/l2r_model:l2r_model"
+    },
+    {
+      "source": "l2r_validate",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/BUILD.bazel:3: //crates/l2r_validate:l2r_validate deps //crates/l2r_model:l2r_model"
+    }
+  ],
+  "module_edges": [
+    {
+      "source": "l2r::commands",
+      "target": "l2r_apply",
+      "evidence": "crates/l2r_cli/src/commands.rs:5: use l2r_apply::{Approval, apply, approval, approve, assess, check, recover}"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r_apply::approval",
+      "evidence": "crates/l2r_cli/src/commands.rs:5: use l2r_apply::{Approval, apply, approval, approve, assess, check, recover}"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r_apply::assess",
+      "evidence": "crates/l2r_cli/src/commands.rs:5: use l2r_apply::{Approval, apply, approval, approve, assess, check, recover}"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r_apply::check",
+      "evidence": "crates/l2r_cli/src/commands.rs:5: use l2r_apply::{Approval, apply, approval, approve, assess, check, recover}"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r::report",
+      "evidence": "crates/l2r_cli/src/commands.rs:7: use crate::report"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r::session",
+      "evidence": "crates/l2r_cli/src/commands.rs:8: use crate::session::{self, Session, SessionError}"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r_plan::lean_composition",
+      "evidence": "crates/l2r_cli/src/commands.rs:232: l2r_plan::lean_composition"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_cli/src/commands.rs:242: l2r_plan::ConformanceSide"
+    },
+    {
+      "source": "l2r::commands",
+      "target": "l2r_plan::conformance",
+      "evidence": "crates/l2r_cli/src/commands.rs:244: l2r_plan::conformance"
+    },
+    {
+      "source": "l2r::init",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_cli/src/init.rs:7: use l2r_validate::names"
+    },
+    {
+      "source": "l2r::init",
+      "target": "l2r::commands",
+      "evidence": "crates/l2r_cli/src/init.rs:9: use crate::commands::Outcome"
+    },
+    {
+      "source": "l2r::inventory",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_cli/src/inventory.rs:7: use l2r_model::{Inventory, load}"
+    },
+    {
+      "source": "l2r::inventory",
+      "target": "l2r_model::load",
+      "evidence": "crates/l2r_cli/src/inventory.rs:7: use l2r_model::{Inventory, load}"
+    },
+    {
+      "source": "l2r::inventory",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_cli/src/inventory.rs:8: use l2r_validate::names"
+    },
+    {
+      "source": "l2r::inventory",
+      "target": "l2r::commands",
+      "evidence": "crates/l2r_cli/src/inventory.rs:10: use crate::commands::Outcome"
+    },
+    {
+      "source": "l2r",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_cli/src/main.rs:75: l2r_plan::GENERATOR_VERSION"
+    },
+    {
+      "source": "l2r::packet",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_cli/src/packet.rs:6: use l2r_model::{Behavior, Component, MessageEdge, Model, Port}"
+    },
+    {
+      "source": "l2r::packet",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_cli/src/packet.rs:7: use l2r_plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r::packet",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_cli/src/packet.rs:8: use l2r_validate::flat::{Flat, Hop, HopKind}"
+    },
+    {
+      "source": "l2r::packet",
+      "target": "l2r::commands",
+      "evidence": "crates/l2r_cli/src/packet.rs:10: use crate::commands::Outcome"
+    },
+    {
+      "source": "l2r::packet",
+      "target": "l2r::session",
+      "evidence": "crates/l2r_cli/src/packet.rs:11: use crate::session::{Session, SessionError}"
+    },
+    {
+      "source": "l2r::report",
+      "target": "l2r_apply",
+      "evidence": "crates/l2r_cli/src/report.rs:5: use l2r_apply::{ActionKind, Assessment}"
+    },
+    {
+      "source": "l2r::report",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_cli/src/report.rs:6: use l2r_model::{Component, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r::report",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_cli/src/report.rs:6: use l2r_model::{Component, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r::report",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_cli/src/report.rs:7: use l2r_plan::{Ownership, Plan}"
+    },
+    {
+      "source": "l2r::report",
+      "target": "l2r::diff",
+      "evidence": "crates/l2r_cli/src/report.rs:9: use crate::diff::line_diff"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_apply",
+      "evidence": "crates/l2r_cli/src/session.rs:5: use l2r_apply::{Approval, approval}"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_apply::approval",
+      "evidence": "crates/l2r_cli/src/session.rs:5: use l2r_apply::{Approval, approval}"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_cli/src/session.rs:6: use l2r_model::{Model, load}"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_model::load",
+      "evidence": "crates/l2r_cli/src/session.rs:6: use l2r_model::{Model, load}"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_cli/src/session.rs:7: use l2r_plan::{GeneratorIdentity, Plan, plan}"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_cli/src/session.rs:7: use l2r_plan::{GeneratorIdentity, Plan, plan}"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_cli/src/session.rs:8: use l2r_validate::{Diagnostic, Validated, validate}"
+    },
+    {
+      "source": "l2r::session",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_cli/src/session.rs:92: l2r_validate::names::is_safe_relative_path"
+    },
+    {
+      "source": "l2r_apply::approval",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/src/approval.rs:30: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::approval",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_apply/src/approval.rs:30: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::approval",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/src/approval.rs:31: use l2r_plan::Plan"
+    },
+    {
+      "source": "l2r_apply::approval",
+      "target": "l2r_apply::assess",
+      "evidence": "crates/l2r_apply/src/approval.rs:33: use crate::assess::{ActionKind, Assessment}"
+    },
+    {
+      "source": "l2r_apply::assess",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/src/assess.rs:6: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::assess",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_apply/src/assess.rs:6: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::assess",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/src/assess.rs:7: use l2r_plan::{Artifact, Ownership, Plan, declares_generated}"
+    },
+    {
+      "source": "l2r_apply::assess",
+      "target": "l2r_apply::journal",
+      "evidence": "crates/l2r_apply/src/assess.rs:9: use crate::journal::JOURNAL_FILE"
+    },
+    {
+      "source": "l2r_apply::assess",
+      "target": "l2r_apply::lock",
+      "evidence": "crates/l2r_apply/src/assess.rs:10: use crate::lock::{LOCK_FILE, Lock, LockEntry, LockOwnership}"
+    },
+    {
+      "source": "l2r_apply::assess",
+      "target": "l2r_apply::tree",
+      "evidence": "crates/l2r_apply/src/assess.rs:11: use crate::tree::{Occupant, Tree}"
+    },
+    {
+      "source": "l2r_apply::check",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/src/check.rs:5: use l2r_model::Model"
+    },
+    {
+      "source": "l2r_apply::check",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/src/check.rs:6: use l2r_plan::{Ownership, Plan}"
+    },
+    {
+      "source": "l2r_apply::check",
+      "target": "l2r_apply::assess",
+      "evidence": "crates/l2r_apply/src/check.rs:8: use crate::assess::{ActionKind, Assessment, assess_tree, read_lock}"
+    },
+    {
+      "source": "l2r_apply::check",
+      "target": "l2r_apply::lock",
+      "evidence": "crates/l2r_apply/src/check.rs:9: use crate::lock::LOCK_FILE"
+    },
+    {
+      "source": "l2r_apply::check",
+      "target": "l2r_apply::tree",
+      "evidence": "crates/l2r_apply/src/check.rs:10: use crate::tree::{Occupant, Tree}"
+    },
+    {
+      "source": "l2r_apply::fault",
+      "target": "l2r_apply::tree",
+      "evidence": "crates/l2r_apply/src/fault.rs:7: use crate::tree::TreeError"
+    },
+    {
+      "source": "l2r_apply::journal",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/src/journal.rs:19: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::journal",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_apply/src/journal.rs:19: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::journal",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/src/journal.rs:20: use l2r_plan::Plan"
+    },
+    {
+      "source": "l2r_apply::journal",
+      "target": "l2r_apply::approval",
+      "evidence": "crates/l2r_apply/src/journal.rs:22: use crate::approval::{Approval, Change}"
+    },
+    {
+      "source": "l2r_apply::journal",
+      "target": "l2r_apply::lock",
+      "evidence": "crates/l2r_apply/src/journal.rs:23: use crate::lock::{Lock, LockOwnership, is_digest}"
+    },
+    {
+      "source": "l2r_apply::journal",
+      "target": "l2r_apply::tree",
+      "evidence": "crates/l2r_apply/src/journal.rs:24: use crate::tree::TempName"
+    },
+    {
+      "source": "l2r_apply::lock",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/src/lock.rs:13: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::lock",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_apply/src/lock.rs:13: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_apply::lock",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/src/lock.rs:14: use l2r_plan::{Ownership, Plan}"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_apply/src/transaction.rs:40: use l2r_model::digest"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/src/transaction.rs:41: use l2r_plan::{Ownership, Plan, declares_generated}"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_apply::approval",
+      "evidence": "crates/l2r_apply/src/transaction.rs:43: use crate::approval::{self, Approval, ApprovalError, Change, destructive_changes}"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_apply::assess",
+      "evidence": "crates/l2r_apply/src/transaction.rs:44: use crate::assess::{ ActionKind, Assessment, Conflict, RecordedLock, assess_recorded, assess_tree, c"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_apply::journal",
+      "evidence": "crates/l2r_apply/src/transaction.rs:48: use crate::journal::{JOURNAL_FILE, JOURNAL_FORMAT, Journal, Step, StepKind}"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_apply::lock",
+      "evidence": "crates/l2r_apply/src/transaction.rs:49: use crate::lock::{LOCK_FILE, Lock, LockOwnership}"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_apply::tree",
+      "evidence": "crates/l2r_apply/src/transaction.rs:50: use crate::tree::{Occupant, TempNames, Tree, TreeError}"
+    },
+    {
+      "source": "l2r_apply::transaction",
+      "target": "l2r_apply::fault",
+      "evidence": "crates/l2r_apply/src/transaction.rs:324: crate::fault::staging_checkpoint"
+    },
+    {
+      "source": "l2r_apply::tree",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_apply/src/tree.rs:19: use l2r_model::RelPath"
+    },
+    {
+      "source": "l2r_apply::tree",
+      "target": "l2r_apply::fault",
+      "evidence": "crates/l2r_apply/src/tree.rs:131: crate::fault::run_id_override"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_apply::fault",
+      "evidence": "crates/l2r_apply/testing/crash_main.rs:8: use l2r_apply::fault::{self, Mode}"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_model::load",
+      "evidence": "crates/l2r_apply/testing/crash_main.rs:9: use l2r_model::load"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_plan",
+      "evidence": "crates/l2r_apply/testing/crash_main.rs:10: use l2r_plan::{GeneratorIdentity, plan}"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_apply/testing/crash_main.rs:10: use l2r_plan::{GeneratorIdentity, plan}"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_apply::approval",
+      "evidence": "crates/l2r_apply/testing/crash_main.rs:25: l2r_apply::approval::from_json"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_apply",
+      "evidence": "crates/l2r_apply/testing/crash_main.rs:27: l2r_apply::apply"
+    },
+    {
+      "source": "l2r_crash_after",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_apply/testing/crash_main.rs:20: l2r_validate::validate"
+    },
+    {
+      "source": "l2r_model::load",
+      "target": "l2r_model::architecture",
+      "evidence": "crates/l2r_model/src/load.rs:6: use crate::architecture::Model"
+    },
+    {
+      "source": "l2r_model::load",
+      "target": "l2r_model::lean",
+      "evidence": "crates/l2r_model/src/load.rs:7: use crate::lean::Inventory"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/conformance.rs:29: use l2r_model::{Component, digest}"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_plan/src/conformance.rs:29: use l2r_model::{Component, digest}"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/src/conformance.rs:30: use l2r_validate::Validated"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_validate::data",
+      "evidence": "crates/l2r_plan/src/conformance.rs:31: use l2r_validate::data::DataType"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/conformance.rs:32: use l2r_validate::flat::Flat"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_plan::conformance::value",
+      "evidence": "crates/l2r_plan/src/conformance.rs:34: use self::value::{Value, data_samples}"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_plan::lean_composition",
+      "evidence": "crates/l2r_plan/src/conformance.rs:36: use crate::lean_composition::{SEMANTICS_VERSION_V1, semantics_digest_v1}"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_plan::lean_composition_v2",
+      "evidence": "crates/l2r_plan/src/conformance.rs:37: use crate::lean_composition_v2::{PORTS_SCHEDULER_VERSION, ports_scheduler_digest}"
+    },
+    {
+      "source": "l2r_plan::conformance",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/conformance.rs:38: use crate::plan::GeneratorIdentity"
+    },
+    {
+      "source": "l2r_plan::conformance::recorder",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/conformance/recorder.rs:7: use l2r_model::Component"
+    },
+    {
+      "source": "l2r_plan::conformance::renderers",
+      "target": "l2r_validate::data",
+      "evidence": "crates/l2r_plan/src/conformance/renderers.rs:5: use l2r_validate::data::{DataField, DataType, DataVariant, FieldType, Shape}"
+    },
+    {
+      "source": "l2r_plan::conformance::replayer",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/conformance/replayer.rs:7: use l2r_model::{Behavior, Component}"
+    },
+    {
+      "source": "l2r_plan::conformance::replayer",
+      "target": "l2r_plan::conformance::renderers",
+      "evidence": "crates/l2r_plan/src/conformance/replayer.rs:9: use super::renderers::Renderers"
+    },
+    {
+      "source": "l2r_plan::conformance::value",
+      "target": "l2r_validate::data",
+      "evidence": "crates/l2r_plan/src/conformance/value.rs:5: use l2r_validate::data::{DataField, DataType, DataVariant, FieldType, Shape}"
+    },
+    {
+      "source": "l2r_plan::layout",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/layout.rs:5: use l2r_model::Model"
+    },
+    {
+      "source": "l2r_plan::lean_composition",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/lean_composition.rs:16: use l2r_model::{Component, Model, digest, profiles as profile_ids}"
+    },
+    {
+      "source": "l2r_plan::lean_composition",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_plan/src/lean_composition.rs:16: use l2r_model::{Component, Model, digest, profiles as profile_ids}"
+    },
+    {
+      "source": "l2r_plan::lean_composition",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/lean_composition.rs:16: use l2r_model::{Component, Model, digest, profiles as profile_ids}"
+    },
+    {
+      "source": "l2r_plan::lean_composition",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/src/lean_composition.rs:17: use l2r_validate::Validated"
+    },
+    {
+      "source": "l2r_plan::lean_composition",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/lean_composition.rs:20: use crate::plan::GeneratorIdentity"
+    },
+    {
+      "source": "l2r_plan::lean_composition",
+      "target": "l2r_plan::profiles::composite",
+      "evidence": "crates/l2r_plan/src/lean_composition.rs:21: use crate::profiles::composite::{edges_within, is_machine}"
+    },
+    {
+      "source": "l2r_plan::lean_composition",
+      "target": "l2r_plan::lean_composition_v2",
+      "evidence": "crates/l2r_plan/src/lean_composition.rs:69: crate::lean_composition_v2::lean_composition_v2"
+    },
+    {
+      "source": "l2r_plan::lean_composition_v2",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/lean_composition_v2.rs:11: use l2r_model::{Behavior, Component, digest}"
+    },
+    {
+      "source": "l2r_plan::lean_composition_v2",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_plan/src/lean_composition_v2.rs:11: use l2r_model::{Behavior, Component, digest}"
+    },
+    {
+      "source": "l2r_plan::lean_composition_v2",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/src/lean_composition_v2.rs:12: use l2r_validate::Validated"
+    },
+    {
+      "source": "l2r_plan::lean_composition_v2",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/lean_composition_v2.rs:13: use l2r_validate::flat::{Flat, FlatInput, Hop, HopKind, Leaf, Sink, Target}"
+    },
+    {
+      "source": "l2r_plan::lean_composition_v2",
+      "target": "l2r_plan::lean_composition",
+      "evidence": "crates/l2r_plan/src/lean_composition_v2.rs:16: use crate::lean_composition::{SEMANTICS_VERSION_V1, semantics_digest_v1}"
+    },
+    {
+      "source": "l2r_plan::lean_composition_v2",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/lean_composition_v2.rs:17: use crate::plan::GeneratorIdentity"
+    },
+    {
+      "source": "l2r_plan",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/lib.rs:35: use l2r_model::RelPath"
+    },
+    {
+      "source": "l2r_plan",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_plan/src/lib.rs:36: use l2r_model::{digest, profiles as profile_ids}"
+    },
+    {
+      "source": "l2r_plan",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/lib.rs:36: use l2r_model::{digest, profiles as profile_ids}"
+    },
+    {
+      "source": "l2r_plan",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/src/lib.rs:37: use l2r_validate::Validated"
+    },
+    {
+      "source": "l2r_plan::plan",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/plan.rs:6: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_plan::plan",
+      "target": "l2r_model::digest",
+      "evidence": "crates/l2r_plan/src/plan.rs:6: use l2r_model::{RelPath, digest}"
+    },
+    {
+      "source": "l2r_plan::profiles::composite",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/profiles/composite.rs:9: use l2r_model::{Component, MessageEdge, Model, profiles}"
+    },
+    {
+      "source": "l2r_plan::profiles::composite",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/profiles/composite.rs:9: use l2r_model::{Component, MessageEdge, Model, profiles}"
+    },
+    {
+      "source": "l2r_plan::profiles::composite",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/profiles/composite.rs:11: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::profiles::composite",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/profiles/composite.rs:12: use crate::text"
+    },
+    {
+      "source": "l2r_plan::profiles::composite_v1",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/profiles/composite_v1.rs:19: use l2r_model::{Component, MessageEdge, Port, profiles}"
+    },
+    {
+      "source": "l2r_plan::profiles::composite_v1",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/profiles/composite_v1.rs:19: use l2r_model::{Component, MessageEdge, Port, profiles}"
+    },
+    {
+      "source": "l2r_plan::profiles::composite_v1",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/src/profiles/composite_v1.rs:20: use l2r_validate::Validated"
+    },
+    {
+      "source": "l2r_plan::profiles::composite_v1",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/profiles/composite_v1.rs:22: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::profiles::composite_v1",
+      "target": "l2r_plan::profiles::composite",
+      "evidence": "crates/l2r_plan/src/profiles/composite_v1.rs:23: use crate::profiles::composite::edges_within"
+    },
+    {
+      "source": "l2r_plan::profiles::composite_v1",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/profiles/composite_v1.rs:24: use crate::text"
+    },
+    {
+      "source": "l2r_plan::profiles::crate_root",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/profiles/crate_root.rs:3: use l2r_model::Model"
+    },
+    {
+      "source": "l2r_plan::profiles::crate_root",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/profiles/crate_root.rs:5: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::profiles::crate_root",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/profiles/crate_root.rs:6: use crate::text"
+    },
+    {
+      "source": "l2r_plan::profiles::transition_core",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/profiles/transition_core.rs:10: use l2r_model::{Behavior, Component, profiles::TRANSITION_CORE_V0}"
+    },
+    {
+      "source": "l2r_plan::profiles::transition_core",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/profiles/transition_core.rs:10: use l2r_model::{Behavior, Component, profiles::TRANSITION_CORE_V0}"
+    },
+    {
+      "source": "l2r_plan::profiles::transition_core",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/src/profiles/transition_core.rs:11: use l2r_validate::{ResolvedEnum, ResolvedMachine}"
+    },
+    {
+      "source": "l2r_plan::profiles::transition_core",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/profiles/transition_core.rs:13: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::profiles::transition_core",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/profiles/transition_core.rs:14: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2::composite",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/v2/composite.rs:9: use l2r_model::{Component, MessageEdge, Port, profiles::COMPOSITE_V2}"
+    },
+    {
+      "source": "l2r_plan::v2::composite",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/v2/composite.rs:9: use l2r_model::{Component, MessageEdge, Port, profiles::COMPOSITE_V2}"
+    },
+    {
+      "source": "l2r_plan::v2::composite",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/v2/composite.rs:10: use l2r_validate::flat::{Hop, HopKind}"
+    },
+    {
+      "source": "l2r_plan::v2::composite",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/v2/composite.rs:12: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::v2::composite",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/v2/composite.rs:13: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2::composite",
+      "target": "l2r_plan::v2::system",
+      "evidence": "crates/l2r_plan/src/v2/composite.rs:14: use crate::v2::{Gen, hop_function_name, system}"
+    },
+    {
+      "source": "l2r_plan::v2::crate_root",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/v2/crate_root.rs:3: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::v2::crate_root",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/v2/crate_root.rs:4: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2::machine",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/v2/machine.rs:14: use l2r_model::{Behavior, Component, profiles::TRANSITION_CORE_V1}"
+    },
+    {
+      "source": "l2r_plan::v2::machine",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/v2/machine.rs:14: use l2r_model::{Behavior, Component, profiles::TRANSITION_CORE_V1}"
+    },
+    {
+      "source": "l2r_plan::v2::machine",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/v2/machine.rs:16: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::v2::machine",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/v2/machine.rs:17: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_plan/src/v2/mod.rs:21: use l2r_model::{Component, Model, profiles as profile_ids}"
+    },
+    {
+      "source": "l2r_plan::v2",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_plan/src/v2/mod.rs:21: use l2r_model::{Component, Model, profiles as profile_ids}"
+    },
+    {
+      "source": "l2r_plan::v2",
+      "target": "l2r_validate",
+      "evidence": "crates/l2r_plan/src/v2/mod.rs:22: use l2r_validate::Validated"
+    },
+    {
+      "source": "l2r_plan::v2",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/v2/mod.rs:23: use l2r_validate::flat::{Flat, Hop, HopKind}"
+    },
+    {
+      "source": "l2r_plan::v2",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/v2/mod.rs:25: use crate::plan::Artifact"
+    },
+    {
+      "source": "l2r_plan::v2",
+      "target": "l2r_plan::layout",
+      "evidence": "crates/l2r_plan/src/v2/mod.rs:26: use crate::{PlanError, layout}"
+    },
+    {
+      "source": "l2r_plan::v2::system",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/v2/system.rs:14: use l2r_validate::flat::{Flat, FlatInput, Hop, Leaf, Sink, Target}"
+    },
+    {
+      "source": "l2r_plan::v2::system",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/v2/system.rs:17: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2::system::attempt",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/v2/system/attempt.rs:7: use l2r_validate::flat::{Flat, Leaf, Target}"
+    },
+    {
+      "source": "l2r_plan::v2::system::buffer",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/v2/system/buffer.rs:4: use l2r_validate::flat::{Flat, Leaf, Sink}"
+    },
+    {
+      "source": "l2r_plan::v2::system::buffer",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/v2/system/buffer.rs:7: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2::system::route",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_plan/src/v2/system/route.rs:4: use l2r_validate::flat::{FlatRoute, Hop, HopKind, Leaf, Target}"
+    },
+    {
+      "source": "l2r_plan::v2::system::route",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/v2/system/route.rs:7: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2::types",
+      "target": "l2r_validate::data",
+      "evidence": "crates/l2r_plan/src/v2/types.rs:16: use l2r_validate::data::{DataField, DataType, DataVariant, FieldType, Shape}"
+    },
+    {
+      "source": "l2r_plan::v2::types",
+      "target": "l2r_plan::plan",
+      "evidence": "crates/l2r_plan/src/v2/types.rs:18: use crate::plan::{Artifact, Ownership}"
+    },
+    {
+      "source": "l2r_plan::v2::types",
+      "target": "l2r_plan::text",
+      "evidence": "crates/l2r_plan/src/v2/types.rs:19: use crate::text"
+    },
+    {
+      "source": "l2r_plan::v2::types",
+      "target": "l2r_plan::v2::crate_root",
+      "evidence": "crates/l2r_plan/src/v2/types.rs:20: use crate::v2::{Gen, crate_root::PROFILE}"
+    },
+    {
+      "source": "l2r_testing",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_testing/src/lib.rs:6: use l2r_model::{Inventory, Model, load}"
+    },
+    {
+      "source": "l2r_testing",
+      "target": "l2r_model::load",
+      "evidence": "crates/l2r_testing/src/lib.rs:6: use l2r_model::{Inventory, Model, load}"
+    },
+    {
+      "source": "l2r_validate::data",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/data.rs:14: use l2r_model::{Constructor, DeclKind, Declaration, Field, Inventory}"
+    },
+    {
+      "source": "l2r_validate::data",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/data.rs:16: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::data",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/data.rs:17: use crate::names"
+    },
+    {
+      "source": "l2r_validate::flat",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/flat.rs:13: use l2r_model::{Component, MessageEdge, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r_validate::flat",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_validate/src/flat.rs:13: use l2r_model::{Component, MessageEdge, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r_validate::lean_refs",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/lean_refs.rs:6: use l2r_model::{Behavior, Component, DeclKind, Declaration, INVENTORY_SCHEMA, Inventory, Model}"
+    },
+    {
+      "source": "l2r_validate::lean_refs",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/lean_refs.rs:8: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::lean_refs",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/lean_refs.rs:9: use crate::names"
+    },
+    {
+      "source": "l2r_validate::lean_refs",
+      "target": "l2r_validate::resolved",
+      "evidence": "crates/l2r_validate/src/lean_refs.rs:10: use crate::resolved::{ResolvedEnum, ResolvedMachine, Variant}"
+    },
+    {
+      "source": "l2r_validate::lean_refs",
+      "target": "l2r_validate::structure",
+      "evidence": "crates/l2r_validate/src/lean_refs.rs:11: use crate::structure::subject"
+    },
+    {
+      "source": "l2r_validate",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/lib.rs:21: use l2r_model::{Inventory, MODEL_SCHEMA_V2, Model}"
+    },
+    {
+      "source": "l2r_validate::messages",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/messages.rs:10: use l2r_model::{DeclKind, Inventory, MessageEdge, Model, profiles}"
+    },
+    {
+      "source": "l2r_validate::messages",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_validate/src/messages.rs:10: use l2r_model::{DeclKind, Inventory, MessageEdge, Model, profiles}"
+    },
+    {
+      "source": "l2r_validate::messages",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/messages.rs:12: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::messages",
+      "target": "l2r_validate::lean_refs",
+      "evidence": "crates/l2r_validate/src/messages.rs:13: use crate::lean_refs::{Refs, translation_type}"
+    },
+    {
+      "source": "l2r_validate::messages",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/messages.rs:14: use crate::names"
+    },
+    {
+      "source": "l2r_validate::names",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/names.rs:70: l2r_model::RelPath::parse"
+    },
+    {
+      "source": "l2r_validate::ports",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/ports.rs:12: use l2r_model::{DeclKind, Inventory, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r_validate::ports",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_validate/src/ports.rs:12: use l2r_model::{DeclKind, Inventory, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r_validate::ports",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/ports.rs:14: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::ports",
+      "target": "l2r_validate::lean_refs",
+      "evidence": "crates/l2r_validate/src/ports.rs:15: use crate::lean_refs::{Refs, port_translation_type}"
+    },
+    {
+      "source": "l2r_validate::ports",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/ports.rs:16: use crate::names"
+    },
+    {
+      "source": "l2r_validate::ports",
+      "target": "l2r_validate::resolved",
+      "evidence": "crates/l2r_validate/src/ports.rs:17: use crate::resolved::ResolvedEnum"
+    },
+    {
+      "source": "l2r_validate::resolved",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/resolved.rs:8: use l2r_model::{Inventory, Model}"
+    },
+    {
+      "source": "l2r_validate::resolved",
+      "target": "l2r_validate::data",
+      "evidence": "crates/l2r_validate/src/resolved.rs:10: use crate::data::DataType"
+    },
+    {
+      "source": "l2r_validate::resolved",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_validate/src/resolved.rs:11: use crate::flat::Flat"
+    },
+    {
+      "source": "l2r_validate::structure",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/structure.rs:5: use l2r_model::{Component, MODEL_SCHEMA, Model, SUPPORTED_SCHEMAS, profiles}"
+    },
+    {
+      "source": "l2r_validate::structure",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_validate/src/structure.rs:5: use l2r_model::{Component, MODEL_SCHEMA, Model, SUPPORTED_SCHEMAS, profiles}"
+    },
+    {
+      "source": "l2r_validate::structure",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/structure.rs:7: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::structure",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/structure.rs:8: use crate::names"
+    },
+    {
+      "source": "l2r_validate::v2",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/v2.rs:21: use l2r_model::{Component, Inventory, MessageEdge, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r_validate::v2",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_validate/src/v2.rs:21: use l2r_model::{Component, Inventory, MessageEdge, Model, Port, profiles}"
+    },
+    {
+      "source": "l2r_validate::v2",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/v2.rs:23: use crate::diagnostic::{Diagnostic, Findings}"
+    },
+    {
+      "source": "l2r_validate::v2",
+      "target": "l2r_validate::flat",
+      "evidence": "crates/l2r_validate/src/v2.rs:24: use crate::flat::{self, Flat, FlatError}"
+    },
+    {
+      "source": "l2r_validate::v2",
+      "target": "l2r_validate::lean_refs",
+      "evidence": "crates/l2r_validate/src/v2.rs:25: use crate::lean_refs"
+    },
+    {
+      "source": "l2r_validate::v2",
+      "target": "l2r_validate::resolved",
+      "evidence": "crates/l2r_validate/src/v2.rs:26: use crate::resolved::Validated"
+    },
+    {
+      "source": "l2r_validate::v2",
+      "target": "l2r_validate::structure",
+      "evidence": "crates/l2r_validate/src/v2.rs:27: use crate::structure"
+    },
+    {
+      "source": "l2r_validate::v2::components",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/v2/components.rs:4: use l2r_model::{Component, Model, profiles}"
+    },
+    {
+      "source": "l2r_validate::v2::components",
+      "target": "l2r_model::profiles",
+      "evidence": "crates/l2r_validate/src/v2/components.rs:4: use l2r_model::{Component, Model, profiles}"
+    },
+    {
+      "source": "l2r_validate::v2::components",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/v2/components.rs:7: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::v2::components",
+      "target": "l2r_validate::structure",
+      "evidence": "crates/l2r_validate/src/v2/components.rs:8: use crate::structure::{MAX_MAILBOX_CAPACITY, subject}"
+    },
+    {
+      "source": "l2r_validate::v2::edges",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/v2/edges.rs:6: use l2r_model::{MessageEdge, Model}"
+    },
+    {
+      "source": "l2r_validate::v2::edges",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/v2/edges.rs:9: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::v2::edges",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/v2/edges.rs:10: use crate::names"
+    },
+    {
+      "source": "l2r_validate::v2::edges",
+      "target": "l2r_validate::structure",
+      "evidence": "crates/l2r_validate/src/v2/edges.rs:11: use crate::structure::subject"
+    },
+    {
+      "source": "l2r_validate::v2::generated_names",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/v2/generated_names.rs:6: use l2r_model::Model"
+    },
+    {
+      "source": "l2r_validate::v2::generated_names",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/v2/generated_names.rs:9: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::v2::generated_names",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/v2/generated_names.rs:10: use crate::names"
+    },
+    {
+      "source": "l2r_validate::v2::generated_names",
+      "target": "l2r_validate::structure",
+      "evidence": "crates/l2r_validate/src/v2/generated_names.rs:11: use crate::structure::subject"
+    },
+    {
+      "source": "l2r_validate::v2::lean",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/v2/lean.rs:7: use l2r_model::{Component, DeclKind, INVENTORY_SCHEMA_V1, Inventory, MessageEdge, Model, Port}"
+    },
+    {
+      "source": "l2r_validate::v2::lean",
+      "target": "l2r_validate::data",
+      "evidence": "crates/l2r_validate/src/v2/lean.rs:10: use crate::data::{self, DataType, TypeUse}"
+    },
+    {
+      "source": "l2r_validate::v2::lean",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/v2/lean.rs:11: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::v2::lean",
+      "target": "l2r_validate::lean_refs",
+      "evidence": "crates/l2r_validate/src/v2/lean.rs:12: use crate::lean_refs::{Refs, port_translation_type, step_type, translation_type}"
+    },
+    {
+      "source": "l2r_validate::v2::lean",
+      "target": "l2r_validate::structure",
+      "evidence": "crates/l2r_validate/src/v2/lean.rs:13: use crate::structure::subject"
+    },
+    {
+      "source": "l2r_validate::v2::ports",
+      "target": "l2r_model",
+      "evidence": "crates/l2r_validate/src/v2/ports.rs:7: use l2r_model::{Component, Model, Port}"
+    },
+    {
+      "source": "l2r_validate::v2::ports",
+      "target": "l2r_validate::diagnostic",
+      "evidence": "crates/l2r_validate/src/v2/ports.rs:10: use crate::diagnostic::Findings"
+    },
+    {
+      "source": "l2r_validate::v2::ports",
+      "target": "l2r_validate::names",
+      "evidence": "crates/l2r_validate/src/v2/ports.rs:11: use crate::names"
+    },
+    {
+      "source": "l2r_validate::v2::ports",
+      "target": "l2r_validate::structure",
+      "evidence": "crates/l2r_validate/src/v2/ports.rs:12: use crate::structure::MAX_MAILBOX_CAPACITY"
+    }
+  ],
+  "crate_loops": [],
+  "module_loops": [
+    [
+      "l2r_apply::approval",
+      "l2r_apply::assess",
+      "l2r_apply::journal"
+    ],
+    [
+      "l2r_apply::fault",
+      "l2r_apply::tree"
+    ],
+    [
+      "l2r_plan::lean_composition",
+      "l2r_plan::lean_composition_v2"
+    ]
+  ],
+  "checks": {
+    "references_to_undeclared_crates": [],
+    "declared_deps_without_reference": []
+  },
+  "not_measured": [
+    "test targets, and test modules from the first #[cfg(test)] to the end of a file",
+    "macro bodies and macro expansions"
+  ]
+}
