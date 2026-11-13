@@ -5,6 +5,8 @@ Architect: the repository owner. Date: 2026-11-13. Knowledge base: `architecture
 Evidence labels: MEASURED (deps.py, compiler, build, a command that was run), READ (`file:line`), INFERRED (chain stated), ARCHITECT (answer, date).
 Marks: PROPOSED · DECIDED (architect, date) · OPEN.
 
+**Status (2026-11-13):** the architect answered Q1–Q7 on PR #21. The decisions are quoted verbatim under [Decided](#decided) and are authoritative. Remedies are delivered by separate engineering PRs; this record changes no code.
+
 ## Verdict
 
 **The crate structure is appropriate. Its one structural weakness is that the concept along which L2R evolves, the versioned profile and schema, has no owning type.**
@@ -19,7 +21,7 @@ What does not hold:
 - **No owner for what a profile is.** A profile is a `String` (READ `l2r_model/src/architecture.rs:74`). What a profile *is*, and which names its output uses, are rewritten in each module that needs them, across `l2r_validate`, `l2r_plan` and the CLI (F8, F9, F10).
 - **The likely change multiplies the cost.** Under immutability every new behaviour is a new version. The repository added such versions on 2026-11-02, 11-03 and 11-10 (INFERRED from `git log` on `l2r_model/src/profiles.rs` and the ADRs). So the most likely change is the one these findings make expensive.
 - **The cost has already been paid once.** Commit 05e855e records a gate that had been missed (READ).
-- **Two reachable defects come from the same cause.** In each, a validated model plans Rust that is wrong (F9).
+- **Two reachable defects come from the same cause.** In each, a validated model plans Rust that is wrong (F9). One is reproduced; the other is inferred.
 
 ## Architecture as built
 
@@ -72,7 +74,12 @@ This is what each module hides, as read. The README's crate table is the only ot
     - only their decision headings read: ADR-0001, ADR-0002 and ADR-0004.
   - `docs/generation-boundary.md`, `docs/composite-v2.md` and `docs/model-reference.md` where cited.
   - Not read: the PRD (Discussion #1).
-- **The immutability rule** is stated in `AGENTS.md`, in ADR-0001 D5 and in ADR-0005 D9 ("`v0` and `v1` are unchanged"). ADR-0005 D9 cites "ADR-0003 D8" for it, but ADR-0003's body ends at D7 (READ). That is a citation for the owner to check.
+- **The immutability rule** is stated in `AGENTS.md` and in ADR-0005 D9 ("`v0` and `v1` are unchanged (ADR-0003 D8)"). Where the cited text is (READ, Discussions fetched 2026-11-13):
+  - ADR-0003's accepted body (Discussion #5, ratified 2026-11-09) has D1–D7 only.
+  - "New D8 — Profile and schema evolution" ("Published profile and schema versions are immutable…") is in ADR-0003's **r4 ratification-proposal comment** (2026-11-04), not in the body.
+  - The same rule is proposed as an append to ADR-0001 D5 in ADR-0001's r3 and r4 comments. ADR-0001's accepted body D5 states determinism only: "The same canonical input, pinned generator and profiles must generate identical output bytes".
+  - Both ratification records say "Historical Proposed/Draft wording is superseded by this ratification" and do not say whether the r4 texts were included.
+  - The citation is corrected by a new comment on Discussion #16 (the architect's instruction, "Other findings" under [Decided](#decided)); D9's own sentence is accepted text, so the decision's substance is unchanged.
 - **Measurement:** `deps.py --repo . --scope crates --out architecture/audit` exits 0. Crates come from `bazel query`; Cargo was not consulted.
   - Size: 7 crates, 67 modules, 14 crate edges, 219 module edges.
   - Loops: no crate loops. Three module loops: approval→assess→journal (F4), fault↔tree (F6), and lean_composition↔lean_composition_v2 (F15).
@@ -89,10 +96,10 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 | Rank | Id | One line | Reachable today? |
 |---|---|---|---|
 | 1 | F8 | What a profile is (kind, schema) is decided separately in each module | no |
-| 2 | F9 | The generated-Rust naming scheme is written in the planner and again in three places | **yes, two defects** |
+| 2 | F9 | The generated-Rust naming scheme is written in the planner and again in three places | **yes**: one reproduced, one inferred |
 | 3 | F10 | One `Model` type for every schema; per-version field gates are written by hand | no (missed once, 05e855e) |
 | 4 | F11 | Frozen profiles share output helpers with versions still changing | no |
-| 5 | F12 | Three mechanisms write files beside the model; one follows symlinks | **yes** |
+| 5 | F12 | Three mechanisms write files beside the model; one follows symlinks | **yes** (inferred) |
 | 6 | F13 | The project layout and the meaning of `check` are decided in the CLI | no |
 | 7 | F14 | Guarantees carried by `Validated` are dropped inside the planner | no |
 | 8 | F1–F7 | `l2r_apply` (carried over) | see the PR #20 record |
@@ -123,7 +130,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 - **Reachable today?** No. The current lists match the current profiles (READ `structure.rs:16-17`, `report.rs:205-207`).
 - **Cost:** every new profile or schema version, the change this repository makes most often (MEASURED `git log` on `l2r_model/src/profiles.rs` and `architecture.rs`: 64c9a17 on 2026-11-02, a4ab4c5 on 11-03, 219dffa on 11-10). The worst silent edit gives a derived Lean network under the wrong format identifier.
 - **View:** `audit_F8`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13): Q1 YES.
 
 ### F9: The generated-Rust naming scheme is written in the planner and again in validate, the CLI and conformance
 
@@ -149,7 +156,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 - **Reachable today?** Yes, both defects above, in the frozen v0/v1 profiles. Fixing either changes what a published schema accepts or what a published profile emits. That choice is the architect's (Q2).
 - **Cost:** a validated, approved model that does not compile, or a packet that misdirects an implementer.
 - **View:** `audit_F9`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13): Q2, correct both defects in place at validation time; Q3 YES. Defect 2 stays INFERRED until it is reproduced (Q2).
 
 ### F10: One `Model` type serves every schema; which fields each schema version may use is gated by hand
 
@@ -163,7 +170,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 - **Reachable today?** No. The gates cover today's fields (READ).
 - **Cost:** each schema version adds a gate to every older version, and a miss weakens a published schema.
 - **View:** `audit_F10`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13) under Q1: schema identity and permitted combinations get one typed owner.
 
 ### F11: Frozen profiles share output helpers with the versions still changing
 
@@ -180,7 +187,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 - **Cost:** a silent break of "published profiles are immutable" (AGENTS.md).
 - **Not a breach in part:** `text::generated_marker` and `declares_generated` are one deliberate system-level decision (READ `text.rs:14-16`).
 - **View:** `audit_F11`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13): Q4, freeze version-dependent output semantics. This is option (a), not the recommended (b): pins and fixtures stay, but finite examples are not the guarantee.
 
 ### F12: Three mechanisms write files outside the output tree; the inventory's follows a planted symlink
 
@@ -194,7 +201,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 - **Reachable today?** Yes, as inferred. It was not run.
 - **Scope note:** G1 covers the output tree only (`docs/generation-boundary.md:38`), so this does not breach a stated guarantee. Whether files written beside the model need the same rule is the architect's question (Q5).
 - **View:** `audit_F12`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13): Q5, one trustworthy file-writing mechanism; each operation keeps its own authorization policy (inventory export needs no generation approval). Highest priority.
 
 ### F13: The project layout and the meaning of `check` are decided in the CLI
 
@@ -206,7 +213,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 - **Change scenario:** a second front end, such as an editor plug-in or a library user, calls `l2r_apply::check` and silently loses the approval check. A new path field in `[system]` needs a SILENT edit in `session.rs`.
 - **Reachable today?** No. The CLI is the only front end.
 - **View:** `audit_F13`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13): Q6, option (b). The CLI stays the one supported front end; document its layout and `check` semantics; consolidate genuinely duplicated path rules without changing behaviour.
 
 ### F14: Guarantees carried by `Validated` are dropped inside the planner
 
@@ -225,7 +232,7 @@ Ordered by the cost of the change each makes expensive, multiplied by its likeli
 - **Already in the knowledge base:** the two capacity fallbacks are the example in `parnas-1972-information-hiding` ("One decision, three owners"). `layout::component_dirs` is the example in `parnas-1979-uses-hierarchy` and `liskov-zilles-1974-abstract-data-types`. All are still at the cited lines (READ). The new evidence is the port-index default and the second tree walk.
 - **Reachable today?** No. Each relied-on rule is enforced (S017, P003, the shape checks).
 - **View:** `audit_F14`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13): improve as part of the typed version/validation seam (Q1), not separately.
 
 ### F1–F7: `l2r_apply` (carried over unchanged)
 
@@ -250,13 +257,13 @@ The full record is the audit posted on PR #20 (issuecomment-6850881232) and its 
 - **Which side splits:** `lean_composition` holds three decisions: the identities of the Lean semantics and scheduler sources (`:31-54`), the v0/v1 deriver, and the schema dispatch. Moving the identities into their own module, which both derivers and conformance use, removes the loop. The dispatch would then sit above both derivers.
 - **Reachable today?** The loop exists, but it has no runtime effect. The cost is small.
 - **View:** `audit_F15`
-- **Mark:** PROPOSED
+- **Mark:** DECIDED (architect, 2026-11-13): lower-priority graph clean-up.
 
 ### F16: The build does not enforce the crate layering
 
 - **Evidence:** MEASURED: `visibility = ["//visibility:public"]` on `l2r_model`, `l2r_validate`, `l2r_plan`, `l2r_apply`, `l2r` and `l2r_testing` (`crates/*/BUILD.bazel`).
 - **Consequence (INFERRED):** a new dependency against the layering compiles. Only review would catch it, for example `l2r_validate` depending on `l2r_plan` to share the names of F9.
-- **Mark:** PROPOSED. This is a question, not a defect (Q7).
+- **Mark:** DECIDED (architect, 2026-11-13): Q7 YES; public integration entrypoints stay usable and the external new-project workflow is verified.
 - **View:** `audit_overview`
 
 ## Not findings
@@ -274,6 +281,8 @@ The full record is the audit posted on PR #20 (issuecomment-6850881232) and its 
 
 ## Questions for the architect
 
+All seven are answered; see [Decided](#decided).
+
 Each question changes the modules, the uses relation or an interface. Q1 constrains Q2 and Q3.
 
 | Id | Finding | Question | Alternatives and consequences | Recommendation, and why |
@@ -282,7 +291,7 @@ Each question changes the modules, the uses relation or an interface. Q1 constra
 | Q2 | F9 | The two reachable defects are in frozen v0/v1 profiles. Fix them in place, add new versions, or document them as limitations? | (a) A validation rule in place. **This reopens a binding decision:** ADR-0005 D9 says "`v0` and `v1` are unchanged". It would newly reject only models whose output does not compile or mirrors the wrong type. (b) New versions (`composite/v3`, …). The schemas stay pure, at the cost of more versions. (c) Document only. | No recommendation. Whether (a) is allowed is a reading of ADR-0005 D9, and that reading is yours. The argument for (a): it changes no generated byte of any model whose output is correct. |
 | Q3 | F9 | Should the generated names have one owner that validate (S020), the CLI packet and conformance ask, instead of restating them? | (a) A naming module the planner uses and exports, which validate cannot import while it sits below the planner. It needs either a lower crate for "the names a profile generates", or moving S020 into the planner as a plan-time check. (b) A test that compares the S020 lists with the planner's output for each example. | (a) with the lower crate. It hides the naming scheme once and keeps validation before planning. This is the case where the design skill should lay out the alternatives (hand-over). |
 | Q4 | F11 | Should a frozen profile own all the text it emits, including helpers, or are shared helpers guarded by pins enough? | (a) Freeze helpers per version. This means copies, but no frozen output can move. (b) Pins over a corpus of models that exercises every branch of every frozen profile. | (b), unless you want (a)'s certainty. Copies trade one risk for another. |
-| Q5 | F12 | Should every file L2R writes outside the output tree go through one writer with the approval record's guarantees? | (a) One writer, which fixes the inventory symlink. (b) Fix `inventory.rs` alone. | (a). One mechanism per authority decision (`saltzer-schroeder-1975-protection-principles`, economy of mechanism). |
+| Q5 | F12 | Should every file L2R writes outside the output tree go through one writer with the approval record's guarantees? | (a) One writer, which fixes the inventory symlink. (b) Fix `inventory.rs` alone. | (a). One mechanism per authority decision (`saltzer-schroeder-1975-protection-principles`, economy of mechanism). *Note after the decision:* the question tied the writing mechanism to the approval record's authorization; the architect separated them (one mechanism, per-operation authorization). |
 | Q6 | F13 | Should the project layout (where the approval record and inventory live) and the full meaning of `check` belong to a library rather than the CLI? | (a) Move them into `l2r_apply` or a small project-layout module. (b) Keep them in the CLI and state that it is the only supported front end. | (a), if a second front end is planned. Otherwise (b), stated in the docs. |
 | Q7 | F16 | Should Bazel `visibility` enforce the crate layering? | (a) Restrict each library's visibility to the crates above it. The CLI binary stays public: downstream projects run `@l2r//crates/l2r_cli:l2r` (READ `bazel/l2r.bzl:35`, `l2r/src/init.rs:174`, `tools/e2e/new_project.sh:44`). (b) Keep public. | (a). Outside `crates/`, only the CLI binary is a direct dependency (MEASURED `bazel query 'rdeps(//..., //crates/...) except //crates/...'`: the five examples' drift tests and `composition_v2_test`, all through `//crates/l2r_cli:l2r`), so restricting the libraries breaks no known user. |
 
@@ -290,9 +299,22 @@ F14 and F15 need no question before Q1 is answered: their remedy depends on how 
 
 ## Decided
 
-| Finding | Decision | Architect, date | Hand-over to design? |
-|---|---|---|---|
-| F1 | "My decision is to retain this as a proposed architectural finding, not authorize a refactor yet. We must preserve independent checks on normal and recovery paths while avoiding multiple definitions of the same rule." | owner, 2026-11-13 | no |
+The architect's decisions, quoted verbatim from the PR #21 comment of 2026-11-13. They are authoritative.
+
+| Question / finding | Decision (ARCHITECT, 2026-11-13) | Hand-over to design? |
+|---|---|---|
+| Q1 (F8, F10) | "**Q1 — YES.** Schema/profile identity, classification and permitted combinations must have a single typed owner in the domain model. Preserve existing canonical model JSON, digests, approvals and all valid frozen-profile outputs byte-for-byte. The design skill may determine the abstraction and module boundaries; do not substitute a global registry of string comparisons." | yes |
+| Q2 (F9) | "**Q2 — Correct the two v0/v1 defects in place at validation time.** Published immutability protects the meaning and output of valid models, not the accidental acceptance of inputs that produce uncompilable Rust or incorrectly conflate distinct Lean message types. Reject those inputs with precise diagnostics; do not silently rename generated types or rewrite existing valid artifacts. Capture this limited correction as an explicit clarification to ADR-0005 D9, not as permission for other changes to frozen profiles. Reproduce the second suspected defect before claiming it is confirmed." | no |
+| Q3 (F9) | "**Q3 — YES.** Generated Rust naming needs a single owner usable by validation, planning, work packets and conformance without reversing crate dependencies. Hand that architectural seam to the design skill, then implement; prevent name conflicts before approving a plan." | yes |
+| Q4 (F11) | "**Q4 — Freeze version-dependent output semantics.** Sharing truly stable infrastructure/helpers is fine, but a new version may not change even untested valid inputs' v0/v1 generated bytes. Keep regression fixtures and pin checks; do not mistake finite examples for the immutability guarantee." | no |
+| Q5 (F12) | "**Q5 — YES to one trustworthy *file-writing mechanism*, NO to requiring generation approval for Lean inventory export.** Fix both the predictable inventory temporary file and predictable OS-temp Lean exporter. The shared primitive must prevent symlink-following/unsafe replacement; each operation retains its own authorization policy. This is the highest-priority safety correction. Demonstrate hostile-path refusal." | no |
+| Q6 (F13) | "**Q6 — Keep the CLI as the one supported front end for now.** Document its project-layout and full `check` semantics accurately; avoid inventing a reusable front-end layer before a real second consumer exists. Consolidate genuinely duplicated path rules where this can be done without changing behavior." | no |
+| Q7 (F16) | "**Q7 — YES.** Enforce intended crate dependency boundaries with Bazel visibility while keeping documented public integration entrypoints usable. Verify the external-new-project workflow." | no |
+| F1 | "My decision is to retain this as a proposed architectural finding, not authorize a refactor yet. We must preserve independent checks on normal and recovery paths while avoiding multiple definitions of the same rule." | no |
+| Other findings | "F1 remains PROPOSED with no authorized refactor. F14 can be improved as part of the typed version/validation seam; F15 is a lower-priority graph clean-up. No broad rewrite of the structurally sound crate architecture. The cited `ADR-0003 D8` appears invalid; verify the authoritative Discussion text and correct the citation without altering the decision's substance." | no |
+| Priority | "first the reachable unsafe inventory write and invalid v1 input cases, then schema/profile/naming ownership and compatibility protection, then proportionate cleanup. Keep proof claims and frozen behavior honest." | — |
+
+F2–F7 received no decision and stay PROPOSED.
 
 ## Knowledge base
 
