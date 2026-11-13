@@ -11,7 +11,8 @@ L2R_APPLY_DEPS = [
 l2r_rust_library(
     name = "l2r_apply",
     srcs = glob(["src/**/*.rs"]),
-    visibility = ["//visibility:public"],
+    # Used by the CLI only (model < validate < plan < apply < cli).
+    visibility = ["//crates/l2r_cli:__pkg__"],
     deps = L2R_APPLY_DEPS,
 )
 
@@ -23,7 +24,6 @@ l2r_rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_features = ["fault-injection"],
     crate_name = "l2r_apply",
-    visibility = ["//crates:__subpackages__"],
     deps = L2R_APPLY_DEPS,
 )
 
@@ -70,7 +70,7 @@ l2r_rust_binary(
     name = "l2r_crash_after",
     testonly = True,
     srcs = ["testing/crash_main.rs"],
-    visibility = ["//crates:__subpackages__"],
+    visibility = ["//crates/l2r_cli:__pkg__"],
     deps = [
         ":l2r_apply_fault",
         "//crates/l2r_model",

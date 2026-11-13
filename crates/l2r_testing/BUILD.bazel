@@ -11,6 +11,7 @@ l2r_rust_library(
         "//examples/starter:inputs",
         "//examples/tank_station:inputs",
     ],
-    visibility = ["//visibility:public"],
+    # Test fixtures for the crates' own tests (testonly).
+    visibility = ["//crates:__subpackages__"],
     deps = ["//crates/l2r_model"],
 )
