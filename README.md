@@ -151,6 +151,8 @@ the architecture model changed, until the new plan has been previewed and approv
 | `docs/release-notes.md` | What each release contains; proved, tested and assumed, side by side |
 | `.claude/skills` | Instructions for coding agents working on L2R itself (not part of the tool) |
 
+The crates form one order, `l2r_model` < `l2r_validate` < `l2r_plan` < `l2r_apply` < `l2r_cli`. Each library is visible in Bazel only to the crates above it, and `l2r_testing` only to the crates' tests, so a dependency against the order does not build. The supported entrypoints for other workspaces are `@l2r//crates/l2r_cli:l2r`, the macros in `@l2r//bazel:l2r.bzl` and `@l2r//tools/lean:bin_path`; the libraries are not a public API.
+
 ## Documentation and decisions
 
 PRDs and ADRs live in [GitHub Discussions](https://github.com/syncom-systems/l2r/discussions):
