@@ -223,7 +223,7 @@ the name must change all three.
 
 **`l2r check <model>`** fails, listing every finding, when any of these holds:
 
-1. the model or the inventory does not load, or the model is invalid;
+1. the model or the inventory does not load, the model is invalid, or it cannot be planned;
 2. the output tree does not exist;
 3. a planned file (generated or implementation) is missing, a generated file is
    out of date with the plan or no longer planned, or an implementation file is
@@ -235,9 +235,12 @@ the name must change all three.
 5. there is no lock, or it records another plan;
 6. an implementation file exceeds its component's
    `implementation_budget_lines`;
-7. there is no approval record, it cannot be read, or it is not for the current
-   plan digest (the model, the inventory, the generator or a profile changed).
+7. there is no approval record, it cannot be read or has an unsupported format,
+   or it is not for the current plan digest (the model, the inventory, the
+   generator, a profile or the planned files changed).
 
 Items 2 to 6 are `l2r_apply::check`. Item 7 is added by the CLI. A program that
 calls `l2r_apply::check` directly gets no approval check. `l2r_check_test`
-(`bazel/l2r.bzl`) runs the full `l2r check`.
+(`bazel/l2r.bzl`) runs `l2r check` on a copy of the project that Bazel makes
+with symbolic links resolved, so a link in the output tree is not seen there;
+run `l2r check` in the project itself for that.
