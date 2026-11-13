@@ -90,3 +90,17 @@ l2r_rust_test(
         "//crates/l2r_validate",
     ],
 )
+
+l2r_rust_test(
+    name = "l2r_apply_file_test",
+    srcs = ["tests/file.rs"],
+    deps = [
+        ":l2r_apply",
+        "//crates/l2r_testing",
+    ],
+)
+
+l2r_rust_test(
+    name = "l2r_apply_unit_test",
+    crate = ":l2r_apply",
+)
