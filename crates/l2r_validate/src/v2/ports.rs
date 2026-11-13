@@ -6,10 +6,10 @@ use std::collections::BTreeSet;
 
 use l2r_model::{Component, Model, Port};
 
-use super::MAX_CAPACITY;
 use super::{RESERVED_IDS, has_outgoing_edge, is_composite, is_machine, port_subject, root_id};
 use crate::diagnostic::Findings;
 use crate::names;
+use crate::structure::MAX_MAILBOX_CAPACITY;
 
 fn is_in(port: &Port) -> bool {
     port.direction.as_deref() == Some("in")
@@ -133,8 +133,8 @@ fn outbox_capacity_problem(on_root: bool, capacity: Option<u32>) -> Option<Strin
         (true, None) => {
             Some("an `out` port of the root composite must state the `capacity` of its outbox".to_string())
         }
-        (true, Some(n)) if !(1..=MAX_CAPACITY).contains(&n) => Some(format!(
-            "`capacity` must be between 1 and {MAX_CAPACITY}"
+        (true, Some(n)) if !(1..=MAX_MAILBOX_CAPACITY).contains(&n) => Some(format!(
+            "`capacity` must be between 1 and {MAX_MAILBOX_CAPACITY}"
         )),
         (false, Some(_)) => Some(
             "only the root composite's `out` ports have an outbox; this port forwards to the edges of its parent"
