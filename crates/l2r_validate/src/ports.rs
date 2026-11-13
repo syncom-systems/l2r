@@ -9,7 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use l2r_model::{DeclKind, Inventory, Model, Port, profiles};
+use l2r_model::{DeclKind, Inventory, Model, Port, Profile, Schema};
 
 use crate::diagnostic::Findings;
 use crate::lean_refs::{Refs, port_translation_type};
@@ -19,6 +19,9 @@ use crate::resolved::ResolvedEnum;
 /// Applies the structural port rules.
 pub fn check(model: &Model, findings: &mut Findings) {
     let mut ids = BTreeSet::new();
+    // These rules run for v0 and v1 documents; an unknown schema (S001) is
+    // held to v1.
+    let schema = model.parsed_schema().unwrap_or(Schema::V1);
     for port in &model.ports {
         let subject = format!("port `{}`", port.id);
         if !names::is_identifier(&port.id) || names::is_rust_keyword(&port.id) {
@@ -32,7 +35,7 @@ pub fn check(model: &Model, findings: &mut Findings) {
             findings.error("L2R-P001", &subject, "duplicate port id");
         }
         // A `v1` document means what it always meant.
-        if port.direction.is_some() || port.capacity.is_some() {
+        if port.features().iter().any(|f| !schema.admits_feature(*f)) {
             findings.error(
                 "L2R-S015",
                 &subject,
@@ -40,7 +43,7 @@ pub fn check(model: &Model, findings: &mut Findings) {
             );
         }
         match model.component(&port.composite) {
-            Some(c) if c.profile == profiles::COMPOSITE_V1 => {}
+            Some(c) if c.parsed_profile() == Some(Profile::CompositeV1) => {}
             Some(_) => findings.error(
                 "L2R-P002",
                 &subject,
@@ -57,7 +60,7 @@ pub fn check(model: &Model, findings: &mut Findings) {
         }
         match model.component(port.target()) {
             Some(child)
-                if child.profile == profiles::TRANSITION_CORE_V0
+                if child.parsed_profile() == Some(Profile::TransitionCoreV0)
                     && child.parent.as_deref() == Some(port.composite.as_str()) => {}
             _ => findings.error(
                 "L2R-P003",
@@ -73,7 +76,7 @@ pub fn check(model: &Model, findings: &mut Findings) {
     for composite in model
         .components
         .iter()
-        .filter(|c| c.profile == profiles::COMPOSITE_V1)
+        .filter(|c| c.parsed_profile() == Some(Profile::CompositeV1))
     {
         let own: Vec<&Port> = model
             .ports

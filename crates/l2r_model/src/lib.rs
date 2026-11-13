@@ -17,6 +17,7 @@ pub use lean::{
     Constructor, DeclKind, Declaration, Field, INVENTORY_SCHEMA, INVENTORY_SCHEMA_V1, Inventory,
 };
 pub use path::{PathError, RelPath};
+pub use profiles::{Feature, Kind, Profile, Schema};
 
 #[cfg(test)]
 mod tests {

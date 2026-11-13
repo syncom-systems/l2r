@@ -33,7 +33,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use l2r_model::RelPath;
-use l2r_model::{digest, profiles as profile_ids};
+use l2r_model::{Profile, Schema, digest};
 use l2r_validate::Validated;
 
 /// Version of this generator, bound into every plan digest.
@@ -54,65 +54,14 @@ impl std::error::Error for PlanError {}
 
 /// Plans every file for `validated`, as produced by `generator`.
 pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan, PlanError> {
-    let model = validated.model();
-    let dirs = layout::component_dirs(model);
-    let root = model
-        .components
-        .iter()
-        .find(|c| c.parent.is_none())
-        .ok_or_else(|| PlanError("no root component".into()))?;
-
-    if validated.flat().is_some() {
-        let (mut artifacts, used_profiles) = v2::artifacts(validated)?;
-        artifacts.sort_by(|a, b| a.path.cmp(&b.path));
-        check_paths(&artifacts)?;
-        return Ok(Plan {
-            generator: generator.clone(),
-            model_digest: digest::digest_of(model),
-            inventory_digest: digest::digest_of(validated.inventory()),
-            profiles: used_profiles.into_iter().collect(),
-            output_dir: model.system.output_dir.clone(),
-            artifacts,
-        });
-    }
-
-    let mut artifacts = profiles::crate_root::artifacts(model, &root.rust_module, &root.id)?;
-    let mut used_profiles = BTreeSet::new();
-    for component in &model.components {
-        let dir = &dirs[&component.id];
-        used_profiles.insert(component.profile.clone());
-        match component.profile.as_str() {
-            profile_ids::TRANSITION_CORE_V0 => {
-                let machine = validated.machine(&component.id).ok_or_else(|| {
-                    PlanError(format!("machine `{}` was not resolved", component.id))
-                })?;
-                artifacts.extend(profiles::transition_core::artifacts(
-                    component, machine, dir,
-                )?);
-            }
-            profile_ids::COMPOSITE_V0 => {
-                let names = validated.composite_v0_names(&component.id).ok_or_else(|| {
-                    PlanError(format!("composite `{}` has no checked names", component.id))
-                })?;
-                artifacts.extend(profiles::composite::artifacts(
-                    model, component, names, dir,
-                )?)
-            }
-            profile_ids::COMPOSITE_V1 => artifacts.extend(profiles::composite_v1::artifacts(
-                validated, component, dir,
-            )?),
-            other => {
-                return Err(PlanError(format!(
-                    "profile `{other}` has no implementation"
-                )));
-            }
-        }
-    }
-    used_profiles.insert(profiles::crate_root::PROFILE.to_string());
-
+    // Each schema has its own planner; a new schema is a compile error here.
+    let (mut artifacts, used_profiles) = match validated.schema() {
+        Schema::V0 | Schema::V1 => v0_v1_artifacts(validated)?,
+        Schema::V2 => v2::artifacts(validated)?,
+    };
     artifacts.sort_by(|a, b| a.path.cmp(&b.path));
     check_paths(&artifacts)?;
-
+    let model = validated.model();
     Ok(Plan {
         generator: generator.clone(),
         model_digest: digest::digest_of(model),
@@ -121,6 +70,52 @@ pub fn plan(validated: &Validated, generator: &GeneratorIdentity) -> Result<Plan
         output_dir: model.system.output_dir.clone(),
         artifacts,
     })
+}
+
+/// Plans every file of a `v0` or `v1` model and names the profiles used.
+fn v0_v1_artifacts(validated: &Validated) -> Result<(Vec<Artifact>, BTreeSet<String>), PlanError> {
+    let model = validated.model();
+    let dirs = layout::component_dirs(model);
+    let root = model
+        .components
+        .iter()
+        .find(|c| c.parent.is_none())
+        .ok_or_else(|| PlanError("no root component".into()))?;
+    let mut artifacts = profiles::crate_root::artifacts(model, &root.rust_module, &root.id)?;
+    let mut used_profiles = BTreeSet::from([profiles::crate_root::PROFILE.to_string()]);
+    for component in &model.components {
+        let dir = &dirs[&component.id];
+        used_profiles.insert(component.profile.clone());
+        artifacts.extend(v0_v1_component(validated, component, dir)?);
+    }
+    Ok((artifacts, used_profiles))
+}
+
+/// The files of one component of a `v0` or `v1` model, planned by its profile.
+fn v0_v1_component(
+    validated: &Validated,
+    component: &l2r_model::Component,
+    dir: &str,
+) -> Result<Vec<Artifact>, PlanError> {
+    match validated.profile(&component.id) {
+        Profile::TransitionCoreV0 => {
+            let machine = validated
+                .machine(&component.id)
+                .ok_or_else(|| PlanError(format!("machine `{}` was not resolved", component.id)))?;
+            profiles::transition_core::artifacts(component, machine, dir)
+        }
+        Profile::CompositeV0 => {
+            let names = validated.composite_v0_names(&component.id).ok_or_else(|| {
+                PlanError(format!("composite `{}` has no checked names", component.id))
+            })?;
+            profiles::composite::artifacts(validated.model(), component, names, dir)
+        }
+        Profile::CompositeV1 => profiles::composite_v1::artifacts(validated, component, dir),
+        other @ (Profile::TransitionCoreV1 | Profile::CompositeV2) => Err(PlanError(format!(
+            "profile `{}` has no implementation",
+            other.id()
+        ))),
+    }
 }
 
 /// A planned path, validated like every other path that reaches the filesystem.

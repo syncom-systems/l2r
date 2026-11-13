@@ -7,7 +7,7 @@
 //! edge for the implementer to write.
 
 use l2r_model::rust_names::composite_v0::SystemNames;
-use l2r_model::{Component, MessageEdge, Model, profiles};
+use l2r_model::{Component, MessageEdge, Model, Profile, profiles};
 
 use crate::plan::{Artifact, Ownership};
 use crate::text;
@@ -51,7 +51,7 @@ pub fn artifacts(
 }
 
 pub(crate) fn is_machine(c: &Component) -> bool {
-    c.profile == profiles::TRANSITION_CORE_V0
+    c.parsed_profile() == Some(Profile::TransitionCoreV0)
 }
 
 fn contract(

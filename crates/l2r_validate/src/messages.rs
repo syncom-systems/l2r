@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 
-use l2r_model::{DeclKind, Inventory, MessageEdge, Model, profiles};
+use l2r_model::{DeclKind, Inventory, MessageEdge, Model, Profile};
 
 use crate::diagnostic::Findings;
 use crate::lean_refs::{Refs, translation_type};
@@ -61,7 +61,7 @@ fn check_endpoints(
                 findings.error("L2R-M002", subject, format!("{role} `{id}` does not exist"));
                 ok = false;
             }
-            Some(c) if c.profile != profiles::TRANSITION_CORE_V0 => {
+            Some(c) if c.parsed_profile() != Some(Profile::TransitionCoreV0) => {
                 findings.error("L2R-M003", subject, format!("{role} `{id}` is not a state machine; only machines send and receive messages"));
                 ok = false;
             }

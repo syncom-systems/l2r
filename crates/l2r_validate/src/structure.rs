@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use l2r_model::{Component, MODEL_SCHEMA, Model, SUPPORTED_SCHEMAS, System, profiles};
+use l2r_model::{Component, Feature, Model, Profile, SUPPORTED_SCHEMAS, Schema, profiles};
 
 use crate::diagnostic::Findings;
 use crate::names;
@@ -13,9 +13,8 @@ pub fn check(model: &Model, findings: &mut Findings) {
     for component in &model.components {
         check_profile_shape(model, component, findings);
         // The v2 profiles belong to model schema v2, which has its own rules.
-        if component.profile == profiles::TRANSITION_CORE_V1
-            || component.profile == profiles::COMPOSITE_V2
-        {
+        let later = component.parsed_profile().map(Profile::schema);
+        if matches!(later, Some(Schema::V2)) {
             findings.error(
                 "L2R-S019",
                 subject(component),
@@ -26,6 +25,15 @@ pub fn check(model: &Model, findings: &mut Findings) {
             );
         }
     }
+}
+
+/// True when a `v0` document uses a feature or profile that `v1` introduced.
+/// (The `v2` profiles and port fields have their own findings, S019 and the
+/// port rules.)
+fn uses_v1(model: &Model) -> bool {
+    let v1_only = |f: &Feature| Schema::V1.admits_feature(*f) && !Schema::V0.admits_feature(*f);
+    let v1_profile = |c: &Component| c.parsed_profile().map(Profile::schema) == Some(Schema::V1);
+    model.features().iter().any(v1_only) || model.components.iter().any(v1_profile)
 }
 
 /// The rules every model schema shares: identities, containment and Rust mappings.
@@ -43,7 +51,7 @@ pub(crate) fn check_common(model: &Model, findings: &mut Findings) {
 }
 
 fn check_schema(model: &Model, findings: &mut Findings) {
-    if !SUPPORTED_SCHEMAS.contains(&model.schema.as_str()) {
+    if model.parsed_schema().is_none() {
         findings.error(
             "L2R-S001",
             "schema",
@@ -56,19 +64,12 @@ fn check_schema(model: &Model, findings: &mut Findings) {
     }
     // A `v0` document means what it always meant: it cannot silently acquire
     // ports, capacities or the v1 profile.
-    if model.schema == MODEL_SCHEMA {
-        let uses_v1 = !model.ports.is_empty()
-            || model
-                .components
-                .iter()
-                .any(|c| c.mailbox_capacity.is_some() || c.profile == profiles::COMPOSITE_V1);
-        if uses_v1 {
-            findings.error(
-                "L2R-S015",
-                "schema",
-                "ports, mailbox capacities and `composite/v1` need `schema = \"l2r.architecture/v1\"`",
-            );
-        }
+    if model.parsed_schema() == Some(Schema::V0) && uses_v1(model) {
+        findings.error(
+            "L2R-S015",
+            "schema",
+            "ports, mailbox capacities and `composite/v1` need `schema = \"l2r.architecture/v1\"`",
+        );
     }
 }
 
@@ -147,7 +148,7 @@ fn check_component_fields(component: &Component, findings: &mut Findings) {
             format!("rust_module `{}` is reserved", component.rust_module),
         );
     }
-    if !profiles::SUPPORTED.contains(&component.profile.as_str()) {
+    if component.parsed_profile().is_none() {
         findings.error(
             "L2R-S007",
             &subject,
@@ -192,8 +193,8 @@ fn check_profile_shape(model: &Model, component: &Component, findings: &mut Find
         .components
         .iter()
         .any(|c| c.parent.as_deref() == Some(&component.id));
-    match component.profile.as_str() {
-        profiles::TRANSITION_CORE_V0 => {
+    match component.parsed_profile() {
+        Some(Profile::TransitionCoreV0) => {
             if component.behavior.is_none() {
                 findings.error(
                     "L2R-S008",
@@ -209,7 +210,7 @@ fn check_profile_shape(model: &Model, component: &Component, findings: &mut Find
                 );
             }
         }
-        profiles::COMPOSITE_V0 => {
+        Some(Profile::CompositeV0) => {
             if component.behavior.is_some() {
                 findings.error(
                     "L2R-S008",
@@ -225,7 +226,7 @@ fn check_profile_shape(model: &Model, component: &Component, findings: &mut Find
                 );
             }
         }
-        profiles::COMPOSITE_V1 => {
+        Some(Profile::CompositeV1) => {
             if component.behavior.is_some() {
                 findings.error(
                     "L2R-S008",
@@ -249,7 +250,10 @@ fn check_profile_shape(model: &Model, component: &Component, findings: &mut Find
                 );
             }
             for child in children {
-                if child.profile != profiles::TRANSITION_CORE_V0 {
+                if !child
+                    .parsed_profile()
+                    .is_some_and(|p| Profile::CompositeV1.admits_child(p))
+                {
                     findings.error(
                         "L2R-S016",
                         &subject,
@@ -261,7 +265,7 @@ fn check_profile_shape(model: &Model, component: &Component, findings: &mut Find
                 }
             }
         }
-        _ => {}
+        Some(Profile::TransitionCoreV1 | Profile::CompositeV2) | None => {}
     }
     check_capacity(model, component, findings);
 }
@@ -273,7 +277,7 @@ fn check_capacity(model: &Model, component: &Component, findings: &mut Findings)
         .parent
         .as_deref()
         .and_then(|p| model.component(p))
-        .is_some_and(|p| p.profile == profiles::COMPOSITE_V1);
+        .is_some_and(|p| p.parsed_profile() == Some(Profile::CompositeV1));
     let subject = subject(component);
     match (in_v1, component.mailbox_capacity) {
         (true, None) => findings.error(

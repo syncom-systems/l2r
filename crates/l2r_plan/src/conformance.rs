@@ -26,7 +26,7 @@ mod value;
 
 use std::collections::BTreeMap;
 
-use l2r_model::{Component, digest};
+use l2r_model::{Component, Schema, digest};
 use l2r_validate::Validated;
 use l2r_validate::data::DataType;
 use l2r_validate::flat::Flat;
@@ -75,9 +75,11 @@ struct Harness<'a> {
 
 impl<'a> Harness<'a> {
     fn new(validated: &'a Validated) -> Result<Self, PlanError> {
-        let flat = validated
-            .flat()
-            .ok_or_else(|| PlanError("conformance is derived for v2 models only".into()))?;
+        let flat = match validated.schema() {
+            Schema::V0 | Schema::V1 => None,
+            Schema::V2 => validated.flat(),
+        }
+        .ok_or_else(|| PlanError("conformance is derived for v2 models only".into()))?;
         let types = validated.types();
         let mut ops = Vec::new();
         for (port, input) in flat.inputs.iter().enumerate() {

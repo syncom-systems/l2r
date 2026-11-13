@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 
 use l2r_model::rust_names::{Owner, Problem, composite_v0, composite_v1};
-use l2r_model::{Component, Model, profiles};
+use l2r_model::{Component, Model, Profile};
 
 use crate::diagnostic::Findings;
 use crate::names;
@@ -35,10 +35,11 @@ pub(crate) fn check(model: &Model, findings: &mut Findings) -> BTreeMap<String, 
         if !well_formed(model, composite) {
             continue;
         }
-        let names = match composite.profile.as_str() {
-            profiles::COMPOSITE_V0 => v0_names(model, composite).map(CompositeNames::V0),
-            profiles::COMPOSITE_V1 => v1_names(model, composite).map(CompositeNames::V1),
-            _ => continue,
+        let names = match composite.parsed_profile() {
+            Some(Profile::CompositeV0) => v0_names(model, composite).map(CompositeNames::V0),
+            Some(Profile::CompositeV1) => v1_names(model, composite).map(CompositeNames::V1),
+            Some(Profile::TransitionCoreV0 | Profile::TransitionCoreV1 | Profile::CompositeV2)
+            | None => continue,
         };
         match names {
             Ok(names) => {
@@ -102,7 +103,7 @@ fn v0_names(
         .map(|c| composite_v0::Child {
             id: &c.id,
             module: &c.rust_module,
-            is_machine: c.profile == profiles::TRANSITION_CORE_V0,
+            is_machine: c.parsed_profile() == Some(Profile::TransitionCoreV0),
         })
         .collect();
     composite_v0::SystemNames::new(&children, &edge_ids(model, composite))

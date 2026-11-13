@@ -21,7 +21,7 @@ pub use resolved::{ResolvedEnum, ResolvedMachine, Validated, Variant};
 
 use resolved::Resolution;
 
-use l2r_model::{Inventory, MODEL_SCHEMA_V2, Model};
+use l2r_model::{Inventory, Model, Schema};
 
 /// Rule S013 alone: every path in `[system]` is relative and cannot escape
 /// the model's directory. Run it before opening a file those paths name;
@@ -43,8 +43,11 @@ pub fn validate_system_paths(model: &Model) -> Result<(), Vec<Diagnostic>> {
 pub fn validate(model: &Model, inventory: &Inventory) -> Result<Validated, Vec<Diagnostic>> {
     let model = model.canonical();
     let inventory = inventory.canonical();
-    if model.schema == MODEL_SCHEMA_V2 {
-        return v2::validate(model, inventory);
+    // Each schema has its own rules; a new schema is a compile error here. An
+    // unknown schema is checked by the v0/v1 rules, which report it (S001).
+    match model.parsed_schema() {
+        Some(Schema::V2) => return v2::validate(model, inventory),
+        Some(Schema::V0 | Schema::V1) | None => {}
     }
     let mut findings = diagnostic::Findings::default();
 

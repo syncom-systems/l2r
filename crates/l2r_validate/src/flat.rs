@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use l2r_model::{Component, MessageEdge, Model, Port, profiles};
+use l2r_model::{Component, Kind, MessageEdge, Model, Port, Schema};
 
 /// The flat network of a `v2` model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,7 +151,9 @@ struct Index<'a> {
 }
 
 fn is_machine(component: &Component) -> bool {
-    component.profile == profiles::TRANSITION_CORE_V1
+    component
+        .parsed_profile()
+        .is_some_and(|p| Schema::V2.admits(p) && p.kind() == Kind::Machine)
 }
 
 impl<'a> Index<'a> {

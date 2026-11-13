@@ -18,7 +18,7 @@ mod ports;
 
 use std::collections::BTreeSet;
 
-use l2r_model::{Component, Inventory, MessageEdge, Model, Port, profiles};
+use l2r_model::{Component, Inventory, Kind, MessageEdge, Model, Port, Profile, Schema};
 
 use crate::diagnostic::{Diagnostic, Findings};
 use crate::flat::{self, Flat, FlatError};
@@ -91,12 +91,22 @@ fn report_flat_error(error: FlatError, findings: &mut Findings) {
     }
 }
 
+/// A machine of a `v2` model: a component whose profile `v2` admits and
+/// whose kind is machine.
 fn is_machine(component: &Component) -> bool {
-    component.profile == profiles::TRANSITION_CORE_V1
+    v2_kind(component) == Some(Kind::Machine)
 }
 
+/// A composite of a `v2` model.
 fn is_composite(component: &Component) -> bool {
-    component.profile == profiles::COMPOSITE_V2
+    v2_kind(component) == Some(Kind::Composite)
+}
+
+fn v2_kind(component: &Component) -> Option<Kind> {
+    component
+        .parsed_profile()
+        .filter(|p| Schema::V2.admits(*p))
+        .map(Profile::kind)
 }
 
 fn port_subject(port: &Port) -> String {

@@ -39,7 +39,7 @@ Ids: G given facts, D decisions, M modules, U uses edges, I interfaces, Q questi
 
 | Id | Module | Hides | Owns these nouns | Mark |
 |---|---|---|---|---|
-| M1 | `l2r_model::profile` (replaces `l2r_model::profiles` and the `MODEL_SCHEMA*` constants) | D1, D2, D3 | `Schema`, `Profile`, `Kind`, `Feature` | PROPOSED |
+| M1 | `l2r_model::profiles` (extended; the identifier constants stay, as the strings the types map to) | D1, D2, D3 | `Schema`, `Profile`, `Kind`, `Feature` | PROPOSED; implemented in step 2a |
 | M2 | `l2r_model::rust_names`, with `composite_v0`, `composite_v1` and `composite_v2` sub-modules and the shared `type_name` | D4, D5 | `SystemNames` (one per version), `NameConflict` | PROPOSED |
 | M3 | `l2r_validate` (existing) | the rules; establishes `Validated` | `Validated`, which now carries the typed `Schema` and each component's `Profile` | PROPOSED (change to an existing module) |
 | M4 | `l2r_plan` (existing) | the text of generated files; D6 | `Plan`, `Artifact` | PROPOSED (change) |
@@ -107,10 +107,24 @@ impl Profile {
     pub fn parse(id: &str) -> Option<Profile>;  // the one place a profile string is compared
     pub fn id(self) -> &'static str;
     pub fn kind(self) -> Kind;
-    pub fn admits_child(self, child: Profile) -> bool;  // false for every machine
-    pub fn must_be_root(self) -> bool;                  // composite/v1
+    pub fn schema(self) -> Schema;                      // the schema that introduced it
+    pub fn admits_child(self, child: Profile) -> bool;  // composite/v1: transition-core/v0 only
 }
+
+impl Model { pub fn parsed_schema(&self) -> Option<Schema>; pub fn features(&self) -> Vec<Feature>; }
+impl Component { pub fn parsed_profile(&self) -> Option<Profile>; pub fn kind(&self) -> Option<Kind>; }
+impl Port { pub fn features(&self) -> Vec<Feature>; }
 ```
+
+As implemented (step 2a):
+- `must_be_root` was dropped. Its one use sits inside the `composite/v1` arm, where it was a tautology.
+- The model reports which gated features it uses, and the schema says which it admits. The S015 gates now ask both.
+- After the independent review:
+  - Every decision by schema or profile is an exhaustive `match`, or names the admitted schemas explicitly. That covers validate's dispatch, `Schema::admits`, S019, the profile-shape rules, `render`, packets and the Lean network tail.
+  - `admits_child` is correct for every profile.
+  - Classification within `v2` asks `kind()` among the profiles `v2` admits.
+  - The planner reads profiles from `Validated`.
+- Deliberately kept: rules of the frozen `v0`/`v1` profiles name their exact profile, for example M003 "only `transition-core/v0` sends" and the `composite/v0` planner's machine test. The rule belongs to that version, not to the kind.
 
 - **Guarantees carried by types:** after parsing, a schema or profile is one of a closed set. Every classification is an exhaustive `match`, so a new variant is a compile error at each site that must decide about it (`liskov-zilles-1974-abstract-data-types`, Interpretation 1). Each string is compared once, in `parse`. That is the opposite of a registry of string comparisons (G1).
 - **Obligations the signatures do not show:**
@@ -238,7 +252,8 @@ Mark: PROPOSED
 | Step | Content | Why this order |
 |---|---|---|
 | 1 | M2 `composite_v0` and `composite_v1`, used by the v0/v1 planners and by validation, with S021 and P005, and the ADR-0005 D9 clarification comment | The architect's priority: "first … invalid v1 input cases". Implemented on branch `fix/generated-name-conflicts` |
-| 2 | M1 and I3; the planner, validate and CLI moved onto them; M2 `composite_v2` replaces S020's lists, `packet.rs` and `recorder.rs` | "then schema/profile/naming ownership" |
+| 2a | M1 and I3 (`Validated::schema`, `Validated::profile`). Validate, the planner (one planner per schema, chosen by an exhaustive `match`), Lean-composition and conformance dispatch, and the CLI's `render` moved onto them | "then schema/profile/naming ownership". Branch `refactor/profile-type`, stacked on step 1 |
+| 2b | M2 `composite_v2` replaces S020's lists, `packet.rs` and `recorder.rs` | Q3's remaining consumers |
 
 ## Questions for the architect
 
