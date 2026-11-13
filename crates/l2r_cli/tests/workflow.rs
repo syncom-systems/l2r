@@ -463,3 +463,21 @@ fn conformance_prints_both_sides_for_a_hierarchical_model_only() {
         refused.stderr
     );
 }
+
+#[test]
+fn approve_replaces_a_link_planted_at_the_record_and_leaves_its_target_alone() {
+    let (dir, model) = project("approve-link");
+    let victim = dir.join("victim.txt");
+    fs::write(&victim, "victim\n").unwrap();
+    let record = dir.join("architecture.approval.json");
+    std::os::unix::fs::symlink(&victim, &record).unwrap();
+
+    let digest = digest_from(&l2r(&["plan", &model]).stdout);
+    let approved = approve(&model, &digest);
+    assert_eq!(approved.code, 0, "{}", approved.stderr);
+
+    assert_eq!(fs::read_to_string(&victim).unwrap(), "victim\n");
+    let kind = fs::symlink_metadata(&record).unwrap().file_type();
+    assert!(kind.is_file(), "the record is a regular file, not the link");
+    assert!(fs::read_to_string(&record).unwrap().contains(&digest));
+}

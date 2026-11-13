@@ -206,6 +206,31 @@ mod tests {
     }
 
     #[test]
+    fn a_link_at_a_staging_name_is_skipped_and_never_followed() {
+        let dir = std::env::temp_dir().join(format!("l2r-file-unit-{}", unique()));
+        fs::create_dir(&dir).unwrap();
+        let victim = dir.join("victim");
+        fs::write(&victim, "victim").unwrap();
+        let planted = dir.join("planted");
+        std::os::unix::fs::symlink(&victim, &planted).unwrap();
+        let tries = Cell::new(0);
+        let (staged, mut file) = exclusive(|| {
+            tries.set(tries.get() + 1);
+            if tries.get() == 1 {
+                planted.clone()
+            } else {
+                dir.join("fresh")
+            }
+        })
+        .unwrap();
+        file.write_all(b"staged").unwrap();
+        assert_eq!(staged, dir.join("fresh"));
+        assert_eq!(tries.get(), 2);
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "victim");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn names_are_unique_within_a_process() {
         assert_ne!(unique(), unique());
     }
