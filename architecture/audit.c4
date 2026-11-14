@@ -1,5 +1,6 @@
 // One view per finding of architecture/audit.md. Views only; the elements come
-// from audit/measured.c4, which deps.py generates.
+// from audit/measured.c4, which deps.py generated for this audit (the
+// predecessor of the architecture-evidence skill).
 views {
   view audit_overview {
     title 'Crates and their measured dependencies'

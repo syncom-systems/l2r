@@ -23,13 +23,23 @@ checked against the record by `scripts/c4check.py`.
 
 ## `audit-codebase-architecture`: findings in existing code for the architect
 
-The counterpart for code that exists. `scripts/deps.py` measures crate and
-module dependencies with `file:line` evidence and their loops; the skill looks
+The counterpart for code that exists. It measures with `architecture-evidence`
+(below), then looks
 for decisions known in more than one place, reliance not carried by types,
 authority checks with gaps and shallow interfaces, judged against
 `/architecture-knowledge`. It stops with findings and questions in
 `architecture/audit.md`; a remedy the architect wants designed goes to
 `design-codebase-architecture`.
+
+## `architecture-evidence`: what depends on what, measured
+
+Observation only, shared by the skills that interpret it. `scripts/measure.py`
+reads build units, their declared dependencies and visibility from the build
+and source units and their references from the code, each with `file:line`,
+and writes `evidence.json` (format in `references/format.md`) and a LikeC4
+model. It states what it did not measure. One analyzer per language feeds the
+common format; Rust today. Its tests run with
+`python3 -m unittest discover -s .claude/skills/architecture-evidence/tests`.
 
 ## `arch`: code health and architecture together
 

@@ -16,7 +16,7 @@ Find where existing code makes a decision in more than one place, relies on what
 
 Your sense of what is usual structure is not evidence (R3). Every fact in the audit carries one label:
 
-- **MEASURED:** from `scripts/deps.py`, the compiler or the build graph.
+- **MEASURED:** from the `architecture-evidence` measurement, the compiler or the build graph.
 - **READ:** a `file:line` you looked at.
 - **INFERRED:** reasoning from measured or read facts, with the chain stated.
 - **ARCHITECT:** the architect's answer, with the date.
@@ -36,31 +36,19 @@ The picture is the measured model plus one view per finding (ruling R4); see [Pi
 
 ### 1. Scope and measurement
 
-Name the scope (crates, packages or a subsystem) and what is outside it. For Rust, run:
+Name the scope (crates, packages or a subsystem) and what is outside it. A new audit replaces the previous one: its record, its views and everything in `architecture/audit/` (git keeps the old ones). Remove what the previous audit left there, then measure with the `architecture-evidence` skill, writing to `architecture/audit`:
 
 ```bash
-python3 <skill>/scripts/deps.py --repo . --scope <dirs> [--exclude '<generated glob>'] --out architecture/audit
+python3 <skills>/architecture-evidence/scripts/measure.py --repo . --scope <dirs> [--exclude '<generated glob>'] --out architecture/audit
 ```
 
-It reads every Rust target of the workspace from the build, then measures the scope together with its context: the crates the scope depends on directly (`used_by_scope`) and the crates that depend on it directly (`uses_scope`). Context crates are not audited, but their edges into and out of the scope are measured. It writes:
-- `architecture/audit/edges.json`:
-  - each crate with its roles, its declared dependencies and its external and unresolved ones;
-  - crate edges, citing the `file:line` where the depending target is declared (its `deps` list holds the label) or the manifest line;
-  - module edges from `use` and qualified paths, each with `file:line`;
-  - the loops among them;
-  - `checks` and `not_measured`.
-- `architecture/audit/measured.c4`: the same graph as a LikeC4 model (system `measured`), rewritten on every run.
+Follow that skill on the exit code and on what the evidence does not show. Do not audit without a measurement. In short:
+- `evidence.json` lists the build units of the scope and its context (`used_by_scope`, `uses_scope`), their source units, and **declared** dependencies (from the build) and **observed** dependencies (from the source), each with `file:line`, plus their loops and checks. Context units are not audited, but the dependencies crossing the scope boundary are measured.
+- Name in the record what `not_measured`, `unresolved_deps` and `checks.declared_without_observed` leave out.
 
-Read the exit code before anything else:
-- **2, no measurement.** Bazel is missing or its query failed, a scope directory does not exist, or the scope has no Rust crates. Nothing is written. In a Bazel workspace it never falls back to Cargo. Do not audit without the measurement; report what failed.
-- **1, inconsistent.** Code refers to a crate its build does not declare (`checks.references_to_undeclared_crates`). That is a measurement error, since the code could not compile. Resolve it before you rely on the edges.
-- **0, measured.** Still read `unresolved_deps`, `declared_deps_without_reference` and `not_measured`, and name in the record what they leave out.
+Every dependency is a compile-time fact. Whether it is a *use* in Parnas's sense (A's correctness depends on B) is your judgement. A dependency on a type alone usually is one, but a weak one; say which.
 
-What it does not read is listed in `not_measured` and in its header: test targets and test modules, macro bodies and expansions, generated sources and `select()` branches. A path resolves to the longest known module, so a function re-exported under its module's name lands on that module.
-
-Every edge is a compile-time dependency. Whether it is a *use* in Parnas's sense (A's correctness depends on B) is your judgement. A dependency on a type alone usually is one, but a weak one; say which.
-
-For other languages, collect the same facts from the build files and imports, and label them READ.
+For a language the evidence skill does not measure, collect the same facts from the build files and imports, and label them READ.
 
 ### 2. Decisions known in more than one place
 
@@ -76,7 +64,7 @@ Include the decisions about **authority**: what may be written, overwritten, del
 
 ### 3. The uses relation
 
-From `edges.json` and reading (`parnas-1979-uses-hierarchy`):
+From `evidence.json` and reading (`parnas-1979-uses-hierarchy`):
 
 - **Loops.** For each loop, read the edges. Name which side would split, and into what.
 - **Reliance without a call.** A module that is correct only because something else ran first: validation, sorting, acyclicity, authorization. Check whether a type carries that guarantee (`liskov-zilles-1974-abstract-data-types`). If only the call order carries it, that is a finding. If a type carries it at a boundary and an inner function drops it, report exactly that and no more.

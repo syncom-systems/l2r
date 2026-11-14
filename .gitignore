@@ -11,3 +11,4 @@
 # repository; the shared agent skills are.
 .claude/*
 !.claude/skills/
+__pycache__/
